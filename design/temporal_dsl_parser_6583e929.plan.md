@@ -1,24 +1,30 @@
 ---
 name: Temporal DSL Parser
-overview: "Build a Go parser for the Temporal Workflow DSL (.twf files) producing a typed AST. Three-layer pipeline: Lexer (indentation-aware) -> Recursive descent Parser -> validated AST. Supports workflow/activity definitions, signal/query/update declarations with workflow attachment, and workflow calls with child/detach/nexus modifiers."
+overview: "Build a Go parser for the Temporal Workflow DSL (.twf files) producing a typed AST with resolution. Four-layer pipeline: Lexer (indentation-aware) -> Recursive descent Parser -> AST -> Resolver (links calls to definitions). Child workflow calls are implicit (bare `workflow`), `spawn` for independent execution, `detach` for fire-and-forget. Signal/query/update defined at workflow level only. Options statement supported for calls and definitions."
 todos:
   - id: token-pkg
-    content: Create `token/token.go` with 36 TokenType constants, Token struct, and keyword lookup table
+    content: Create `token/` package with TokenType constants (34 types), Token struct, and keyword lookup table
     status: pending
   - id: ast-pkg
-    content: Create `ast/ast.go` with Node/Definition/Statement interfaces, 5 definition types, 15 statement types, and supporting types (AwaitTarget, SelectCase, SwitchCase, ForVariant, WorkflowCallMode)
+    content: Create `ast/` package with Node/Definition/Statement interfaces, 2 definition types (WorkflowDef, ActivityDef), 18 statement types, and supporting types (AwaitTarget, SelectCase, SwitchCase, ForVariant, WorkflowCallMode)
     status: pending
   - id: lexer-pkg
-    content: Create `lexer/lexer.go` with indentation-tracking scanner, ARGS grouping, ARROW recognition, keyword lookup, INDENT/DEDENT emission
+    content: Create `lexer/` package with indentation-tracking scanner, ARGS grouping (no nested parens), ARROW recognition, keyword lookup, INDENT/DEDENT emission
     status: pending
   - id: lexer-tests
-    content: Create `lexer/lexer_test.go` with tests for indentation, keywords (including new ones), args, comments, arrows, edge cases
+    content: Create `lexer/` tests for indentation, keywords, args (including paren rejection), comments, arrows, edge cases
     status: pending
   - id: parser-pkg
-    content: "Create `parser/parser.go` with recursive descent parser: top-level dispatch, workflow/activity body dispatch with context flag, attachment block parsing, workflow call modifier parsing, collectRawUntil helper, all validation rules"
+    content: "Create `parser/` package with recursive descent parser: registration-based keyword dispatch, workflow/activity body context, options attachment, collectRawUntil helper, all validation rules"
     status: pending
   - id: parser-tests
-    content: "Create `parser/parser_test.go` with end-to-end tests: workflow defs with attachments, activity defs, all call types, control flow, select/switch, error cases"
+    content: "Create `parser/` tests: workflow defs with signal/query/update declarations, activity defs, all call types (spawn/detach/nexus), options, control flow, select/switch, error cases"
+    status: pending
+  - id: resolver-pkg
+    content: "Create `resolver/` package: walk AST to link activity calls -> ActivityDef, workflow calls -> WorkflowDef, await signal/update -> SignalDecl/UpdateDecl. Report undefined references."
+    status: pending
+  - id: resolver-tests
+    content: "Create `resolver/` tests: successful resolution, missing definitions, cross-workflow references, duplicate names"
     status: pending
 isProject: false
 ---
@@ -31,58 +37,135 @@ isProject: false
 
 ## Architecture
 
-Three-layer pipeline: **Lexer** (chars to tokens) -> **Parser** (tokens to AST) -> validated AST.
+Four-layer pipeline: **Lexer** (chars to tokens) -> **Parser** (tokens to AST) -> **Resolver** (links calls to definitions) -> validated, linked AST.
 
 ```mermaid
 flowchart LR
     Input[".twf Source"] --> Lexer
     Lexer --> Tokens["Token Stream"]
     Tokens --> Parser["Recursive Descent Parser"]
-    Parser --> AST["Typed AST"]
+    Parser --> AST["Unresolved AST"]
+    AST --> Resolver["Resolver"]
+    Resolver --> Linked["Linked AST"]
 ```
-
-
 
 ## Project Structure
 
+Minimal layout (one file per package):
+
 ```
-temporal-workflow-design/parser/
+parser/
   go.mod
   token/
-    token.go              # Token types, Token struct, keyword table
-  lexer/
-    lexer.go              # Scanner with indentation tracking
-    lexer_test.go
+    token.go
   ast/
-    ast.go                # AST node interfaces and types
+    ast.go
+  lexer/
+    lexer.go
+    lexer_test.go
   parser/
-    parser.go             # Recursive descent parser
+    parser.go
     parser_test.go
+  resolver/
+    resolver.go
+    resolver_test.go
 ```
 
-## Design Principles (All Simplifications Applied)
+**NOTE — Split into smaller files as needed.** If any file grows beyond ~300 lines, break it up. Likely splits:
 
-1. **Loop unification** -- Go-style `for`: `for:` (infinite), `for condition:` (conditional), `for var in collection:` (iteration).
-2. **Def vs call distinction** -- `workflow` and `activity` have both top-level defs (with bodies) and in-body calls. `signal`, `query`, `update` are top-level declarations attached to workflows via reference blocks.
-3. **Workflow call modifiers** -- `child`, `detach`, and bare `workflow` express lifecycle relationship. `nexus <namespace>` is an optional prefix for cross-namespace calls. Sync/async determined by surrounding context (bare = wait, inside select/parallel = concurrent).
-4. **Attachment blocks** -- Workflow defs have optional `signals:`, `queries:`, `updates:` blocks referencing declarations defined elsewhere in the file.
-5. **No try/catch/raise** -- Error handling removed from grammar entirely.
-6. **No config blocks** -- Call options (timeouts, retry policies) deferred.
-7. **No infrastructure** -- `schedule`, `nexus_service`, `nexus_endpoint` out of scope.
-8. **select/switch split** -- `select` races async primitives. `switch`/`case` is value dispatch (allowed in both workflow and activity bodies).
-9. **Activity body restrictions** -- Activity bodies allow only imperative logic: `if`/`else`, `for`, `switch`/`case`, `break`, `continue`, `return`, raw statements, comments. No Temporal primitives.
+```
+parser/
+  token/
+    types.go              # TokenType constants
+    token.go              # Token struct, String()
+    keywords.go           # Keyword lookup table
+  ast/
+    node.go               # Base interfaces (Node, Definition, Statement)
+    definitions.go        # WorkflowDef, ActivityDef
+    statements.go         # All statement types
+    types.go              # Supporting types (AwaitTarget, SelectCase, etc.)
+  lexer/
+    lexer.go              # Core scanner loop
+    indent.go             # Indent stack and INDENT/DEDENT logic
+    lexer_test.go
+  parser/
+    parser.go             # Core parser struct, top-level dispatch
+    definitions.go        # parseWorkflowDef, parseActivityDef
+    statements.go         # Statement parsers (calls, control flow, etc.)
+    helpers.go            # collectRawUntil, expectToken, etc.
+    parser_test.go
+  resolver/
+    resolver.go           # Walk + link
+    resolver_test.go
+```
 
-## Syntax Changes from Current DSL
+Prefer smaller files. They are easier to work with and reason about.
 
-- **Assignment flip**: `result = activity GetOrder(orderId)` -> `activity GetOrder(orderId) -> result`
-- **Workflow calls replace child/nexus**: `child WorkflowName(args)` -> `child workflow WorkflowName(args)`; `nexus ns/Op(args)` -> `nexus ns workflow Op(args)`
-- **Keyword-first lines**: Every line starts with a recognized keyword, `#` comment, or is a raw statement fallback.
+## Design Principles
+
+1. **Parens everywhere** -- Inputs, outputs, conditions, and expressions are all paren-delimited. `workflow Foo(input: In) -> (Out):`, `if (cond):`, `for (x in items):`, `switch (val):`. Bare `return expr` is the exception (no parens).
+2. **No nested parens** -- Inside any paren-delimited block (`ARGS` token), nested `(` and `)` are **disallowed**. The first `)` always closes the block. This keeps the lexer trivial and parsing unambiguous.
+3. **Child is implicit** -- Bare `workflow Name(args)` is a child workflow call (most common case). `spawn` for independent execution. `detach` for fire-and-forget.
+4. **Nexus namespaces in quotes** -- `nexus "payments" workflow Name(args)`. Quotes make namespace boundaries unambiguous.
+5. **Declarations at workflow level** -- `signal`, `query`, `update` are defined inside the workflow that handles them. No top-level declarations, no attachment blocks.
+6. **Options statement** -- `options(...)` can appear on the next line (indented) after any activity/workflow call or definition signature. Parser does not validate option contents.
+7. **Def vs call distinction** -- `workflow` and `activity` have both top-level defs (with `:` and bodies) and in-body calls (no `:`). Defs end with `COLON`, calls do not.
+8. **Loop unification** -- Go-style `for`: `for:` (infinite), `for (condition):` (conditional), `for (var in collection):` (iteration).
+9. **select/switch split** -- `select` races async primitives. `switch`/`case` is value dispatch (allowed in both workflow and activity bodies).
+10. **Activity body restrictions** -- Activity bodies allow only imperative logic: `if`/`else`, `for`, `switch`/`case`, `break`, `continue`, `return`, raw statements, comments. No Temporal primitives.
+11. **No try/catch/raise** -- Error handling removed from grammar entirely.
+12. **No infrastructure** -- `schedule`, `nexus_service`, `nexus_endpoint` out of scope.
+13. **Simple, extensible parser patterns** -- Registration-based keyword dispatch (map of keyword -> parse function) rather than monolithic switch statements. Adding a new keyword means adding one entry to the registry. Visitor/walker pattern for AST traversal.
+
+## Syntax Summary
+
+```
+# Top-level definitions
+workflow OrderFulfillment(orderId: string) -> (OrderResult):
+    ...body...
+
+activity GetOrder(orderId: string) -> (Order):
+    ...body...
+
+# Signal/query/update defined inside workflows
+workflow OrderWorkflow(orderId: string) -> (OrderResult):
+    signal PaymentReceived(transactionId: string, amount: decimal)
+    query GetStatus() -> (OrderStatus)
+    update ChangeAddress(addr: Address) -> (UpdateResult)
+
+    activity GetOrder(orderId) -> order
+    await signal PaymentReceived
+    return OrderResult{status: "completed"}
+
+# Workflow calls
+workflow ShipOrder(order) -> shipResult                          # child (implicit)
+spawn workflow ProcessAsync(data) -> result                      # independent, wait for result
+detach workflow SendNotification(customer)                       # fire-and-forget
+nexus "payments" workflow Charge(card) -> chargeResult           # child, cross-namespace
+spawn nexus "shipping" workflow Ship(order) -> shipment          # independent, cross-namespace
+detach nexus "notifications" workflow SendEmail(email)           # fire-and-forget, cross-namespace
+
+# Options (next line, indented)
+activity CreateShipment(order) -> shipment
+    options(startToCloseTimeout: 30s, retryPolicy: {maxAttempts: 3})
+
+# Control flow uses parens
+if (validated.priority == "high"):
+    ...
+for (item in order.items):
+    ...
+for (retries < 3):
+    ...
+switch (batch.type):
+    case "invoice":
+        ...
+```
 
 ---
 
 ## Formal Grammar (EBNF)
 
-Conventions: `UPPERCASE` = token, `lowercase` = production, `[...]` = optional, `{...}` = zero or more, `ARGS` = single token capturing raw content between `(` and `)`.
+Conventions: `UPPERCASE` = token, `lowercase` = production, `[...]` = optional, `{...}` = zero or more, `ARGS` = single token capturing raw content between `(` and `)` with no nested parens.
 
 ### File Structure
 
@@ -91,46 +174,41 @@ file           = { top_level_item } EOF ;
 top_level_item = definition | COMMENT | NEWLINE ;
 
 definition     = workflow_def
-               | activity_def
-               | signal_decl
-               | query_decl
-               | update_decl ;
+               | activity_def ;
 ```
 
 ### Top-Level Definitions
 
 ```ebnf
-workflow_def = WORKFLOW IDENT ARGS [ ARROW type_expr ] COLON NEWLINE
-               INDENT [ signals_block ] [ queries_block ] [ updates_block ]
+workflow_def = WORKFLOW IDENT ARGS [ ARROW ARGS ] COLON NEWLINE
+               INDENT [ options_stmt ]
+               { signal_def | query_def | update_def }
                workflow_body DEDENT ;
 
-activity_def = ACTIVITY IDENT ARGS [ ARROW type_expr ] COLON NEWLINE
-               INDENT activity_body DEDENT ;
-
-signal_decl  = SIGNAL IDENT ARGS NEWLINE ;
-query_decl   = QUERY IDENT ARGS [ ARROW type_expr ] NEWLINE ;
-update_decl  = UPDATE IDENT ARGS [ ARROW type_expr ] NEWLINE ;
+activity_def = ACTIVITY IDENT ARGS [ ARROW ARGS ] COLON NEWLINE
+               INDENT [ options_stmt ] activity_body DEDENT ;
 ```
 
-### Attachment Blocks (inside workflow def, before body)
+Return types use `ARGS` (paren-delimited): `-> (OrderResult)`.
+
+### Workflow-Level Declarations
+
+Signal, query, and update are defined inside the workflow, before body statements.
 
 ```ebnf
-signals_block = SIGNALS COLON NEWLINE INDENT { IDENT NEWLINE } DEDENT ;
-queries_block = QUERIES COLON NEWLINE INDENT { IDENT NEWLINE } DEDENT ;
-updates_block = UPDATES COLON NEWLINE INDENT { IDENT NEWLINE } DEDENT ;
+signal_def = SIGNAL IDENT ARGS NEWLINE ;
+query_def  = QUERY IDENT ARGS [ ARROW ARGS ] NEWLINE ;
+update_def = UPDATE IDENT ARGS [ ARROW ARGS ] NEWLINE ;
 ```
 
 Example:
 
 ```
-workflow OrderWorkflow(orderId: string) -> OrderResult:
-    signals:
-        PaymentReceived
-        OrderCancelled
-    queries:
-        GetStatus
-    updates:
-        ChangePlan
+workflow OrderWorkflow(orderId: string) -> (OrderResult):
+    signal PaymentReceived(transactionId: string, amount: decimal)
+    signal OrderCancelled(reason: string)
+    query GetStatus() -> (OrderStatus)
+    update ChangeAddress(addr: Address) -> (UpdateResult)
 
     activity GetOrder(orderId) -> order
     await signal PaymentReceived
@@ -177,30 +255,59 @@ activity_stmt = switch_block
 **Activity call** (inside workflow body):
 
 ```ebnf
-activity_call = ACTIVITY IDENT ARGS [ ARROW IDENT ] NEWLINE ;
+activity_call = ACTIVITY IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ] ;
 ```
 
-**Workflow call** (inside workflow body) -- three modifiers express lifecycle:
+**Workflow call** (inside workflow body) -- three lifecycle modifiers:
 
 ```ebnf
-workflow_call = [ CHILD | DETACH ] [ NEXUS IDENT ] WORKFLOW IDENT ARGS [ ARROW IDENT ] NEWLINE ;
+workflow_call = [ SPAWN | DETACH ] [ NEXUS STRING ] WORKFLOW IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ] ;
 ```
 
-- `child workflow Name(args) [-> result]` -- parent-child, waits for completion
-- `workflow Name(args) [-> result]` -- independent, waits for result
+- `workflow Name(args) [-> result]` -- child (implicit), waits for completion
+- `spawn workflow Name(args) [-> result]` -- independent, waits for result
 - `detach workflow Name(args)` -- fire-and-forget (no `-> result`)
-- Any form can include `nexus <namespace>` for cross-namespace calls
+- Any form can include `nexus "namespace"` for cross-namespace calls
 
 Validation: `DETACH` + `ARROW` is an error (can't capture result from fire-and-forget).
 
 Examples:
 
 ```
-child workflow ShipOrder(order) -> shipResult
-workflow ProcessPayment(order) -> paymentResult
+workflow ShipOrder(order) -> shipResult
+spawn workflow ProcessPayment(order) -> paymentResult
 detach workflow SendNotification(order.customer)
-child nexus payments workflow ProcessPayment(order.payment) -> paymentResult
-detach nexus notifications workflow SendEmail(email)
+nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
+spawn nexus "shipping" workflow CreateShipment(order) -> shipment
+detach nexus "notifications" workflow SendEmail(email)
+```
+
+### Options
+
+Options can appear on the next line (indented) after a call or as the first statement in a definition body. Content inside parens is opaque -- the parser does not validate it.
+
+```ebnf
+options_line = INDENT OPTIONS ARGS NEWLINE DEDENT ;
+options_stmt = OPTIONS ARGS NEWLINE ;
+```
+
+`options_line` is for calls (creates indent/dedent around a single line). `options_stmt` is for definitions (already inside a body at the correct indent level).
+
+Examples:
+
+```
+# After a call (indented under it)
+activity CreateShipment(order) -> shipment
+    options(startToCloseTimeout: 30s, retryPolicy: {maxAttempts: 3})
+
+workflow ShipOrder(order) -> result
+    options(workflowExecutionTimeout: 24h)
+
+# At the start of a definition body
+activity GetOrder(orderId: string) -> (Order):
+    options(startToCloseTimeout: 10s)
+    order = db.get(orderId)
+    return order
 ```
 
 ### Timer
@@ -231,7 +338,7 @@ Races concurrent Temporal primitives. First case to complete wins. `DETACH` not 
 ```ebnf
 select_block = SELECT COLON NEWLINE INDENT { select_case } DEDENT ;
 
-select_case  = ( [ CHILD ] [ NEXUS IDENT ] WORKFLOW IDENT ARGS [ ARROW IDENT ]
+select_case  = ( [ SPAWN ] [ NEXUS STRING ] WORKFLOW IDENT ARGS [ ARROW IDENT ]
                | ACTIVITY IDENT ARGS [ ARROW IDENT ]
                | SIGNAL IDENT [ ARGS ]
                | UPDATE IDENT [ ARGS ]
@@ -243,7 +350,7 @@ Example:
 
 ```
 select:
-    child workflow ProcessPayment(order) -> paymentResult:
+    workflow ProcessPayment(order) -> paymentResult:
         activity HandlePayment(paymentResult)
     signal PaymentReceived:
         activity FulfillOrder(order)
@@ -253,10 +360,10 @@ select:
 
 ### Switch (Value Dispatch)
 
-Dispatches on a value expression. Allowed in both workflow and activity bodies.
+Dispatches on a value expression. Allowed in both workflow and activity bodies. Expression is paren-delimited.
 
 ```ebnf
-switch_block   = SWITCH raw_expr COLON NEWLINE
+switch_block   = SWITCH ARGS COLON NEWLINE
                  INDENT { switch_case } [ switch_default ] DEDENT ;
 switch_case    = CASE raw_expr COLON NEWLINE INDENT body DEDENT ;
 switch_default = ELSE COLON NEWLINE INDENT body DEDENT ;
@@ -266,23 +373,20 @@ Note: `body` inside switch cases inherits context (workflow_body or activity_bod
 
 ### Control Flow
 
+Conditions and clauses are paren-delimited.
+
 ```ebnf
-if_stmt   = IF condition COLON NEWLINE INDENT body DEDENT
+if_stmt   = IF ARGS COLON NEWLINE INDENT body DEDENT
             [ ELSE COLON NEWLINE INDENT body DEDENT ] ;
 
-for_stmt  = FOR for_clause COLON NEWLINE INDENT body DEDENT ;
-
-for_clause = (* three forms, distinguished by parser lookahead *)
-             (* form 1: infinite loop *)  (* nothing -- just COLON *)
-           | (* form 2: conditional    *)  condition
-           | (* form 3: iteration      *)  IDENT IN iterable_expr ;
+for_stmt  = FOR [ ARGS ] COLON NEWLINE INDENT body DEDENT ;
 ```
 
-The parser distinguishes `for` forms by lookahead after consuming `FOR`:
+The parser distinguishes `for` forms by examining the content of ARGS (or its absence):
 
-- Next is `COLON` -> infinite loop (`for:`)
-- Next is `IDENT` followed by `IN` -> iteration (`for item in collection:`)
-- Otherwise -> conditional loop (`for count < limit:`)
+- No ARGS (next token is `COLON`) -> infinite loop (`for:`)
+- ARGS contains `IN` keyword -> iteration (`for (item in collection):`)
+- Otherwise -> conditional loop (`for (count < limit):`)
 
 ### Simple Statements
 
@@ -306,17 +410,16 @@ Any line whose first token is not a recognized keyword (and is not a comment) is
 Captured as raw strings by `collectRawUntil`. Not sub-parsed.
 
 ```ebnf
-type_expr     = <tokens until COLON or NEWLINE> ;
-condition     = <tokens until COLON> ;
-iterable_expr = <tokens until COLON> ;
 duration_expr = <tokens until NEWLINE or COLON> ;
 raw_expr      = <tokens until NEWLINE> ;
 raw_line      = <all tokens on the line until NEWLINE> ;
 ```
 
+Note: `type_expr`, `condition`, and `iterable_expr` from the previous revision are now captured inside `ARGS` tokens (paren-delimited) and do not need separate productions.
+
 ---
 
-## Token Design (`token/token.go`)
+## Token Design
 
 ```go
 type TokenType int
@@ -331,22 +434,20 @@ const (
     // Keywords -- top-level defs
     WORKFLOW
     ACTIVITY
+
+    // Keywords -- workflow-level declarations
     SIGNAL
     QUERY
     UPDATE
 
-    // Keywords -- attachment blocks
-    SIGNALS
-    QUERIES
-    UPDATES
-
     // Keywords -- workflow call modifiers
-    CHILD
+    SPAWN
     DETACH
     NEXUS
 
-    // Keywords -- other calls
+    // Keywords -- calls and primitives
     TIMER
+    OPTIONS
 
     // Keywords -- async
     AWAIT
@@ -376,34 +477,38 @@ const (
 
     // Values
     IDENT    // non-keyword identifiers
-    ARGS     // raw content between ( and )
+    STRING   // quoted string (for nexus namespaces)
+    ARGS     // raw content between ( and ), no nested parens
     COMMENT  // text after #
     RAW_TEXT // anything else
 )
 ```
 
-26 keywords + 2 symbols + 4 structural + 4 value types = **36 token types**.
+24 keywords + 2 symbols + 4 structural + 5 value types = **35 token types**.
 
-Changes from previous revision: removed `TRY`, `CATCH`, `AS`, `RAISE`, `SLASH`. Added `DETACH`, `SIGNALS`, `QUERIES`, `UPDATES`.
+Changes from previous revision: removed `CHILD`, `SIGNALS`, `QUERIES`, `UPDATES`. Added `SPAWN`, `OPTIONS`, `STRING`.
 
 ---
 
-## AST Design (`ast/ast.go`)
+## AST Design
 
 Two interfaces -- `Definition` (top-level) and `Statement` (inside bodies) -- with a `Node` base providing position info.
 
-**Top-level definitions:**
+**Top-level definitions (2):**
 
-- `WorkflowDef` -- Name, Params (opaque), ReturnType (opaque, optional), SignalRefs ([]string), QueryRefs ([]string), UpdateRefs ([]string), Body ([]Statement)
-- `ActivityDef` -- Name, Params (opaque), ReturnType (opaque, optional), Body ([]Statement)
+- `WorkflowDef` -- Name, Params (opaque), ReturnType (opaque, optional), Options (opaque, optional), Signals ([]SignalDecl), Queries ([]QueryDecl), Updates ([]UpdateDecl), Body ([]Statement)
+- `ActivityDef` -- Name, Params (opaque), ReturnType (opaque, optional), Options (opaque, optional), Body ([]Statement)
+
+**Workflow-level declarations (embedded in WorkflowDef, not standalone):**
+
 - `SignalDecl` -- Name, Params (opaque)
 - `QueryDecl` -- Name, Params (opaque), ReturnType (opaque, optional)
 - `UpdateDecl` -- Name, Params (opaque), ReturnType (opaque, optional)
 
-**Statements:**
+**Statements (18):**
 
-- `ActivityCall` -- Name, Args (opaque), Result (optional)
-- `WorkflowCall` -- Mode (Child/Detach/Bare), Namespace (optional), Name, Args (opaque), Result (optional)
+- `ActivityCall` -- Name, Args (opaque), Result (optional), Options (opaque, optional)
+- `WorkflowCall` -- Mode (Child/Spawn/Detach), Namespace (optional, quoted string), Name, Args (opaque), Result (optional), Options (opaque, optional)
 - `TimerStmt` -- Duration (opaque)
 - `AwaitStmt` -- Targets ([]AwaitTarget)
 - `ParallelBlock` -- Body
@@ -417,6 +522,9 @@ Two interfaces -- `Definition` (top-level) and `Statement` (inside bodies) -- wi
 - `ContinueStmt` -- (position only)
 - `RawStmt` -- Text (entire line)
 - `Comment` -- Text
+- `SignalDecl` -- (also a statement when inside workflow body)
+- `QueryDecl` -- (also a statement when inside workflow body)
+- `UpdateDecl` -- (also a statement when inside workflow body)
 
 **Supporting types:**
 
@@ -424,30 +532,68 @@ Two interfaces -- `Definition` (top-level) and `Statement` (inside bodies) -- wi
 - `SelectCase` -- Primitive kind + fields (varies), Body
 - `SwitchCase` -- Value (opaque), Body
 - `ForVariant` -- Infinite | Conditional{Condition} | Iteration{Variable, Iterable}
-- `WorkflowCallMode` -- Child | Detach | Bare
+- `WorkflowCallMode` -- Child | Spawn | Detach
 
 All opaque fields stored as `string`.
 
 ---
 
-## Parser Design (`parser/parser.go`)
+## Resolver Design
 
-Recursive descent parser with context tracking (`inActivityDef` flag for body restrictions).
+After parsing, a resolution pass walks the AST to link calls to their definitions. This is a separate package (`resolver/`) that operates on the parsed AST.
 
-**Top-level dispatch** (`ParseFile`):
+**What it links:**
+
+- `ActivityCall.Name` -> matching `ActivityDef` (top-level)
+- `WorkflowCall.Name` -> matching `WorkflowDef` (top-level)
+- `AwaitStmt` signal targets -> matching `SignalDecl` (in enclosing workflow)
+- `AwaitStmt` update targets -> matching `UpdateDecl` (in enclosing workflow)
+- `SelectCase` signal/update cases -> matching decls (in enclosing workflow)
+
+**Errors reported:**
+
+- Undefined activity (call references non-existent activity def)
+- Undefined workflow (call references non-existent workflow def)
+- Undefined signal/update (await references signal/update not declared in this workflow)
+- Duplicate definition names (two workflows with same name, etc.)
+
+**Implementation:** Single-pass walk. First pass collects all top-level definitions into a lookup map. Second pass walks all workflow bodies resolving references. Linked references can be stored as pointer fields on the AST nodes (e.g., `ActivityCall.Resolved *ActivityDef`).
+
+---
+
+## Parser Design
+
+Recursive descent parser with **registration-based dispatch** for extensibility.
+
+### Keyword Dispatch Pattern
+
+Rather than monolithic switch statements, use a map of keyword -> parse function:
+
+```go
+type stmtParser func(p *Parser) (ast.Statement, error)
+
+// Registered at init
+topLevelParsers    map[token.TokenType]func(p *Parser) (ast.Definition, error)
+workflowStmtParsers map[token.TokenType]stmtParser
+activityStmtParsers map[token.TokenType]stmtParser
+```
+
+Adding a new keyword means adding one entry to the appropriate registry. The dispatch loop is just a map lookup + fallback to `parseRawStmt()`.
+
+### Top-Level Dispatch
 
 - `WORKFLOW` -> `parseWorkflowDef()`
 - `ACTIVITY` -> `parseActivityDef()`
-- `SIGNAL` -> `parseSignalDecl()`
-- `QUERY` -> `parseQueryDecl()`
-- `UPDATE` -> `parseUpdateDecl()`
 - `COMMENT` -> comment node
 - Other keywords at top level -> error
 
-**Workflow body statement dispatch** (`parseWorkflowStmt`):
+### Workflow Body Dispatch
 
+- `SIGNAL` -> `parseSignalDecl()` (only before first non-decl statement)
+- `QUERY` -> `parseQueryDecl()` (only before first non-decl statement)
+- `UPDATE` -> `parseUpdateDecl()` (only before first non-decl statement)
 - `ACTIVITY` -> `parseActivityCall()`
-- `CHILD` / `DETACH` / `NEXUS` / `WORKFLOW` -> `parseWorkflowCall()`
+- `SPAWN` / `DETACH` / `NEXUS` / `WORKFLOW` -> `parseWorkflowCall()`
 - `TIMER` -> `parseTimerStmt()`
 - `AWAIT` -> `parseAwaitStmt()`
 - `PARALLEL` -> `parseParallelBlock()`
@@ -462,7 +608,7 @@ Recursive descent parser with context tracking (`inActivityDef` flag for body re
 - `COMMENT` -> comment
 - Otherwise -> `parseRawStmt()`
 
-**Activity body statement dispatch** (`parseActivityStmt`):
+### Activity Body Dispatch
 
 - `IF` -> `parseIfStmt()`
 - `FOR` -> `parseForStmt()`
@@ -474,11 +620,22 @@ Recursive descent parser with context tracking (`inActivityDef` flag for body re
 - Temporal primitive keyword -> error ("not allowed in activity body")
 - Otherwise -> `parseRawStmt()`
 
-**Key helper**: `collectRawUntil(terminators ...TokenType) string` -- reads and concatenates tokens until a terminator is found.
+### Key Helpers
 
-**Workflow def parsing**: After consuming signature, enter body. Check for optional `SIGNALS`/`QUERIES`/`UPDATES` blocks (must come before statements). Then parse workflow body.
+- `collectRawUntil(terminators ...TokenType) string` -- reads and concatenates tokens until a terminator is found
+- `expectToken(tt TokenType) (Token, error)` -- consume and validate next token
+- `peekToken() Token` -- lookahead without consuming
+- `parseOptionalOptions() (string, error)` -- after a call or at body start, check for INDENT OPTIONS ARGS DEDENT
 
-**Workflow call parsing**: Consume optional `CHILD`/`DETACH`, optional `NEXUS IDENT`, then expect `WORKFLOW IDENT ARGS [ARROW IDENT] NEWLINE`. Validate: detach + arrow = error.
+### Workflow Call Parsing
+
+Consume optional `SPAWN`/`DETACH`, optional `NEXUS STRING`, then expect `WORKFLOW IDENT ARGS [ARROW IDENT] NEWLINE`. Check for trailing options line. Validate: detach + arrow = error.
+
+### For Statement Parsing
+
+After consuming `FOR`, check next token:
+- `COLON` -> infinite loop (`for:`)
+- `ARGS` -> examine content for `IN` keyword to distinguish conditional vs iteration
 
 ---
 
@@ -487,15 +644,17 @@ Recursive descent parser with context tracking (`inActivityDef` flag for body re
 - `await` must be followed by `signal` or `update` -- enforced in `parseAwaitStmt`
 - `detach` + `-> result` is an error -- enforced in `parseWorkflowCall`
 - `select` cases cannot use `detach` -- enforced in `parseSelectBlock`
-- Workflow/activity/signal/query/update defs only at top level -- enforced by top-level vs body dispatch
-- Temporal primitives not allowed in activity bodies -- enforced by `parseActivityStmt`
+- Workflow/activity defs only at top level -- enforced by top-level dispatch
+- Signal/query/update defs only inside workflow body (before other statements) -- enforced by workflow body parser
+- Temporal primitives not allowed in activity bodies -- enforced by `activityStmtParsers` registry
 - `switch` must have at least one `case` -- enforced in `parseSwitchBlock`
 - `case` only inside `switch` -- enforced by statement dispatch
 - `else` only after `if` body or as last item in `switch` -- enforced by lookahead
 - `break`/`continue` only inside `for` -- enforced by context flag or deferred validation
 - `continue_as_new` only inside workflow body -- enforced by context
-- Attachment blocks (`signals:`, `queries:`, `updates:`) must precede body statements -- enforced by parsing order
+- No nested parens in `ARGS` tokens -- enforced by lexer (first `)` closes)
 - Indentation must be consistent -- enforced by lexer indent stack
+- Options must immediately follow a call/def (no intervening statements) -- enforced by parser lookahead
 
 ---
 
@@ -515,16 +674,23 @@ Fail on first error for v1. Recovery can be layered on later.
 
 ## Test Strategy
 
-- **Lexer tests**: Token streams for indentation, keywords, args, comments, arrows, `continue_as_new`, blank lines, mixed indent errors, new keywords (`detach`, `signals`, `queries`, `updates`).
+- **Lexer tests**: Token streams for indentation, keywords, args (including paren rejection for nested parens), quoted strings, comments, arrows, `continue_as_new`, blank lines, mixed indent errors, `spawn`, `options`.
 - **Parser tests**: Full DSL snippets asserting AST structure:
-  - Workflow def with attachment blocks and body
+  - Workflow def with signal/query/update declarations and body
   - Activity def with imperative body (if/for/switch/raw)
-  - Signal/query/update bare declarations
-  - Workflow calls: child, detach, bare, with nexus prefix
-  - All three `for` forms
-  - Parallel and select blocks (including workflow call cases in select)
+  - Activity def with options
+  - Workflow calls: child (bare), spawn, detach, with nexus prefix
+  - Workflow/activity calls with options lines
+  - All three `for` forms with paren-delimited clauses
+  - `if` and `switch` with paren-delimited expressions
+  - Parallel and select blocks
   - Switch/case with else default
   - Await (simple and multi-target with `or`)
   - Comments and raw statements
-  - Error cases: detach with arrow, Temporal primitive in activity body, bad indentation, missing keywords, invalid await targets, bare `case` outside `switch`
-
+  - `continue_as_new`
+  - Error cases: detach with arrow, Temporal primitive in activity body, bad indentation, missing keywords, invalid await targets, bare `case` outside `switch`, nested parens in args, signal/query/update outside workflow
+- **Resolver tests**:
+  - Successful resolution of all call types to definitions
+  - Undefined activity/workflow/signal/update errors
+  - Duplicate definition name errors
+  - Signal/update await resolved to enclosing workflow's declarations

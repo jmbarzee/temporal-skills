@@ -1,0 +1,24 @@
+workflow OrderFulfillment(orderId: string) -> (OrderResult):
+    signal PaymentReceived(transactionId: string, amount: decimal)
+    query GetStatus() -> (OrderStatus)
+    update ChangeAddress(addr: Address) -> (UpdateResult)
+
+    activity GetOrder(orderId) -> order
+
+    if (order.priority == "high"):
+        activity ExpediteOrder(order)
+    else:
+        activity StandardProcessing(order)
+
+    parallel:
+        activity ReserveInventory(order) -> inventory
+        activity ProcessPayment(order) -> payment
+
+    await signal PaymentReceived
+    workflow ShipOrder(order) -> shipResult
+    return OrderResult{status: "completed"}
+
+workflow ShipOrder(order: Order) -> (ShipResult):
+    activity CreateShipment(order) -> shipment
+        options(startToCloseTimeout: 30s)
+    return shipment

@@ -1,0 +1,19 @@
+activity GetOrder(orderId: string) -> (Order):
+    order = db.get(orderId)
+    return order
+
+activity ExpediteOrder(order: Order) -> (Order):
+    order.priority = "expedited"
+    return order
+
+activity StandardProcessing(order: Order) -> (Order):
+    return order
+
+activity ReserveInventory(order: Order) -> (Inventory):
+    return reserve(order)
+
+activity ProcessPayment(order: Order) -> (Payment):
+    return charge(order)
+
+activity CreateShipment(order: Order) -> (Shipment):
+    return ship(order)

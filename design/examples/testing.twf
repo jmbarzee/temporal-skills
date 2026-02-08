@@ -1,0 +1,99 @@
+# Source: testing.md
+# Patterns: simple testable workflow/activity pairs
+
+# --- Basic testable order workflow ---
+
+workflow OrderWorkflow(order: Order) -> (OrderResult):
+    activity ValidateOrder(order) -> validated
+    if (validated.success == false):
+        return OrderResult{status: "invalid"}
+
+    activity ProcessPayment(order.payment) -> payment
+    activity ShipOrder(order)
+
+    return OrderResult{status: "completed", paymentId: payment.id}
+
+# --- Workflow with timer for testing ---
+
+workflow ReminderWorkflow(userId: string) -> (void):
+    activity SendFirstReminder(userId)
+
+    timer 24h
+
+    activity SendSecondReminder(userId)
+
+    timer 48h
+
+    activity SendFinalReminder(userId)
+
+# --- Workflow with signals for testing ---
+
+workflow ApprovalWorkflow(request: Request) -> (Decision):
+    signal Approved(approver: string)
+    signal Rejected(approver: string, reason: string)
+
+    activity NotifyApprovers(request)
+
+    select:
+        signal Approved:
+            return Decision{status: "approved"}
+        signal Rejected:
+            return Decision{status: "rejected"}
+        timer 1h:
+            return Decision{status: "timeout"}
+
+# --- Workflow with query for testing ---
+
+workflow StatusWorkflow(orderId: string) -> (OrderResult):
+    query GetStatus() -> (string)
+
+    status = "pending"
+    activity StartProcessing(orderId)
+
+    status = "processing"
+    activity ProcessItems(orderId)
+
+    status = "completed"
+    return OrderResult{status: status}
+
+# --- Parent-child workflow for testing ---
+
+workflow ParentWorkflow(data: Data) -> (Result):
+    workflow ChildWorkflow(data.item) -> childResult
+    return Result{childData: childResult}
+
+workflow ChildWorkflow(item: Item) -> (ChildResult):
+    activity ProcessItem(item)
+    return ChildResult{processed: true}
+
+# --- Supporting activities ---
+
+activity ValidateOrder(order: Order) -> (ValidationResult):
+    return validate(order)
+
+activity ProcessPayment(payment: Payment) -> (PaymentResult):
+    return charge(payment)
+
+activity ShipOrder(order: Order) -> (void):
+    ship(order)
+
+activity SendFirstReminder(userId: string) -> (void):
+    send_reminder(userId, 1)
+
+activity SendSecondReminder(userId: string) -> (void):
+    send_reminder(userId, 2)
+
+activity SendFinalReminder(userId: string) -> (void):
+    send_reminder(userId, 3)
+
+activity NotifyApprovers(request: Request) -> (void):
+    notify(request.approvers)
+
+activity StartProcessing(orderId: string) -> (void):
+    start(orderId)
+
+activity ProcessItems(orderId: string) -> (void):
+    process_all(orderId)
+
+activity ProcessItem(item: Item) -> (void):
+    process(item)

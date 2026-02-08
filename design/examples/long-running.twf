@@ -1,0 +1,108 @@
+# Source: long-running.md
+# Patterns: continue_as_new, entity workflow, signal/query/update, signal draining
+
+# --- Basic continue-as-new pattern ---
+
+workflow LongRunningProcessor(state: State) -> (void):
+    signal NewEvent(data: EventData)
+
+    eventCount = 0
+
+    for:
+        await signal NewEvent
+        activity ProcessEvent(state) -> result
+        state.processed = state.processed + 1
+        eventCount = eventCount + 1
+
+        # Reset history before it gets too large
+        if (eventCount >= 1000):
+            continue_as_new(state)
+
+# --- Entity workflow pattern ---
+
+workflow UserEntity(userId: string, state: UserState) -> (void):
+    signal UpdateProfile(data: ProfileData)
+    signal AddCredits(amount: decimal)
+    signal Deactivate()
+    query GetState() -> (UserState)
+    update UpdateSettings(settings: Settings) -> (Result)
+
+    # Initialize state if new
+    if (state == null):
+        activity LoadUser(userId) -> state
+
+    eventCount = 0
+
+    for:
+        # Wait for commands or periodic triggers
+        select:
+            signal UpdateProfile:
+                activity PersistUser(userId, state)
+            signal AddCredits:
+                activity PersistUser(userId, state)
+            signal Deactivate:
+                activity PersistUser(userId, state)
+                return
+            timer 24h:
+                activity DailyMaintenance(userId, state)
+
+        eventCount = eventCount + 1
+
+        # Continue-as-new periodically
+        if (eventCount > 500):
+            continue_as_new(userId, state)
+
+# --- History management: fixed event count ---
+
+workflow FixedCountProcessor(state: State) -> (void):
+    signal WorkItem(data: ItemData)
+
+    eventCount = 0
+
+    for:
+        await signal WorkItem
+        activity DoWork(state)
+        eventCount = eventCount + 1
+
+        if (eventCount >= 1000):
+            continue_as_new(state)
+
+# --- Signal draining before continue-as-new ---
+
+workflow DrainingProcessor(state: State) -> (void):
+    signal IncomingEvent(data: EventData)
+
+    count = 0
+
+    for:
+        await signal IncomingEvent
+        activity ProcessDrainedEvent(state)
+        count = count + 1
+
+        if (count >= 500):
+            # Drain pending signals at natural boundary
+            activity FlushPending(state)
+            continue_as_new(state)
+
+# --- Supporting activities ---
+
+activity ProcessEvent(state: State) -> (EventResult):
+    return process(state)
+
+activity LoadUser(userId: string) -> (UserState):
+    return db.load(userId)
+
+activity PersistUser(userId: string, state: UserState) -> (void):
+    db.save(userId, state)
+
+activity DailyMaintenance(userId: string, state: UserState) -> (void):
+    run_maintenance(userId, state)
+
+activity DoWork(state: State) -> (void):
+    work(state)
+
+activity ProcessDrainedEvent(state: State) -> (void):
+    process(state)
+
+activity FlushPending(state: State) -> (void):
+    flush(state)

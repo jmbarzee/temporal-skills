@@ -1,0 +1,259 @@
+# Source: patterns.md
+# Patterns: process, entity, saga (adapted), fan-out/fan-in, pipeline, state machine, polling
+
+# --- Process Workflow ---
+
+workflow OrderFulfillment(order: Order) -> (OrderResult):
+    # Step 1: Validate
+    activity ValidateOrder(order) -> validated
+    if (validated.success == false):
+        return OrderResult{status: "invalid", error: validated.error}
+
+    # Step 2: Reserve
+    activity ReserveInventory(order.items) -> reservation
+
+    # Step 3: Charge
+    activity ProcessPayment(order.payment) -> payment
+
+    # Step 4: Fulfill
+    activity ShipOrder(order, reservation)
+
+    # Step 5: Notify
+    activity SendConfirmation(order.customer)
+
+    return OrderResult{status: "completed", trackingId: reservation.trackingId}
+
+# --- Entity Workflow ---
+
+workflow AccountEntity(accountId: string, state: AccountState) -> (void):
+    signal Deposit(amount: decimal)
+    signal Withdraw(amount: decimal)
+    signal Close()
+    query GetBalance() -> (decimal)
+    update Transfer(amount: decimal, toAccount: string) -> (TransferResult)
+
+    if (state == null):
+        activity LoadAccount(accountId) -> state
+
+    eventCount = 0
+
+    for:
+        select:
+            signal Deposit:
+                activity RecordTransaction(accountId, "deposit")
+            signal Withdraw:
+                activity RecordTransaction(accountId, "withdraw")
+            signal Close:
+                activity CloseAccount(accountId)
+                return
+            timer 24h:
+                activity DailyReconciliation(accountId)
+
+        eventCount = eventCount + 1
+        if (eventCount > 1000):
+            continue_as_new(accountId, state)
+
+# --- Saga Pattern (adapted without try/catch) ---
+
+workflow BookingWorkflow(booking: Booking) -> (BookingResult):
+    # Step 1: Reserve flight
+    activity ReserveFlight(booking.flight) -> flight
+
+    # Step 2: Reserve hotel
+    activity ReserveHotel(booking.hotel) -> hotel
+
+    # Step 3: Reserve car
+    activity ReserveCar(booking.car) -> car
+
+    # Step 4: Charge payment
+    activity ChargePayment(booking.payment) -> payment
+
+    # All succeeded
+    return BookingResult{status: "confirmed"}
+
+# --- Saga compensation workflow (called on failure) ---
+
+workflow CompensateBooking(flight: string, hotel: string, car: string) -> (void):
+    # Run compensations
+    activity CancelFlight(flight)
+    activity CancelHotel(hotel)
+    activity CancelCar(car)
+
+# --- Fan-Out/Fan-In ---
+
+workflow BatchProcessor(items: []Item) -> (BatchResult):
+    # Fan-out: start all processing in parallel
+    parallel:
+        for (item in items):
+            activity ProcessBatchItem(item) -> result
+
+    # Fan-in: aggregate results
+    activity AggregateResults(result) -> aggregated
+    return BatchResult{processed: aggregated.count}
+
+# --- Pipeline ---
+
+workflow DataPipeline(rawData: RawData) -> (ProcessedData):
+    # Stage 1: Ingest
+    activity Ingest(rawData) -> ingested
+
+    # Stage 2: Validate
+    activity Validate(ingested) -> validated
+    if (validated.valid == false):
+        return ProcessedData{status: "invalid", errors: validated.errors}
+
+    # Stage 3: Transform
+    activity Transform(validated.data) -> transformed
+
+    # Stage 4: Enrich
+    activity Enrich(transformed) -> enriched
+
+    # Stage 5: Load
+    activity Load(enriched)
+
+    return ProcessedData{status: "complete", recordCount: enriched.count}
+
+# --- State Machine ---
+
+workflow DocumentApproval(doc: Document) -> (ApprovalResult):
+    signal Submit()
+    signal Approve()
+    signal Reject()
+    signal RequestChanges()
+    signal Withdraw()
+
+    state = "draft"
+
+    for:
+        switch (state):
+            case "draft":
+                await signal Submit
+                activity NotifyReviewers(doc)
+                state = "pending_review"
+            case "pending_review":
+                select:
+                    signal Approve:
+                        state = "approved"
+                    signal Reject:
+                        state = "rejected"
+                    signal RequestChanges:
+                        state = "changes_requested"
+            case "changes_requested":
+                select:
+                    signal Submit:
+                        state = "pending_review"
+                    signal Withdraw:
+                        state = "withdrawn"
+            case "approved":
+                activity PublishDocument(doc)
+                return ApprovalResult{status: "approved"}
+            case "rejected":
+                activity ArchiveDocument(doc)
+                return ApprovalResult{status: "rejected"}
+            case "withdrawn":
+                return ApprovalResult{status: "withdrawn"}
+
+# --- Polling ---
+
+workflow WaitForResource(resourceId: string) -> (Resource):
+    backoff = 5
+
+    for:
+        activity CheckResourceStatus(resourceId) -> status
+
+        if (status.ready):
+            activity GetResource(resourceId) -> resource
+            return resource
+
+        if (status.failed):
+            return Resource{error: status.error}
+
+        # Wait with backoff
+        timer backoff
+        backoff = backoff * 2
+
+# --- Supporting activities ---
+
+activity ValidateOrder(order: Order) -> (ValidateResult):
+    return validate(order)
+
+activity ReserveInventory(items: []Item) -> (Reservation):
+    return reserve(items)
+
+activity ProcessPayment(payment: Payment) -> (PaymentResult):
+    return charge(payment)
+
+activity ShipOrder(order: Order, reservation: Reservation) -> (void):
+    ship(order, reservation)
+
+activity SendConfirmation(customer: Customer) -> (void):
+    notify(customer)
+
+activity LoadAccount(accountId: string) -> (AccountState):
+    return db.load(accountId)
+
+activity RecordTransaction(accountId: string, txType: string) -> (void):
+    db.record(accountId, txType)
+
+activity CloseAccount(accountId: string) -> (void):
+    db.close(accountId)
+
+activity DailyReconciliation(accountId: string) -> (void):
+    reconcile(accountId)
+
+activity ReserveFlight(flight: FlightSpec) -> (FlightReservation):
+    return reserve(flight)
+
+activity ReserveHotel(hotel: HotelSpec) -> (HotelReservation):
+    return reserve(hotel)
+
+activity ReserveCar(car: CarSpec) -> (CarReservation):
+    return reserve(car)
+
+activity ChargePayment(payment: Payment) -> (PaymentResult):
+    return charge(payment)
+
+activity CancelFlight(flightId: string) -> (void):
+    cancel(flightId)
+
+activity CancelHotel(hotelId: string) -> (void):
+    cancel(hotelId)
+
+activity CancelCar(carId: string) -> (void):
+    cancel(carId)
+
+activity ProcessBatchItem(item: Item) -> (ItemResult):
+    return process(item)
+
+activity AggregateResults(results: []ItemResult) -> (AggregateResult):
+    return aggregate(results)
+
+activity Ingest(rawData: RawData) -> (IngestedData):
+    return ingest(rawData)
+
+activity Validate(data: IngestedData) -> (ValidationResult):
+    return validate(data)
+
+activity Transform(data: ValidatedData) -> (TransformedData):
+    return transform(data)
+
+activity Enrich(data: TransformedData) -> (EnrichedData):
+    return enrich(data)
+
+activity Load(data: EnrichedData) -> (void):
+    load(data)
+
+activity NotifyReviewers(doc: Document) -> (void):
+    notify(doc.reviewers)
+
+activity PublishDocument(doc: Document) -> (void):
+    publish(doc)
+
+activity ArchiveDocument(doc: Document) -> (void):
+    archive(doc)
+
+activity CheckResourceStatus(resourceId: string) -> (ResourceStatus):
+    return check(resourceId)
+
+activity GetResource(resourceId: string) -> (Resource):
+    return fetch(resourceId)

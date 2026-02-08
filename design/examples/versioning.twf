@@ -1,0 +1,140 @@
+# Source: versioning.md
+# Patterns: patching (patched() as raw stmts), add/remove/change steps
+# Note: patched() calls are raw statements; assign to variable for if-checks
+
+# --- Adding a step with patch ---
+
+workflow OrderWorkflowAddStep(order: Order) -> (OrderResult):
+    activity ValidateOrder(order)
+
+    # Version gate: new code only runs for new executions
+    hasFraudCheck = patched("add-fraud-check")
+    if (hasFraudCheck):
+        activity FraudCheck(order)
+
+    activity ProcessPayment(order) -> payment
+    return OrderResult{status: "complete"}
+
+# --- Removing a step with patch ---
+
+workflow OrderWorkflowRemoveStep(data: Data) -> (Result):
+    activity Step1(data)
+
+    removedLegacy = patched("v3-remove-legacy")
+    if (removedLegacy == false):
+        activity LegacyStep(data)
+
+    activity Step2(data)
+    return Result{}
+
+# --- Changing a step with patch ---
+
+workflow OrderWorkflowChangeStep(data: Data) -> (Result):
+    activity Step1(data)
+
+    improved = patched("v4-improved-processing")
+    if (improved):
+        activity ImprovedProcessing(data)
+    else:
+        activity OldProcessing(data)
+
+    activity Step3(data)
+    return Result{}
+
+# --- Reordering activities with patch ---
+
+workflow ReorderWorkflow(data: Data) -> (Result):
+    activity StepA(data)
+
+    reordered = patched("reorder-bc")
+    if (reordered):
+        activity StepC(data)
+        activity StepB(data)
+    else:
+        activity StepB(data)
+        activity StepC(data)
+
+    return Result{}
+
+# --- Changing activity parameters with patch ---
+
+workflow ParamChangeWorkflow(data: Data) -> (Result):
+    newParams = patched("new-activity-params")
+    if (newParams):
+        activity EnhancedActivity(data, true) -> result
+    else:
+        activity EnhancedActivity(data) -> result
+
+    return Result{result}
+
+# --- Multiple patches in one workflow ---
+
+workflow MultiPatchWorkflow(order: Order) -> (OrderResult):
+    activity ValidateOrder(order)
+
+    hasFraudCheck = patched("2024-01-add-fraud-check")
+    if (hasFraudCheck):
+        activity FraudCheck(order)
+
+    hasImprovedValidation = patched("2024-02-improve-validation")
+    if (hasImprovedValidation):
+        activity ImprovedValidation(order)
+
+    activity ProcessPayment(order) -> payment
+
+    removedLegacyNotify = patched("2024-03-remove-legacy-notify")
+    if (removedLegacyNotify == false):
+        activity LegacyNotify(order)
+
+    activity FinalizeOrder(order) -> result
+    return OrderResult{status: "complete"}
+
+# --- Supporting activities ---
+
+activity ValidateOrder(order: Order) -> (void):
+    validate(order)
+
+activity FraudCheck(order: Order) -> (void):
+    check_fraud(order)
+
+activity ProcessPayment(order: Order) -> (PaymentResult):
+    return charge(order)
+
+activity Step1(data: Data) -> (void):
+    step1(data)
+
+activity Step2(data: Data) -> (void):
+    step2(data)
+
+activity Step3(data: Data) -> (void):
+    step3(data)
+
+activity LegacyStep(data: Data) -> (void):
+    legacy(data)
+
+activity ImprovedProcessing(data: Data) -> (void):
+    improved(data)
+
+activity OldProcessing(data: Data) -> (void):
+    old_process(data)
+
+activity StepA(data: Data) -> (void):
+    step_a(data)
+
+activity StepB(data: Data) -> (void):
+    step_b(data)
+
+activity StepC(data: Data) -> (void):
+    step_c(data)
+
+activity EnhancedActivity(data: Data) -> (Result):
+    return enhanced(data)
+
+activity ImprovedValidation(order: Order) -> (void):
+    validate_improved(order)
+
+activity LegacyNotify(order: Order) -> (void):
+    legacy_notify(order)
+
+activity FinalizeOrder(order: Order) -> (OrderResult):
+    return finalize(order)

@@ -1,0 +1,112 @@
+# Source: nexus.md
+# Patterns: cross-namespace calls via nexus: child, spawn, detach
+
+# --- Caller workflow using nexus ---
+
+workflow OrderWorkflow(order: Order) -> (OrderResult):
+    # Validate locally
+    activity ValidateOrder(order)
+
+    # Call into payments namespace via Nexus (child call)
+    nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
+
+    # Call into notifications namespace (fire-and-forget)
+    detach nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
+
+    return OrderResult{paymentId: paymentResult.id}
+
+# --- Spawn nexus workflow (async) ---
+
+workflow AsyncNexusCaller(data: Data) -> (Result):
+    # Start nexus operation asynchronously
+    spawn nexus "processing" workflow ProcessAsync(data) -> handle
+
+    # Do other work locally
+    activity DoLocalWork(data) -> localResult
+
+    return Result{localResult}
+
+# --- Multiple nexus calls ---
+
+workflow MultiNamespaceWorkflow(request: Request) -> (AggregateResult):
+    # Call different namespaces
+    nexus "inventory" workflow CheckInventory(request.items) -> inventoryResult
+    nexus "pricing" workflow CalculatePrice(request.items) -> priceResult
+    nexus "shipping" workflow EstimateShipping(request.destination) -> shippingResult
+
+    return AggregateResult{inventoryResult, priceResult, shippingResult}
+
+# --- Nexus with options ---
+
+workflow NexusWithOptions(payment: Payment) -> (PaymentResult):
+    nexus "payments" workflow ChargeCard(payment) -> result
+        options(scheduleToCloseTimeout: 5m)
+    return PaymentResult{result}
+
+# --- Supporting local activities ---
+
+activity ValidateOrder(order: Order) -> (void):
+    validate(order)
+
+activity DoLocalWork(data: Data) -> (LocalResult):
+    return process(data)
+
+# --- Target namespace workflows (would be in separate files in practice) ---
+
+workflow ProcessPayment(payment: Payment) -> (PaymentResult):
+    activity ValidatePaymentDetails(payment)
+    activity ChargePaymentMethod(payment) -> result
+    activity RecordTransaction(result)
+    return PaymentResult{id: result.id}
+
+workflow SendConfirmation(customer: Customer, paymentResult: PaymentResult) -> (void):
+    activity SendEmail(customer.email, paymentResult)
+
+workflow ProcessAsync(data: Data) -> (ProcessResult):
+    activity ProcessData(data) -> result
+    return ProcessResult{result}
+
+workflow CheckInventory(items: []Item) -> (InventoryResult):
+    activity CheckStock(items) -> stock
+    return InventoryResult{stock}
+
+workflow CalculatePrice(items: []Item) -> (PriceResult):
+    activity ComputePrice(items) -> price
+    return PriceResult{price}
+
+workflow EstimateShipping(destination: Address) -> (ShippingResult):
+    activity CalcShipping(destination) -> estimate
+    return ShippingResult{estimate}
+
+workflow ChargeCard(payment: Payment) -> (ChargeResult):
+    activity ProcessCharge(payment) -> result
+    return ChargeResult{result}
+
+# --- Supporting activities for target workflows ---
+
+activity ValidatePaymentDetails(payment: Payment) -> (void):
+    validate(payment)
+
+activity ChargePaymentMethod(payment: Payment) -> (ChargeResult):
+    return charge(payment)
+
+activity RecordTransaction(result: ChargeResult) -> (void):
+    record(result)
+
+activity SendEmail(email: string, data: PaymentResult) -> (void):
+    send(email, data)
+
+activity ProcessData(data: Data) -> (Result):
+    return process(data)
+
+activity CheckStock(items: []Item) -> (StockInfo):
+    return check(items)
+
+activity ComputePrice(items: []Item) -> (Price):
+    return compute(items)
+
+activity CalcShipping(destination: Address) -> (Estimate):
+    return calculate(destination)
+
+activity ProcessCharge(payment: Payment) -> (ChargeResult):
+    return charge(payment)

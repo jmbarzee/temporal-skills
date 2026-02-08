@@ -1,0 +1,97 @@
+# Source: task-queues.md
+# Patterns: priority/tenant/capability/geographic routing via options
+
+# --- Priority queue routing ---
+
+workflow PriorityOrderWorkflow(order: Order) -> (Result):
+    if (order.priority == "express"):
+        activity ProcessOrder(order) -> result
+            options(taskQueue: "high-priority")
+    else:
+        activity ProcessOrder(order) -> result
+            options(taskQueue: "standard")
+
+    return Result{result}
+
+# --- Tenant isolation ---
+
+workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
+    # Route to tenant-specific queue
+    activity ProcessTenantData(data) -> result
+        options(taskQueue: "tenant-queue")
+
+    return Result{result}
+
+# --- Capability-based routing ---
+
+workflow MediaWorkflow(media: Media) -> (Result):
+    if (media.type == "video"):
+        # Needs GPU workers
+        activity TranscodeVideo(media) -> result
+            options(taskQueue: "gpu-workers")
+    else:
+        activity ProcessImage(media) -> result
+            options(taskQueue: "standard-workers")
+
+    return Result{result}
+
+# --- Geographic routing ---
+
+workflow GlobalWorkflow(request: Request) -> (Result):
+    # Route to nearest region
+    activity ProcessLocally(request) -> result
+        options(taskQueue: "workers-regional")
+
+    return Result{result}
+
+# --- Multi-queue workflow combining patterns ---
+
+workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
+    # Validate on fast queue
+    activity QuickValidation(job) -> validated
+        options(taskQueue: "fast-queue", startToCloseTimeout: 5s)
+
+    if (validated.valid == false):
+        return JobResult{status: "invalid"}
+
+    # Process based on job type
+    switch (job.type):
+        case "compute":
+            activity HeavyCompute(job) -> result
+                options(taskQueue: "compute-workers")
+        case "io":
+            activity IOBoundWork(job) -> result
+                options(taskQueue: "io-workers")
+        else:
+            activity DefaultProcess(job) -> result
+
+    return JobResult{status: "done"}
+
+# --- Supporting activities ---
+
+activity ProcessOrder(order: Order) -> (OrderResult):
+    return process(order)
+
+activity ProcessTenantData(data: Data) -> (DataResult):
+    return process(data)
+
+activity TranscodeVideo(media: Media) -> (TranscodeResult):
+    return transcode(media)
+
+activity ProcessImage(media: Media) -> (ImageResult):
+    return process(media)
+
+activity ProcessLocally(request: Request) -> (ProcessResult):
+    return process(request)
+
+activity QuickValidation(job: Job) -> (ValidationResult):
+    return validate(job)
+
+activity HeavyCompute(job: Job) -> (ComputeResult):
+    return compute(job)
+
+activity IOBoundWork(job: Job) -> (IOResult):
+    return io_process(job)
+
+activity DefaultProcess(job: Job) -> (ProcessResult):
+    return process(job)

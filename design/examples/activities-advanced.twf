@@ -1,0 +1,84 @@
+# Source: activities-advanced.md
+# Patterns: heartbeat, progress, timeout configs, retry via options
+
+# --- Long-running activity with heartbeat ---
+
+activity ProcessLargeFile(fileId: string) -> (ProcessResult):
+    options(startToCloseTimeout: 2h, heartbeatTimeout: 30s)
+    file = download(fileId)
+    total = len(file.chunks)
+    for (i in file.chunks):
+        process(i)
+        heartbeat(progress: {current: i, total: total})
+    return ProcessResult{success: true}
+
+# --- Resumable activity using heartbeat details ---
+
+activity ResumableProcess(batchId: string) -> (BatchResult):
+    options(startToCloseTimeout: 1h, heartbeatTimeout: 60s)
+    lastProgress = get_heartbeat_details()
+    startIndex = lastProgress.index
+    items = getItems(batchId)
+    for (i in items):
+        process(i)
+        heartbeat(index: i)
+    return BatchResult{processed: len(items)}
+
+# --- Async completion activity (human approval) ---
+
+activity RequestHumanApproval(request: ApprovalRequest) -> (ApprovalResult):
+    options(startToCloseTimeout: 7d)
+    taskToken = get_activity_task_token()
+    createTicket(title: request.title, callback_token: taskToken)
+    do_not_complete()
+
+# --- Notification activity ---
+
+activity NotifyRequestCreated(request: Request) -> (void):
+    options(startToCloseTimeout: 30s)
+    send_notification(request)
+
+# --- Execute approved action ---
+
+activity ExecuteApprovedAction(request: Request) -> (void):
+    options(startToCloseTimeout: 5m)
+    execute(request)
+
+# --- Workflow using async activity with timeout ---
+
+workflow ApprovalWorkflow(request: Request) -> (Decision):
+    activity NotifyRequestCreated(request)
+
+    # This blocks until external completion
+    activity RequestHumanApproval(request) -> result
+
+    if (result.approved):
+        activity ExecuteApprovedAction(request)
+
+    return Decision{approved: result.approved}
+
+# --- Workflow with various timeout configurations ---
+
+workflow TimeoutConfigDemo(data: Data) -> (Result):
+    # Short operation, tight timeout
+    activity QuickLookup(data.id) -> result1
+        options(startToCloseTimeout: 30s)
+
+    # Long operation with heartbeat
+    activity ProcessLargeFile(data.fileId) -> result2
+
+    # Operation with retry policy
+    activity UnreliableService(data) -> result3
+        options(startToCloseTimeout: 2m, retryPolicy: {maxAttempts: 5, initialInterval: 1s, backoffCoefficient: 2.0, maxInterval: 60s})
+
+    return Result{result1, result2, result3}
+
+# --- Supporting activities ---
+
+activity QuickLookup(id: string) -> (LookupResult):
+    options(startToCloseTimeout: 30s)
+    return db.lookup(id)
+
+activity UnreliableService(data: Data) -> (ServiceResult):
+    options(startToCloseTimeout: 2m)
+    return external_api.call(data)

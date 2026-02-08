@@ -1,0 +1,104 @@
+# Source: SKILL.md
+# Patterns: basic structure, control flow, parallel, timer, child workflow
+
+# --- Process Order: control flow, parallel, iteration ---
+
+workflow ProcessOrder(order: Order) -> (Result):
+    activity ValidateOrder(order) -> validated
+
+    # Conditionals
+    if (validated.priority == "high"):
+        activity ExpediteOrder(order)
+    else:
+        activity StandardProcessing(order)
+
+    # Loops
+    for (item in order.items):
+        activity ProcessItem(item)
+
+    # Parallel execution
+    parallel:
+        activity ReserveInventory(order) -> inventory
+        activity ProcessPayment(order) -> payment
+
+    return Result{inventory, payment}
+
+# --- Order Fulfillment: timer, signal, child, nexus ---
+
+workflow OrderFulfillment(orderId: string) -> (OrderResult):
+    signal PaymentReceived(transactionId: string, amount: decimal)
+    query GetOrderStatus() -> (OrderStatus)
+    update UpdateShippingAddress(address: Address) -> (Result)
+
+    activity GetOrder(orderId) -> order
+
+    # Durable timer
+    timer 1h
+
+    # Wait for signal with timeout via select
+    select:
+        signal PaymentReceived:
+            activity FulfillOrder(order)
+        timer 24h:
+            activity CancelOrder(orderId)
+            return OrderResult{status: "cancelled"}
+
+    # Child workflow
+    workflow ShipOrder(order) -> shipResult
+
+    # Cross-namespace call
+    nexus "notifications" workflow SendNotification(order.customer, "shipped")
+
+    return OrderResult{status: "completed"}
+
+# --- Anti-pattern example: deterministic deadline ---
+
+workflow DeadlineExample(data: Data) -> (Result):
+    select:
+        activity DoWork(data) -> result:
+            return Result{success: true}
+        timer 30m:
+            return Result{success: false, error: "timeout"}
+
+# --- Supporting definitions ---
+
+activity ValidateOrder(order: Order) -> (ValidateResult):
+    result = validate(order)
+    return result
+
+activity ExpediteOrder(order: Order) -> (void):
+    expedite(order)
+
+activity StandardProcessing(order: Order) -> (void):
+    process(order)
+
+activity ProcessItem(item: Item) -> (ItemResult):
+    return process(item)
+
+activity ReserveInventory(order: Order) -> (Inventory):
+    return reserve(order)
+
+activity ProcessPayment(order: Order) -> (Payment):
+    return charge(order)
+
+activity GetOrder(orderId: string) -> (Order):
+    return db.get(orderId)
+
+activity FulfillOrder(order: Order) -> (void):
+    fulfill(order)
+
+activity CancelOrder(orderId: string) -> (void):
+    cancel(orderId)
+
+activity DoWork(data: Data) -> (Result):
+    return process(data)
+
+workflow ShipOrder(order: Order) -> (ShipResult):
+    activity CreateShipment(order) -> shipment
+    return ShipResult{shipment}
+
+activity CreateShipment(order: Order) -> (Shipment):
+    return ship(order)
+
+workflow SendNotification(customer: Customer, message: string) -> (void):
+    notify(customer, message)

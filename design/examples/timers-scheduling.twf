@@ -1,0 +1,126 @@
+# Source: timers-scheduling.md
+# Patterns: timer delay, deadline via select, polling with backoff, periodic
+
+# --- Basic timer: delayed notification ---
+
+workflow DelayedNotification(userId: string, delay: duration) -> (void):
+    # Durable sleep - workflow pauses but state is preserved
+    timer delay
+    activity SendNotification(userId)
+
+# --- Deadline pattern: race between operation and timer ---
+
+workflow ProcessWithDeadline(data: Data) -> (Result):
+    select:
+        activity LongOperation(data) -> result:
+            return Result{success: true, data: result}
+        timer 1h:
+            activity Cleanup(data)
+            return Result{success: false, error: "deadline exceeded"}
+
+# --- Periodic execution within workflow ---
+
+workflow HealthMonitor(resourceId: string) -> (void):
+    count = 0
+
+    for:
+        activity CheckHealth(resourceId)
+        timer 5m
+        count = count + 1
+        if (count > 1000):
+            continue_as_new(resourceId)
+
+# --- Polling with backoff ---
+
+workflow WaitForResource(resourceId: string) -> (Resource):
+    backoff = 1
+
+    for:
+        activity CheckResource(resourceId) -> resource
+        if (resource.ready):
+            return resource
+
+        timer backoff
+        backoff = backoff * 2
+
+# --- Deadline with periodic check ---
+
+workflow WaitForCompletion(jobId: string) -> (JobResult):
+    checks = 0
+
+    for:
+        activity GetJobStatus(jobId) -> status
+        if (status.complete):
+            return JobResult{status: "complete", data: status.data}
+
+        checks = checks + 1
+        if (checks > 100):
+            return JobResult{status: "timeout"}
+
+        timer 30s
+
+# --- Approval with signal timeout ---
+
+workflow ApprovalWithTimeout(request: Request) -> (Decision):
+    signal Approved(approver: string)
+    signal Rejected(approver: string, reason: string)
+
+    activity NotifyApprovers(request)
+
+    select:
+        signal Approved:
+            return Decision{status: "approved"}
+        signal Rejected:
+            return Decision{status: "rejected"}
+        timer 7d:
+            activity NotifyExpired(request)
+            return Decision{status: "expired"}
+
+# --- Polling with continue-as-new for history management ---
+
+workflow LongPoller(resourceId: string, iteration: int) -> (Resource):
+    count = 0
+
+    for:
+        activity PollResource(resourceId) -> status
+        if (status.ready):
+            activity FetchResource(resourceId) -> resource
+            return resource
+
+        timer 5s
+        count = count + 1
+        if (count >= 500):
+            continue_as_new(resourceId, iteration + 1)
+
+# --- Supporting activities ---
+
+activity SendNotification(userId: string) -> (void):
+    send(userId)
+
+activity LongOperation(data: Data) -> (OperationResult):
+    options(startToCloseTimeout: 2h)
+    return process(data)
+
+activity Cleanup(data: Data) -> (void):
+    cleanup(data)
+
+activity CheckHealth(resourceId: string) -> (HealthStatus):
+    return check(resourceId)
+
+activity CheckResource(resourceId: string) -> (Resource):
+    return check(resourceId)
+
+activity GetJobStatus(jobId: string) -> (JobStatus):
+    return get_status(jobId)
+
+activity NotifyApprovers(request: Request) -> (void):
+    notify(request.approvers)
+
+activity NotifyExpired(request: Request) -> (void):
+    notify_expired(request)
+
+activity PollResource(resourceId: string) -> (ResourceStatus):
+    return poll(resourceId)
+
+activity FetchResource(resourceId: string) -> (Resource):
+    return fetch(resourceId)

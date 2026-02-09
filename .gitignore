@@ -1,1 +1,6 @@
+# VS Code Extension
+node_modules/
+out/
+dist/
+*.vsix
 publish-extension.sh

@@ -1,0 +1,117 @@
+{
+  "name": "twf-syntax",
+  "displayName": "Temporal Workflow (.twf)",
+  "description": "Syntax highlighting, language support, and visualization for Temporal Workflow Definition (.twf) files",
+  "version": "0.2.0",
+  "publisher": "jmbarzee",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jmbarzee/temporal-skills"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "temporal",
+    "workflow",
+    "twf",
+    "dsl",
+    "orchestration",
+    "durable execution",
+    "microservices",
+    "saga",
+    "activities",
+    "state machine",
+    "visualization"
+  ],
+  "icon": "icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:twf"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "twf",
+        "aliases": [
+          "Temporal Workflow",
+          "twf"
+        ],
+        "extensions": [
+          ".twf"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "twf",
+        "scopeName": "source.twf",
+        "path": "./syntaxes/twf.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "twf.visualize",
+        "title": "Visualize Workflow",
+        "category": "TWF",
+        "icon": "$(graph)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "twf.visualize",
+          "when": "resourceLangId == twf"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "TWF Language Server",
+      "properties": {
+        "twf.lsp.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the twf-lsp binary. If empty, looks for 'twf-lsp' on PATH."
+        },
+        "twf.parser.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the twf parser binary for visualization. If empty, looks for 'parse' on PATH."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:webview": "cd ../../visualizer && npm run build:webview"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

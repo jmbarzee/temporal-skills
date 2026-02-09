@@ -1,0 +1,134 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Temporal Workflow",
+  "scopeName": "source.twf",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#definition" },
+    { "include": "#declaration" },
+    { "include": "#call-modifiers" },
+    { "include": "#primitives" },
+    { "include": "#async" },
+    { "include": "#blocks" },
+    { "include": "#control-flow" },
+    { "include": "#arrow" },
+    { "include": "#parens" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.twf",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.twf",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.twf" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.twf" }
+          }
+        }
+      ]
+    },
+    "definition": {
+      "patterns": [
+        {
+          "match": "\\b(workflow|activity)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.twf" },
+            "2": { "name": "entity.name.function.twf" }
+          }
+        }
+      ]
+    },
+    "declaration": {
+      "patterns": [
+        {
+          "match": "\\b(signal|query|update)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "storage.type.declaration.twf" },
+            "2": { "name": "entity.name.function.twf" }
+          }
+        }
+      ]
+    },
+    "call-modifiers": {
+      "patterns": [
+        {
+          "name": "keyword.other.twf",
+          "match": "\\b(spawn|detach|nexus)\\b"
+        }
+      ]
+    },
+    "primitives": {
+      "patterns": [
+        {
+          "name": "keyword.other.twf",
+          "match": "\\b(timer|options)\\b"
+        }
+      ]
+    },
+    "async": {
+      "patterns": [
+        {
+          "name": "keyword.control.twf",
+          "match": "\\b(await|or)\\b"
+        }
+      ]
+    },
+    "blocks": {
+      "patterns": [
+        {
+          "name": "keyword.control.twf",
+          "match": "\\b(parallel|select|switch|case)\\b"
+        }
+      ]
+    },
+    "control-flow": {
+      "patterns": [
+        {
+          "name": "keyword.control.twf",
+          "match": "\\b(if|else|for|in|return|break|continue|continue_as_new)\\b"
+        }
+      ]
+    },
+    "arrow": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.twf",
+          "match": "->"
+        }
+      ]
+    },
+    "parens": {
+      "patterns": [
+        {
+          "name": "meta.parens.twf",
+          "begin": "\\(",
+          "end": "\\)",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.parens.begin.twf" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.parens.end.twf" }
+          },
+          "patterns": [
+            { "include": "#comment" },
+            { "include": "#string" },
+            { "include": "#arrow" },
+            { "include": "$self" }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -3,7 +3,7 @@ package lexer
 import (
 	"fmt"
 
-	"github.com/jmbarzee/temporal-skills/design/parser/token"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/token"
 )
 
 // Lexer tokenizes .twf source input with indentation-aware INDENT/DEDENT emission.

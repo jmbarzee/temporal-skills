@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jmbarzee/temporal-skills/lsp/internal/server"
+	"github.com/jmbarzee/temporal-skills/design/lsp/internal/server"
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
 	glspServer "github.com/tliron/glsp/server"

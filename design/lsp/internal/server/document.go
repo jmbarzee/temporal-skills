@@ -3,9 +3,9 @@ package server
 import (
 	"sync"
 
-	"github.com/jmbarzee/temporal-skills/design/parser/ast"
-	"github.com/jmbarzee/temporal-skills/design/parser/parser"
-	"github.com/jmbarzee/temporal-skills/design/parser/resolver"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/parser"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/resolver"
 )
 
 // Document holds the content and analysis results for a single open file.

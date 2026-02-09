@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jmbarzee/temporal-skills/design/parser/ast"
-	"github.com/jmbarzee/temporal-skills/design/parser/parser"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/parser"
 )
 
 func mustParse(t *testing.T, input string) *ast.File {

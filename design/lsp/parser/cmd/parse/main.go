@@ -1,24 +1,30 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/jmbarzee/temporal-skills/design/parser/ast"
-	"github.com/jmbarzee/temporal-skills/design/parser/parser"
-	"github.com/jmbarzee/temporal-skills/design/parser/resolver"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/parser"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/resolver"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "usage: parse <file.twf> [file2.twf ...]\n")
+	jsonOutput := flag.Bool("json", false, "Output AST as JSON")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "usage: parse [--json] <file.twf> [file2.twf ...]\n")
 		os.Exit(1)
 	}
 
 	// Read and concatenate all input files.
 	var parts []string
-	for _, path := range os.Args[1:] {
+	for _, path := range args {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading %s: %v\n", path, err)
@@ -44,7 +50,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *jsonOutput {
+		outputJSON(file)
+		return
+	}
+
 	// Print summary.
+	printSummary(file)
+}
+
+func outputJSON(file *ast.File) {
+	data, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "json marshal error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(data))
+}
+
+func printSummary(file *ast.File) {
 	var workflows, activities int
 	for _, def := range file.Definitions {
 		switch d := def.(type) {

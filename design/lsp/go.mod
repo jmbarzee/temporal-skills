@@ -1,9 +1,8 @@
-module github.com/jmbarzee/temporal-skills/lsp
+module github.com/jmbarzee/temporal-skills/design/lsp
 
 go 1.22
 
 require (
-	github.com/jmbarzee/temporal-skills/design/parser v0.0.0
 	github.com/tliron/commonlog v0.2.18
 	github.com/tliron/glsp v0.2.2
 )
@@ -28,5 +27,3 @@ require (
 	golang.org/x/sys v0.23.0 // indirect
 	golang.org/x/term v0.23.0 // indirect
 )
-
-replace github.com/jmbarzee/temporal-skills/design/parser => ../design/parser

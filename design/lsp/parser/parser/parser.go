@@ -3,9 +3,9 @@ package parser
 import (
 	"fmt"
 
-	"github.com/jmbarzee/temporal-skills/design/parser/ast"
-	"github.com/jmbarzee/temporal-skills/design/parser/lexer"
-	"github.com/jmbarzee/temporal-skills/design/parser/token"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/lexer"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/token"
 )
 
 // ParseError represents a parse error with position info.

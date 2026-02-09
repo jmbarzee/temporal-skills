@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/jmbarzee/temporal-skills/design/parser/ast"
+	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )

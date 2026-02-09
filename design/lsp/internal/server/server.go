@@ -23,6 +23,9 @@ func NewHandler(name, version string) *protocol.Handler {
 		TextDocumentDefinition:     definitionHandler(store),
 		TextDocumentDocumentSymbol: documentSymbolHandler(store),
 		TextDocumentCompletion:     completionHandler(store),
+		TextDocumentReferences:     referencesHandler(store),
+		TextDocumentRename:         renameHandler(store),
+		TextDocumentPrepareRename:  prepareRenameHandler(store),
 	}
 
 	return handler
@@ -40,6 +43,8 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 				DefinitionProvider:     &protocol.DefinitionOptions{},
 				DocumentSymbolProvider: &protocol.DocumentSymbolOptions{},
 				CompletionProvider:     &protocol.CompletionOptions{},
+				ReferencesProvider: &protocol.ReferenceOptions{},
+				RenameProvider:     &protocol.RenameOptions{PrepareProvider: boolPtr(true)},
 			},
 			ServerInfo: &protocol.InitializeResultServerInfo{
 				Name:    name,

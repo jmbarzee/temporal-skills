@@ -806,6 +806,57 @@ func TestAwaitWithArgs(t *testing.T) {
 	}
 }
 
+func TestParseFileAllFirstDefError(t *testing.T) {
+	// First definition has a syntax error; second should still parse.
+	input := `workflow Broken(x: int)
+    return x
+
+activity Bar(x: int) -> (int):
+    return x
+`
+	file, errs := ParseFileAll(input)
+	if len(errs) == 0 {
+		t.Fatal("expected at least one error")
+	}
+	if len(file.Definitions) != 1 {
+		t.Fatalf("expected 1 definition (the second one), got %d", len(file.Definitions))
+	}
+	if _, ok := file.Definitions[0].(*ast.ActivityDef); !ok {
+		t.Errorf("expected ActivityDef, got %T", file.Definitions[0])
+	}
+}
+
+func TestParseFileAllAllErrors(t *testing.T) {
+	// All definitions have errors; expect empty definitions, non-empty errors.
+	input := `workflow Bad1
+workflow Bad2
+`
+	file, errs := ParseFileAll(input)
+	if len(errs) == 0 {
+		t.Fatal("expected errors, got none")
+	}
+	if len(file.Definitions) != 0 {
+		t.Errorf("expected 0 definitions, got %d", len(file.Definitions))
+	}
+}
+
+func TestParseFileAllCleanInput(t *testing.T) {
+	// Clean input should produce zero errors and a complete AST.
+	input := `workflow Foo(x: int) -> (Result):
+    return x
+
+activity Bar(y: string) -> (string):
+    return y
+`
+	file, errs := ParseFileAll(input)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
+	}
+	if len(file.Definitions) != 2 {
+		t.Fatalf("expected 2 definitions, got %d", len(file.Definitions))
+	}
+}
+
 func TestFullWorkflow(t *testing.T) {
 	input := `workflow OrderFulfillment(orderId: string) -> (OrderResult):
     signal PaymentReceived(transactionId: string, amount: decimal)

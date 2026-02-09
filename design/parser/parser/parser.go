@@ -30,6 +30,9 @@ type Parser struct {
 
 	inWorkflow bool
 	inActivity bool
+
+	collecting bool          // true when collecting errors instead of bailing
+	errors     []*ParseError // accumulated errors in collecting mode
 }
 
 // Registration maps for keyword dispatch.
@@ -122,6 +125,47 @@ func ParseFile(input string) (*ast.File, error) {
 	}
 
 	return file, nil
+}
+
+// ParseFileAll parses a .twf source string, collecting as many errors as
+// possible instead of stopping at the first one. It returns a partial AST
+// (which may have successfully parsed definitions) alongside all parse errors.
+func ParseFileAll(input string) (*ast.File, []*ParseError) {
+	l := lexer.New(input)
+	p := &Parser{lex: l, collecting: true}
+	p.advance() // fill current
+	p.advance() // fill peek
+
+	file := &ast.File{}
+
+	for p.current.Type != token.EOF {
+		switch {
+		case p.current.Type == token.NEWLINE:
+			p.advance()
+			continue
+		case p.current.Type == token.COMMENT:
+			p.advance()
+			continue
+		default:
+			parser, ok := topLevelParsers[p.current.Type]
+			if !ok {
+				p.addError(p.errorf("unexpected token %s at top level", p.current.Type).(*ParseError))
+				p.recoverTopLevel()
+				continue
+			}
+			def, err := parser(p)
+			if err != nil {
+				if pe, ok := err.(*ParseError); ok {
+					p.addError(pe)
+				}
+				p.recoverTopLevel()
+				continue
+			}
+			file.Definitions = append(file.Definitions, def)
+		}
+	}
+
+	return file, p.errors
 }
 
 // parseBody parses statements inside an indented block (after INDENT, until DEDENT).

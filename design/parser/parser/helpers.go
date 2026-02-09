@@ -33,6 +33,22 @@ func (p *Parser) errorf(format string, args ...interface{}) error {
 	}
 }
 
+// addError appends a parse error to the accumulated error list.
+func (p *Parser) addError(err *ParseError) {
+	p.errors = append(p.errors, err)
+}
+
+// recoverTopLevel skips tokens until the parser reaches a WORKFLOW or ACTIVITY
+// keyword at column 1 (top-level boundary) or EOF.
+func (p *Parser) recoverTopLevel() {
+	for p.current.Type != token.EOF {
+		if (p.current.Type == token.WORKFLOW || p.current.Type == token.ACTIVITY) && p.current.Column == 1 {
+			return
+		}
+		p.advance()
+	}
+}
+
 // collectRawUntil reads and concatenates token literals until one of the
 // terminator token types is found. The terminator is NOT consumed.
 // Uses token positions to preserve original spacing.

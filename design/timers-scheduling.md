@@ -1,5 +1,7 @@
 # Timers and Scheduling
 
+> **Example:** [`examples/timers-scheduling.twf`](./examples/timers-scheduling.twf)
+
 Durable timing primitives for delays, deadlines, and recurring execution.
 
 ## Timers

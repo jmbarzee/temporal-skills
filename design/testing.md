@@ -1,5 +1,7 @@
 # Testing Temporal Workflows
 
+> **Example:** [`examples/testing.twf`](./examples/testing.twf)
+
 Strategies for testing workflows, activities, and ensuring determinism.
 
 ## Testing Pyramid for Temporal

@@ -1,5 +1,7 @@
 # Nexus: Cross-Namespace Communication
 
+> **Example:** [`examples/nexus.twf`](./examples/nexus.twf)
+
 Nexus enables workflows in one Temporal namespace to call workflows in another namespace, with proper authorization and abstraction.
 
 ## When to Use Nexus

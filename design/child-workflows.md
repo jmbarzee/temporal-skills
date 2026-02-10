@@ -1,5 +1,7 @@
 # Child Workflows
 
+> **Example:** [`examples/child-workflows.twf`](./examples/child-workflows.twf)
+
 Nested workflow execution for decomposition, reusability, and independent failure boundaries.
 
 ## When to Use Child Workflows

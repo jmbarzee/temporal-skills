@@ -17,7 +17,7 @@ workflow ProcessOrder(order: Order) -> (Result):
         activity ProcessItem(item)
 
     # Parallel execution
-    parallel:
+    await all:
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
 
@@ -26,9 +26,16 @@ workflow ProcessOrder(order: Order) -> (Result):
 # --- Order Fulfillment: timer, signal, child, nexus ---
 
 workflow OrderFulfillment(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal)
-    query GetOrderStatus() -> (OrderStatus)
-    update UpdateShippingAddress(address: Address) -> (Result)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        paymentStatus = "received"
+        activity FulfillOrder(order)
+
+    query GetOrderStatus() -> (OrderStatus):
+        return OrderStatus{status: status, payment: paymentStatus}
+
+    update UpdateShippingAddress(address: Address) -> (Result):
+        shippingAddress = address
+        return Result{success: true}
 
     activity GetOrder(orderId) -> order
 
@@ -36,9 +43,8 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
     timer 1h
 
     # Wait for signal with timeout via select
-    select:
-        signal PaymentReceived:
-            activity FulfillOrder(order)
+    hint signal PaymentReceived
+    await one:
         timer 24h:
             activity CancelOrder(orderId)
             return OrderResult{status: "cancelled"}
@@ -54,7 +60,7 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
 # --- Anti-pattern example: deterministic deadline ---
 
 workflow DeadlineExample(data: Data) -> (Result):
-    select:
+    await one:
         activity DoWork(data) -> result:
             return Result{success: true}
         timer 30m:
@@ -66,10 +72,10 @@ activity ValidateOrder(order: Order) -> (ValidateResult):
     result = validate(order)
     return result
 
-activity ExpediteOrder(order: Order) -> (void):
+activity ExpediteOrder(order: Order):
     expedite(order)
 
-activity StandardProcessing(order: Order) -> (void):
+activity StandardProcessing(order: Order):
     process(order)
 
 activity ProcessItem(item: Item) -> (ItemResult):
@@ -84,10 +90,10 @@ activity ProcessPayment(order: Order) -> (Payment):
 activity GetOrder(orderId: string) -> (Order):
     return db.get(orderId)
 
-activity FulfillOrder(order: Order) -> (void):
+activity FulfillOrder(order: Order):
     fulfill(order)
 
-activity CancelOrder(orderId: string) -> (void):
+activity CancelOrder(orderId: string):
     cancel(orderId)
 
 activity DoWork(data: Data) -> (Result):
@@ -100,5 +106,5 @@ workflow ShipOrder(order: Order) -> (ShipResult):
 activity CreateShipment(order: Order) -> (Shipment):
     return ship(order)
 
-workflow SendNotification(customer: Customer, message: string) -> (void):
+workflow SendNotification(customer: Customer, message: string):
     notify(customer, message)

@@ -1,5 +1,7 @@
 # Workflow Versioning and Evolution
 
+> **Example:** [`examples/versioning.twf`](./examples/versioning.twf)
+
 Safe strategies for evolving workflows without breaking running executions.
 
 ## The Versioning Challenge

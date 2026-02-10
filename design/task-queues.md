@@ -1,5 +1,7 @@
 # Task Queues and Worker Scaling
 
+> **Example:** [`examples/task-queues.twf`](./examples/task-queues.twf)
+
 Task queues route work to workers. Understanding task queue design is essential for scaling, isolation, and performance.
 
 ## Task Queue Fundamentals

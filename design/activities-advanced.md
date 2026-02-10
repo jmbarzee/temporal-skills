@@ -1,5 +1,7 @@
 # Advanced Activity Patterns
 
+> **Example:** [`examples/activities-advanced.twf`](./examples/activities-advanced.twf)
+
 Heartbeats, async completion, local activities, and timeout configuration for sophisticated activity designs.
 
 ## Activity Heartbeats

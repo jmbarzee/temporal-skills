@@ -51,7 +51,7 @@ workflow ConfigureRouting(app: App) -> (DeployResult):
 # --- Parallel children ---
 
 workflow ProcessBatch(items: []Item) -> (BatchResult):
-    parallel:
+    await all:
         for (item in items):
             workflow ProcessItem(item) -> result
 
@@ -98,55 +98,55 @@ workflow ParentWithDetach(order: Order) -> (OrderResult):
     detach workflow NotifyCustomer(order.customer)
     return OrderResult{status: "done"}
 
-workflow NotifyCustomer(customer: Customer) -> (void):
+workflow NotifyCustomer(customer: Customer):
     activity SendNotification(customer)
 
 # --- Supporting activities ---
 
-activity Step1(data: Data) -> (void):
+activity Step1(data: Data):
     do_step1(data)
 
-activity Step2(data: Data) -> (void):
+activity Step2(data: Data):
     do_step2(data)
 
-activity ProvisionDB(database: Database) -> (void):
+activity ProvisionDB(database: Database):
     provision(database)
 
-activity MigrateSchema(database: Database) -> (void):
+activity MigrateSchema(database: Database):
     migrate(database)
 
-activity BuildBackend(backend: Backend) -> (void):
+activity BuildBackend(backend: Backend):
     build(backend)
 
-activity DeployContainer(backend: Backend) -> (void):
+activity DeployContainer(backend: Backend):
     deploy(backend)
 
-activity BuildFrontend(frontend: Frontend) -> (void):
+activity BuildFrontend(frontend: Frontend):
     build(frontend)
 
-activity DeployStatic(frontend: Frontend) -> (void):
+activity DeployStatic(frontend: Frontend):
     deploy(frontend)
 
-activity SetupRoutes(app: App) -> (void):
+activity SetupRoutes(app: App):
     setup(app)
 
 activity ProcessSingleItem(item: Item) -> (Result):
     return process(item)
 
-activity CreateUserRecord(user: User) -> (void):
+activity CreateUserRecord(user: User):
     db.insert(user)
 
-activity ConfigureEnterprise(user: User) -> (void):
+activity ConfigureEnterprise(user: User):
     setup_enterprise(user)
 
-activity ConfigureStandard(user: User) -> (void):
+activity ConfigureStandard(user: User):
     setup_standard(user)
 
-activity SendEmail(email: string, message: string) -> (void):
+activity SendEmail(email: string, message: string):
     send(email, message)
 
 activity ProcessOrder(order: Order) -> (OrderResult):
     return process(order)
 
-activity SendNotification(customer: Customer) -> (void):
+activity SendNotification(customer: Customer):
     notify(customer)

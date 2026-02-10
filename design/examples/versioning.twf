@@ -1,39 +1,38 @@
 # Source: versioning.md
-# Patterns: patching (patched() as raw stmts), add/remove/change steps
-# Note: patched() calls are raw statements; assign to variable for if-checks
+# Patterns: versioning workflows by adding/removing/changing steps
+# Note: Use version flags passed as workflow parameters or from external config
 
-# --- Adding a step with patch ---
+# --- Adding a step with version flag ---
 
-workflow OrderWorkflowAddStep(order: Order) -> (OrderResult):
+workflow OrderWorkflowAddStep(order: Order, enableFraudCheck: bool) -> (OrderResult):
     activity ValidateOrder(order)
 
-    # Version gate: new code only runs for new executions
-    hasFraudCheck = patched("add-fraud-check")
-    if (hasFraudCheck):
+    # Version gate: new code only runs when flag is true
+    if (enableFraudCheck):
         activity FraudCheck(order)
 
     activity ProcessPayment(order) -> payment
     return OrderResult{status: "complete"}
 
-# --- Removing a step with patch ---
+# --- Removing a step with version flag ---
 
-workflow OrderWorkflowRemoveStep(data: Data) -> (Result):
+workflow OrderWorkflowRemoveStep(data: Data, useLegacyStep: bool) -> (Result):
     activity Step1(data)
 
-    removedLegacy = patched("v3-remove-legacy")
-    if (removedLegacy == false):
+    # Keep legacy step for old executions
+    if (useLegacyStep):
         activity LegacyStep(data)
 
     activity Step2(data)
     return Result{}
 
-# --- Changing a step with patch ---
+# --- Changing a step with version flag ---
 
-workflow OrderWorkflowChangeStep(data: Data) -> (Result):
+workflow OrderWorkflowChangeStep(data: Data, useImprovedProcessing: bool) -> (Result):
     activity Step1(data)
 
-    improved = patched("v4-improved-processing")
-    if (improved):
+    # Use improved processing for new versions
+    if (useImprovedProcessing):
         activity ImprovedProcessing(data)
     else:
         activity OldProcessing(data)
@@ -41,13 +40,13 @@ workflow OrderWorkflowChangeStep(data: Data) -> (Result):
     activity Step3(data)
     return Result{}
 
-# --- Reordering activities with patch ---
+# --- Reordering activities with version flag ---
 
-workflow ReorderWorkflow(data: Data) -> (Result):
+workflow ReorderWorkflow(data: Data, useNewOrder: bool) -> (Result):
     activity StepA(data)
 
-    reordered = patched("reorder-bc")
-    if (reordered):
+    # Reorder steps B and C for new version
+    if (useNewOrder):
         activity StepC(data)
         activity StepB(data)
     else:
@@ -56,34 +55,34 @@ workflow ReorderWorkflow(data: Data) -> (Result):
 
     return Result{}
 
-# --- Changing activity parameters with patch ---
+# --- Changing activity parameters with version flag ---
 
-workflow ParamChangeWorkflow(data: Data) -> (Result):
-    newParams = patched("new-activity-params")
-    if (newParams):
+workflow ParamChangeWorkflow(data: Data, useEnhancedParams: bool) -> (Result):
+    # Call with different parameters based on version
+    if (useEnhancedParams):
         activity EnhancedActivity(data, true) -> result
     else:
         activity EnhancedActivity(data) -> result
 
     return Result{result}
 
-# --- Multiple patches in one workflow ---
+# --- Multiple version flags in one workflow ---
 
-workflow MultiPatchWorkflow(order: Order) -> (OrderResult):
+workflow MultiVersionWorkflow(order: Order, config: VersionConfig) -> (OrderResult):
     activity ValidateOrder(order)
 
-    hasFraudCheck = patched("2024-01-add-fraud-check")
-    if (hasFraudCheck):
+    # Version flag 1: Add fraud check
+    if (config.enableFraudCheck):
         activity FraudCheck(order)
 
-    hasImprovedValidation = patched("2024-02-improve-validation")
-    if (hasImprovedValidation):
+    # Version flag 2: Improved validation
+    if (config.useImprovedValidation):
         activity ImprovedValidation(order)
 
     activity ProcessPayment(order) -> payment
 
-    removedLegacyNotify = patched("2024-03-remove-legacy-notify")
-    if (removedLegacyNotify == false):
+    # Version flag 3: Remove legacy notification
+    if (config.useLegacyNotify):
         activity LegacyNotify(order)
 
     activity FinalizeOrder(order) -> result
@@ -91,49 +90,49 @@ workflow MultiPatchWorkflow(order: Order) -> (OrderResult):
 
 # --- Supporting activities ---
 
-activity ValidateOrder(order: Order) -> (void):
+activity ValidateOrder(order: Order):
     validate(order)
 
-activity FraudCheck(order: Order) -> (void):
+activity FraudCheck(order: Order):
     check_fraud(order)
 
 activity ProcessPayment(order: Order) -> (PaymentResult):
     return charge(order)
 
-activity Step1(data: Data) -> (void):
+activity Step1(data: Data):
     step1(data)
 
-activity Step2(data: Data) -> (void):
+activity Step2(data: Data):
     step2(data)
 
-activity Step3(data: Data) -> (void):
+activity Step3(data: Data):
     step3(data)
 
-activity LegacyStep(data: Data) -> (void):
+activity LegacyStep(data: Data):
     legacy(data)
 
-activity ImprovedProcessing(data: Data) -> (void):
+activity ImprovedProcessing(data: Data):
     improved(data)
 
-activity OldProcessing(data: Data) -> (void):
+activity OldProcessing(data: Data):
     old_process(data)
 
-activity StepA(data: Data) -> (void):
+activity StepA(data: Data):
     step_a(data)
 
-activity StepB(data: Data) -> (void):
+activity StepB(data: Data):
     step_b(data)
 
-activity StepC(data: Data) -> (void):
+activity StepC(data: Data):
     step_c(data)
 
 activity EnhancedActivity(data: Data) -> (Result):
     return enhanced(data)
 
-activity ImprovedValidation(order: Order) -> (void):
+activity ImprovedValidation(order: Order):
     validate_improved(order)
 
-activity LegacyNotify(order: Order) -> (void):
+activity LegacyNotify(order: Order):
     legacy_notify(order)
 
 activity FinalizeOrder(order: Order) -> (OrderResult):

@@ -45,7 +45,7 @@ workflow NexusWithOptions(payment: Payment) -> (PaymentResult):
 
 # --- Supporting local activities ---
 
-activity ValidateOrder(order: Order) -> (void):
+activity ValidateOrder(order: Order):
     validate(order)
 
 activity DoLocalWork(data: Data) -> (LocalResult):
@@ -59,7 +59,7 @@ workflow ProcessPayment(payment: Payment) -> (PaymentResult):
     activity RecordTransaction(result)
     return PaymentResult{id: result.id}
 
-workflow SendConfirmation(customer: Customer, paymentResult: PaymentResult) -> (void):
+workflow SendConfirmation(customer: Customer, paymentResult: PaymentResult):
     activity SendEmail(customer.email, paymentResult)
 
 workflow ProcessAsync(data: Data) -> (ProcessResult):
@@ -84,16 +84,16 @@ workflow ChargeCard(payment: Payment) -> (ChargeResult):
 
 # --- Supporting activities for target workflows ---
 
-activity ValidatePaymentDetails(payment: Payment) -> (void):
+activity ValidatePaymentDetails(payment: Payment):
     validate(payment)
 
 activity ChargePaymentMethod(payment: Payment) -> (ChargeResult):
     return charge(payment)
 
-activity RecordTransaction(result: ChargeResult) -> (void):
+activity RecordTransaction(result: ChargeResult):
     record(result)
 
-activity SendEmail(email: string, data: PaymentResult) -> (void):
+activity SendEmail(email: string, data: PaymentResult):
     send(email, data)
 
 activity ProcessData(data: Data) -> (Result):

@@ -1,5 +1,7 @@
 # Workflow Patterns
 
+> **Example:** [`examples/patterns.twf`](./examples/patterns.twf)
+
 Common patterns for structuring Temporal workflows. Choose based on your use case characteristics.
 
 ## Pattern Overview

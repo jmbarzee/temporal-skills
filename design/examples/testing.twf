@@ -15,7 +15,7 @@ workflow OrderWorkflow(order: Order) -> (OrderResult):
 
 # --- Workflow with timer for testing ---
 
-workflow ReminderWorkflow(userId: string) -> (void):
+workflow ReminderWorkflow(userId: string):
     activity SendFirstReminder(userId)
 
     timer 24h
@@ -29,23 +29,25 @@ workflow ReminderWorkflow(userId: string) -> (void):
 # --- Workflow with signals for testing ---
 
 workflow ApprovalWorkflow(request: Request) -> (Decision):
-    signal Approved(approver: string)
-    signal Rejected(approver: string, reason: string)
+    signal Approved(approver: string):
+        return Decision{status: "approved", approver: approver}
+
+    signal Rejected(approver: string, reason: string):
+        return Decision{status: "rejected", reason: reason}
 
     activity NotifyApprovers(request)
 
-    select:
-        signal Approved:
-            return Decision{status: "approved"}
-        signal Rejected:
-            return Decision{status: "rejected"}
+    hint signal Approved
+    hint signal Rejected
+    await one:
         timer 1h:
             return Decision{status: "timeout"}
 
 # --- Workflow with query for testing ---
 
 workflow StatusWorkflow(orderId: string) -> (OrderResult):
-    query GetStatus() -> (string)
+    query GetStatus() -> (string):
+        return status
 
     status = "pending"
     activity StartProcessing(orderId)
@@ -74,26 +76,26 @@ activity ValidateOrder(order: Order) -> (ValidationResult):
 activity ProcessPayment(payment: Payment) -> (PaymentResult):
     return charge(payment)
 
-activity ShipOrder(order: Order) -> (void):
+activity ShipOrder(order: Order):
     ship(order)
 
-activity SendFirstReminder(userId: string) -> (void):
+activity SendFirstReminder(userId: string):
     send_reminder(userId, 1)
 
-activity SendSecondReminder(userId: string) -> (void):
+activity SendSecondReminder(userId: string):
     send_reminder(userId, 2)
 
-activity SendFinalReminder(userId: string) -> (void):
+activity SendFinalReminder(userId: string):
     send_reminder(userId, 3)
 
-activity NotifyApprovers(request: Request) -> (void):
+activity NotifyApprovers(request: Request):
     notify(request.approvers)
 
-activity StartProcessing(orderId: string) -> (void):
+activity StartProcessing(orderId: string):
     start(orderId)
 
-activity ProcessItems(orderId: string) -> (void):
+activity ProcessItems(orderId: string):
     process_all(orderId)
 
-activity ProcessItem(item: Item) -> (void):
+activity ProcessItem(item: Item):
     process(item)

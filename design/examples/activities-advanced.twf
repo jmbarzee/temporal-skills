@@ -34,13 +34,13 @@ activity RequestHumanApproval(request: ApprovalRequest) -> (ApprovalResult):
 
 # --- Notification activity ---
 
-activity NotifyRequestCreated(request: Request) -> (void):
+activity NotifyRequestCreated(request: Request):
     options(startToCloseTimeout: 30s)
     send_notification(request)
 
 # --- Execute approved action ---
 
-activity ExecuteApprovedAction(request: Request) -> (void):
+activity ExecuteApprovedAction(request: Request):
     options(startToCloseTimeout: 5m)
     execute(request)
 

@@ -3,16 +3,16 @@
 
 # --- Basic continue-as-new pattern ---
 
-workflow LongRunningProcessor(state: State) -> (void):
-    signal NewEvent(data: EventData)
+workflow LongRunningProcessor(state: State):
+    signal NewEvent(data: EventData):
+        activity ProcessEvent(state) -> result
+        state.processed = state.processed + 1
+        eventCount = eventCount + 1
 
     eventCount = 0
 
     for:
-        await signal NewEvent
-        activity ProcessEvent(state) -> result
-        state.processed = state.processed + 1
-        eventCount = eventCount + 1
+# REMOVED: await signal NewEvent
 
         # Reset history before it gets too large
         if (eventCount >= 1000):
@@ -20,31 +20,46 @@ workflow LongRunningProcessor(state: State) -> (void):
 
 # --- Entity workflow pattern ---
 
-workflow UserEntity(userId: string, state: UserState) -> (void):
-    signal UpdateProfile(data: ProfileData)
-    signal AddCredits(amount: decimal)
-    signal Deactivate()
-    query GetState() -> (UserState)
-    update UpdateSettings(settings: Settings) -> (Result)
+workflow UserEntity(userId: string, state: UserState):
+    signal UpdateProfile(data: ProfileData):
+        state.profile = data
+        activity PersistUser(userId, state)
+
+    signal AddCredits(amount: decimal):
+        state.credits = state.credits + amount
+        activity PersistUser(userId, state)
+
+    signal Deactivate():
+        state.active = false
+        activity PersistUser(userId, state)
+        shouldDeactivate = true
+
+    query GetState() -> (UserState):
+        return state
+
+    update UpdateSettings(settings: Settings) -> (Result):
+        state.settings = settings
+        activity PersistUser(userId, state)
+        return Result{success: true}
 
     # Initialize state if new
     if (state == null):
         activity LoadUser(userId) -> state
 
     eventCount = 0
+    shouldDeactivate = false
 
     for:
         # Wait for commands or periodic triggers
-        select:
-            signal UpdateProfile:
-                activity PersistUser(userId, state)
-            signal AddCredits:
-                activity PersistUser(userId, state)
-            signal Deactivate:
-                activity PersistUser(userId, state)
-                return
+        hint signal UpdateProfile
+        hint signal AddCredits
+        hint signal Deactivate
+        await one:
             timer 24h:
                 activity DailyMaintenance(userId, state)
+
+        if (shouldDeactivate):
+            return
 
         eventCount = eventCount + 1
 
@@ -54,30 +69,30 @@ workflow UserEntity(userId: string, state: UserState) -> (void):
 
 # --- History management: fixed event count ---
 
-workflow FixedCountProcessor(state: State) -> (void):
-    signal WorkItem(data: ItemData)
+workflow FixedCountProcessor(state: State):
+    signal WorkItem(data: ItemData):
+        activity DoWork(state)
+        eventCount = eventCount + 1
 
     eventCount = 0
 
     for:
-        await signal WorkItem
-        activity DoWork(state)
-        eventCount = eventCount + 1
+# REMOVED: await signal WorkItem
 
         if (eventCount >= 1000):
             continue_as_new(state)
 
 # --- Signal draining before continue-as-new ---
 
-workflow DrainingProcessor(state: State) -> (void):
-    signal IncomingEvent(data: EventData)
+workflow DrainingProcessor(state: State):
+    signal IncomingEvent(data: EventData):
+        activity ProcessDrainedEvent(state)
+        count = count + 1
 
     count = 0
 
     for:
-        await signal IncomingEvent
-        activity ProcessDrainedEvent(state)
-        count = count + 1
+# REMOVED: await signal IncomingEvent
 
         if (count >= 500):
             # Drain pending signals at natural boundary
@@ -92,17 +107,17 @@ activity ProcessEvent(state: State) -> (EventResult):
 activity LoadUser(userId: string) -> (UserState):
     return db.load(userId)
 
-activity PersistUser(userId: string, state: UserState) -> (void):
+activity PersistUser(userId: string, state: UserState):
     db.save(userId, state)
 
-activity DailyMaintenance(userId: string, state: UserState) -> (void):
+activity DailyMaintenance(userId: string, state: UserState):
     run_maintenance(userId, state)
 
-activity DoWork(state: State) -> (void):
+activity DoWork(state: State):
     work(state)
 
-activity ProcessDrainedEvent(state: State) -> (void):
+activity ProcessDrainedEvent(state: State):
     process(state)
 
-activity FlushPending(state: State) -> (void):
+activity FlushPending(state: State):
     flush(state)

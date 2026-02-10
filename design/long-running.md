@@ -1,5 +1,7 @@
 # Long-Running Workflows
 
+> **Example:** [`examples/long-running.twf`](./examples/long-running.twf)
+
 Patterns for workflows that run for extended periods: continue-as-new, history management, and entity workflows.
 
 ## The History Problem

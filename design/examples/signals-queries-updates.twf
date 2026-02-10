@@ -4,9 +4,15 @@
 # --- Signal-driven order workflow ---
 
 workflow OrderWorkflow(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal)
-    query GetStatus() -> (string)
-    query GetProgress() -> (Progress)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        status = "processing"
+        activity FulfillOrder(order)
+
+    query GetStatus() -> (string):
+        return status
+
+    query GetProgress() -> (Progress):
+        return Progress{status: status, orderId: orderId}
 
     activity GetOrder(orderId) -> order
 
@@ -16,10 +22,8 @@ workflow OrderWorkflow(orderId: string) -> (OrderResult):
     status = "awaiting_payment"
 
     # Wait for payment signal with timeout via select
-    select:
-        signal PaymentReceived:
-            status = "processing"
-            activity FulfillOrder(order)
+    hint signal PaymentReceived
+    await one:
         timer 24h:
             status = "payment_timeout"
             return OrderResult{status: "payment_timeout"}
@@ -30,17 +34,18 @@ workflow OrderWorkflow(orderId: string) -> (OrderResult):
 # --- Approval flow with multi-target await ---
 
 workflow ApprovalWorkflow(request: Request) -> (Decision):
-    signal Approved(approver: string)
-    signal Rejected(approver: string, reason: string)
+    signal Approved(approver: string):
+        return Decision{status: "approved"}
+
+    signal Rejected(approver: string, reason: string):
+        return Decision{status: "rejected", reason: reason}
 
     activity NotifyApprovers(request)
 
     # Wait for either Approved or Rejected signal, or timeout
-    select:
-        signal Approved:
-            return Decision{status: "approved"}
-        signal Rejected:
-            return Decision{status: "rejected"}
+    hint signal Approved
+    hint signal Rejected
+    await one:
         timer 7d:
             activity NotifyExpired(request)
             return Decision{status: "expired"}
@@ -48,52 +53,74 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
 # --- Batch collector with signal accumulation ---
 
 workflow BatchCollector(batchId: string) -> (Batch):
-    signal AddItem(item: Item)
-    signal CompleteBatch()
+    signal AddItem(item: Item):
+        items = items + 1
+
+    signal CompleteBatch():
+        shouldBreak = true
 
     items = 0
+    shouldBreak = false
 
     for:
-        select:
-            signal AddItem:
-                items = items + 1
-            signal CompleteBatch:
-                break
+        hint signal AddItem
+        hint signal CompleteBatch
+        await one:
             timer 1h:
                 break
+
+        if (shouldBreak):
+            break
 
     activity ProcessBatch(batchId, items) -> result
     return Batch{items: items}
 
 # --- Update-driven subscription workflow ---
 
-workflow SubscriptionWorkflow(userId: string) -> (void):
-    signal Cancel()
-    update ChangePlan(newPlan: string) -> (ChangeResult)
-    update AddCredits(amount: int) -> (CreditResult)
-    query GetPlan() -> (string)
+workflow SubscriptionWorkflow(userId: string):
+    signal Cancel():
+        cancelled = true
+
+    update ChangePlan(newPlan: string) -> (ChangeResult):
+        plan = newPlan
+        return ChangeResult{success: true, plan: plan}
+
+    update AddCredits(amount: int) -> (CreditResult):
+        credits = credits + amount
+        return CreditResult{total: credits}
+
+    query GetPlan() -> (string):
+        return plan
 
     plan = "free"
+    credits = 0
+    cancelled = false
 
     for:
-        select:
-            signal Cancel:
-                break
+        hint signal Cancel
+        await one:
             timer 30d:
                 activity BillUser(userId, plan)
+
+        if (cancelled):
+            break
 
     return
 
 # --- Workflow using await with multi-target ---
 
 workflow MultiAwaitWorkflow(orderId: string) -> (Result):
-    signal PaymentConfirmed(txId: string)
-    update UpdateAddress(addr: Address) -> (UpdateResult)
+    signal PaymentConfirmed(txId: string):
+        paymentTxId = txId
+
+    update UpdateAddress(addr: Address) -> (UpdateResult):
+        address = addr
+        return UpdateResult{success: true}
 
     activity PrepareOrder(orderId) -> order
 
     # Wait for either signal or update
-    await signal PaymentConfirmed or update UpdateAddress
+# REMOVED: await signal PaymentConfirmed or update UpdateAddress
 
     activity FinalizeOrder(order) -> result
     return Result{result}
@@ -103,22 +130,22 @@ workflow MultiAwaitWorkflow(orderId: string) -> (Result):
 activity GetOrder(orderId: string) -> (Order):
     return db.get(orderId)
 
-activity ValidateOrder(order: Order) -> (void):
+activity ValidateOrder(order: Order):
     validate(order)
 
-activity FulfillOrder(order: Order) -> (void):
+activity FulfillOrder(order: Order):
     fulfill(order)
 
-activity NotifyApprovers(request: Request) -> (void):
-    notify(request.approvers)
+activity NotifyApprovers(request: Request):
+    notify_approvers(request)
 
-activity NotifyExpired(request: Request) -> (void):
+activity NotifyExpired(request: Request):
     notify_expired(request)
 
 activity ProcessBatch(batchId: string, count: int) -> (BatchResult):
     return process(batchId, count)
 
-activity BillUser(userId: string, plan: string) -> (void):
+activity BillUser(userId: string, plan: string):
     bill(userId, plan)
 
 activity PrepareOrder(orderId: string) -> (Order):

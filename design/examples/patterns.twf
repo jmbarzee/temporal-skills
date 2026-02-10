@@ -25,29 +25,45 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
 
 # --- Entity Workflow ---
 
-workflow AccountEntity(accountId: string, state: AccountState) -> (void):
-    signal Deposit(amount: decimal)
-    signal Withdraw(amount: decimal)
-    signal Close()
-    query GetBalance() -> (decimal)
-    update Transfer(amount: decimal, toAccount: string) -> (TransferResult)
+workflow AccountEntity(accountId: string, state: AccountState):
+    signal Deposit(amount: decimal):
+        state.balance = state.balance + amount
+        activity RecordTransaction(accountId, "deposit")
+
+    signal Withdraw(amount: decimal):
+        state.balance = state.balance - amount
+        activity RecordTransaction(accountId, "withdraw")
+
+    signal Close():
+        activity CloseAccount(accountId)
+        shouldClose = true
+
+    query GetBalance() -> (decimal):
+        return state.balance
+
+    update Transfer(amount: decimal, toAccount: string) -> (TransferResult):
+        if (state.balance < amount):
+            return TransferResult{success: false, error: "insufficient funds"}
+        state.balance = state.balance - amount
+        activity RecordTransaction(accountId, "transfer")
+        return TransferResult{success: true}
 
     if (state == null):
         activity LoadAccount(accountId) -> state
 
     eventCount = 0
+    shouldClose = false
 
     for:
-        select:
-            signal Deposit:
-                activity RecordTransaction(accountId, "deposit")
-            signal Withdraw:
-                activity RecordTransaction(accountId, "withdraw")
-            signal Close:
-                activity CloseAccount(accountId)
-                return
+        hint signal Deposit
+        hint signal Withdraw
+        hint signal Close
+        await one:
             timer 24h:
                 activity DailyReconciliation(accountId)
+
+        if (shouldClose):
+            return
 
         eventCount = eventCount + 1
         if (eventCount > 1000):
@@ -73,7 +89,7 @@ workflow BookingWorkflow(booking: Booking) -> (BookingResult):
 
 # --- Saga compensation workflow (called on failure) ---
 
-workflow CompensateBooking(flight: string, hotel: string, car: string) -> (void):
+workflow CompensateBooking(flight: string, hotel: string, car: string):
     # Run compensations
     activity CancelFlight(flight)
     activity CancelHotel(hotel)
@@ -83,7 +99,7 @@ workflow CompensateBooking(flight: string, hotel: string, car: string) -> (void)
 
 workflow BatchProcessor(items: []Item) -> (BatchResult):
     # Fan-out: start all processing in parallel
-    parallel:
+    await all:
         for (item in items):
             activity ProcessBatchItem(item) -> result
 
@@ -116,11 +132,21 @@ workflow DataPipeline(rawData: RawData) -> (ProcessedData):
 # --- State Machine ---
 
 workflow DocumentApproval(doc: Document) -> (ApprovalResult):
-    signal Submit()
-    signal Approve()
-    signal Reject()
-    signal RequestChanges()
-    signal Withdraw()
+    signal Submit():
+        state = "pending_review"
+        activity NotifyReviewers(doc)
+
+    signal Approve():
+        state = "approved"
+
+    signal Reject():
+        state = "rejected"
+
+    signal RequestChanges():
+        state = "changes_requested"
+
+    signal Withdraw():
+        state = "withdrawn"
 
     state = "draft"
 
@@ -128,22 +154,19 @@ workflow DocumentApproval(doc: Document) -> (ApprovalResult):
         switch (state):
             case "draft":
                 await signal Submit
-                activity NotifyReviewers(doc)
-                state = "pending_review"
             case "pending_review":
+                hint signal Approve
+                hint signal Reject
+                hint signal RequestChanges
                 select:
-                    signal Approve:
-                        state = "approved"
-                    signal Reject:
-                        state = "rejected"
-                    signal RequestChanges:
-                        state = "changes_requested"
+                    timer 30d:
+                        state = "expired"
             case "changes_requested":
+                hint signal Submit
+                hint signal Withdraw
                 select:
-                    signal Submit:
-                        state = "pending_review"
-                    signal Withdraw:
-                        state = "withdrawn"
+                    timer 30d:
+                        state = "expired"
             case "approved":
                 activity PublishDocument(doc)
                 return ApprovalResult{status: "approved"}
@@ -152,6 +175,8 @@ workflow DocumentApproval(doc: Document) -> (ApprovalResult):
                 return ApprovalResult{status: "rejected"}
             case "withdrawn":
                 return ApprovalResult{status: "withdrawn"}
+            case "expired":
+                return ApprovalResult{status: "expired"}
 
 # --- Polling ---
 
@@ -183,22 +208,22 @@ activity ReserveInventory(items: []Item) -> (Reservation):
 activity ProcessPayment(payment: Payment) -> (PaymentResult):
     return charge(payment)
 
-activity ShipOrder(order: Order, reservation: Reservation) -> (void):
+activity ShipOrder(order: Order, reservation: Reservation):
     ship(order, reservation)
 
-activity SendConfirmation(customer: Customer) -> (void):
+activity SendConfirmation(customer: Customer):
     notify(customer)
 
 activity LoadAccount(accountId: string) -> (AccountState):
     return db.load(accountId)
 
-activity RecordTransaction(accountId: string, txType: string) -> (void):
+activity RecordTransaction(accountId: string, txType: string):
     db.record(accountId, txType)
 
-activity CloseAccount(accountId: string) -> (void):
+activity CloseAccount(accountId: string):
     db.close(accountId)
 
-activity DailyReconciliation(accountId: string) -> (void):
+activity DailyReconciliation(accountId: string):
     reconcile(accountId)
 
 activity ReserveFlight(flight: FlightSpec) -> (FlightReservation):
@@ -213,13 +238,13 @@ activity ReserveCar(car: CarSpec) -> (CarReservation):
 activity ChargePayment(payment: Payment) -> (PaymentResult):
     return charge(payment)
 
-activity CancelFlight(flightId: string) -> (void):
+activity CancelFlight(flightId: string):
     cancel(flightId)
 
-activity CancelHotel(hotelId: string) -> (void):
+activity CancelHotel(hotelId: string):
     cancel(hotelId)
 
-activity CancelCar(carId: string) -> (void):
+activity CancelCar(carId: string):
     cancel(carId)
 
 activity ProcessBatchItem(item: Item) -> (ItemResult):
@@ -240,16 +265,16 @@ activity Transform(data: ValidatedData) -> (TransformedData):
 activity Enrich(data: TransformedData) -> (EnrichedData):
     return enrich(data)
 
-activity Load(data: EnrichedData) -> (void):
+activity Load(data: EnrichedData):
     load(data)
 
-activity NotifyReviewers(doc: Document) -> (void):
+activity NotifyReviewers(doc: Document):
     notify(doc.reviewers)
 
-activity PublishDocument(doc: Document) -> (void):
+activity PublishDocument(doc: Document):
     publish(doc)
 
-activity ArchiveDocument(doc: Document) -> (void):
+activity ArchiveDocument(doc: Document):
     archive(doc)
 
 activity CheckResourceStatus(resourceId: string) -> (ResourceStatus):

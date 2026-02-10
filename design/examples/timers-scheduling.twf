@@ -3,7 +3,7 @@
 
 # --- Basic timer: delayed notification ---
 
-workflow DelayedNotification(userId: string, delay: duration) -> (void):
+workflow DelayedNotification(userId: string, delay: duration):
     # Durable sleep - workflow pauses but state is preserved
     timer delay
     activity SendNotification(userId)
@@ -11,7 +11,7 @@ workflow DelayedNotification(userId: string, delay: duration) -> (void):
 # --- Deadline pattern: race between operation and timer ---
 
 workflow ProcessWithDeadline(data: Data) -> (Result):
-    select:
+    await one:
         activity LongOperation(data) -> result:
             return Result{success: true, data: result}
         timer 1h:
@@ -20,7 +20,7 @@ workflow ProcessWithDeadline(data: Data) -> (Result):
 
 # --- Periodic execution within workflow ---
 
-workflow HealthMonitor(resourceId: string) -> (void):
+workflow HealthMonitor(resourceId: string):
     count = 0
 
     for:
@@ -62,16 +62,17 @@ workflow WaitForCompletion(jobId: string) -> (JobResult):
 # --- Approval with signal timeout ---
 
 workflow ApprovalWithTimeout(request: Request) -> (Decision):
-    signal Approved(approver: string)
-    signal Rejected(approver: string, reason: string)
+    signal Approved(approver: string):
+        return Decision{status: "approved", approver: approver}
+
+    signal Rejected(approver: string, reason: string):
+        return Decision{status: "rejected", reason: reason}
 
     activity NotifyApprovers(request)
 
-    select:
-        signal Approved:
-            return Decision{status: "approved"}
-        signal Rejected:
-            return Decision{status: "rejected"}
+    hint signal Approved
+    hint signal Rejected
+    await one:
         timer 7d:
             activity NotifyExpired(request)
             return Decision{status: "expired"}
@@ -94,14 +95,14 @@ workflow LongPoller(resourceId: string, iteration: int) -> (Resource):
 
 # --- Supporting activities ---
 
-activity SendNotification(userId: string) -> (void):
+activity SendNotification(userId: string):
     send(userId)
 
 activity LongOperation(data: Data) -> (OperationResult):
     options(startToCloseTimeout: 2h)
     return process(data)
 
-activity Cleanup(data: Data) -> (void):
+activity Cleanup(data: Data):
     cleanup(data)
 
 activity CheckHealth(resourceId: string) -> (HealthStatus):
@@ -113,10 +114,10 @@ activity CheckResource(resourceId: string) -> (Resource):
 activity GetJobStatus(jobId: string) -> (JobStatus):
     return get_status(jobId)
 
-activity NotifyApprovers(request: Request) -> (void):
+activity NotifyApprovers(request: Request):
     notify(request.approvers)
 
-activity NotifyExpired(request: Request) -> (void):
+activity NotifyExpired(request: Request):
     notify_expired(request)
 
 activity PollResource(resourceId: string) -> (ResourceStatus):

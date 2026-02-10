@@ -1,0 +1,10 @@
+workflow TestSignals(input: Input) -> (Result):
+    signal Pause():
+        paused = true
+        return
+
+    signal Resume(reason: string):
+        paused = false
+
+    paused = false
+    return Result{success: true}

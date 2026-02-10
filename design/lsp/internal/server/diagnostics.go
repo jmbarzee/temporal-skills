@@ -65,6 +65,19 @@ func publishDiagnostics(context *glsp.Context, doc *Document) error {
 	return nil
 }
 
+// lineRange converts 1-based start/end lines to an LSP 0-based range spanning those lines.
+func lineRange(startLine, endLine int) protocol.Range {
+	s := uint32(0)
+	if startLine > 0 {
+		s = uint32(startLine - 1)
+	}
+	e := uint32(endLine)
+	return protocol.Range{
+		Start: protocol.Position{Line: s, Character: 0},
+		End:   protocol.Position{Line: e, Character: 0},
+	}
+}
+
 // posToRange converts a 1-based parser position to an LSP 0-based range.
 // We highlight the entire line since we don't have end positions.
 func posToRange(line, column int) protocol.Range {

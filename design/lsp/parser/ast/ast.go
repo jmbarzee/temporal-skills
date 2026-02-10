@@ -69,6 +69,7 @@ type SignalDecl struct {
 	Pos
 	Name   string
 	Params string
+	Body   []Statement // handler body
 }
 
 func (*SignalDecl) stmtNode() {}
@@ -78,6 +79,7 @@ type QueryDecl struct {
 	Name       string
 	Params     string
 	ReturnType string
+	Body       []Statement // handler body (restricted: no temporal primitives)
 }
 
 func (*QueryDecl) stmtNode() {}
@@ -87,9 +89,19 @@ type UpdateDecl struct {
 	Name       string
 	Params     string
 	ReturnType string
+	Body       []Statement // handler body
 }
 
 func (*UpdateDecl) stmtNode() {}
+
+type HintStmt struct {
+	Pos
+	Kind     string // "signal", "query", or "update"
+	Name     string
+	Resolved Node // *SignalDecl, *QueryDecl, or *UpdateDecl after resolution
+}
+
+func (*HintStmt) stmtNode() {}
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -135,85 +147,48 @@ type TimerStmt struct {
 
 func (*TimerStmt) stmtNode() {}
 
-// AwaitTarget represents a single target in an await statement.
-type AwaitTarget struct {
-	Pos
-	Kind     string // "signal" or "update"
-	Name     string
-	Args     string // optional
-	Resolved Node   // *SignalDecl or *UpdateDecl after resolution
-}
-
-type AwaitStmt struct {
-	Pos
-	Targets []*AwaitTarget
-}
-
-func (*AwaitStmt) stmtNode() {}
-
-type ParallelBlock struct {
+// AwaitAllBlock represents an "await all:" block that waits for all operations to complete.
+type AwaitAllBlock struct {
 	Pos
 	Body []Statement
 }
 
-func (*ParallelBlock) stmtNode() {}
+func (*AwaitAllBlock) stmtNode() {}
 
-// SelectCase represents a single case in a select block.
-type SelectCase struct {
+// AwaitOneCase represents a single case in an "await one:" block.
+// Can be a timer case or a nested await all case.
+type AwaitOneCase struct {
 	Pos
-	// Exactly one of these groups is set:
-	// Workflow case
-	WorkflowMode      WorkflowCallMode // only CallChild or CallSpawn
-	WorkflowNamespace string
-	WorkflowName      string
-	WorkflowArgs      string
-	WorkflowResult    string
-
-	// Activity case
-	ActivityName string
-	ActivityArgs string
-	ActivityResult string
-
-	// Signal case
-	SignalName string
-	SignalArgs string
-
-	// Update case
-	UpdateName string
-	UpdateArgs string
-
 	// Timer case
 	TimerDuration string
 
+	// Await all case (nested)
+	AwaitAll *AwaitAllBlock
+
 	Body []Statement
 }
 
-// CaseKind returns the kind of this select case.
-func (sc *SelectCase) CaseKind() string {
+// CaseKind returns the kind of this await one case.
+func (c *AwaitOneCase) CaseKind() string {
 	switch {
-	case sc.WorkflowName != "":
-		return "workflow"
-	case sc.ActivityName != "":
-		return "activity"
-	case sc.SignalName != "":
-		return "signal"
-	case sc.UpdateName != "":
-		return "update"
-	case sc.TimerDuration != "":
+	case c.TimerDuration != "":
 		return "timer"
+	case c.AwaitAll != nil:
+		return "await_all"
 	default:
 		return "unknown"
 	}
 }
 
-func (*SelectCase) stmtNode() {}
+func (*AwaitOneCase) stmtNode() {}
 
-type SelectBlock struct {
+// AwaitOneBlock represents an "await one:" block that waits for the first case to complete.
+type AwaitOneBlock struct {
 	Pos
-	Cases []*SelectCase
+	Cases []*AwaitOneCase
 }
 
-func (*SelectBlock) stmtNode() {}
+func (*AwaitOneBlock) stmtNode() {}
 
 // SwitchCase represents a single case in a switch block.
 type SwitchCase struct {

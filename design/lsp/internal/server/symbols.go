@@ -39,30 +39,30 @@ func workflowSymbol(wf *ast.WorkflowDef) protocol.DocumentSymbol {
 	var children []protocol.DocumentSymbol
 
 	for _, s := range wf.Signals {
-		sr := posToRange(s.Line, s.Column)
+		endLine := lastLineInStmts(s.Body, s.Line)
 		children = append(children, protocol.DocumentSymbol{
 			Name:           s.Name,
 			Kind:           protocol.SymbolKindEvent,
-			Range:          sr,
-			SelectionRange: sr,
+			Range:          lineRange(s.Line, endLine),
+			SelectionRange: posToRange(s.Line, s.Column),
 		})
 	}
 	for _, q := range wf.Queries {
-		qr := posToRange(q.Line, q.Column)
+		endLine := lastLineInStmts(q.Body, q.Line)
 		children = append(children, protocol.DocumentSymbol{
 			Name:           q.Name,
 			Kind:           protocol.SymbolKindMethod,
-			Range:          qr,
-			SelectionRange: qr,
+			Range:          lineRange(q.Line, endLine),
+			SelectionRange: posToRange(q.Line, q.Column),
 		})
 	}
 	for _, u := range wf.Updates {
-		ur := posToRange(u.Line, u.Column)
+		endLine := lastLineInStmts(u.Body, u.Line)
 		children = append(children, protocol.DocumentSymbol{
 			Name:           u.Name,
 			Kind:           protocol.SymbolKindMethod,
-			Range:          ur,
-			SelectionRange: ur,
+			Range:          lineRange(u.Line, endLine),
+			SelectionRange: posToRange(u.Line, u.Column),
 		})
 	}
 
@@ -96,16 +96,19 @@ func defRange(def ast.Definition) protocol.Range {
 			if s.Line > endLine {
 				endLine = s.Line
 			}
+			endLine = lastLineInStmts(s.Body, endLine)
 		}
 		for _, q := range d.Queries {
 			if q.Line > endLine {
 				endLine = q.Line
 			}
+			endLine = lastLineInStmts(q.Body, endLine)
 		}
 		for _, u := range d.Updates {
 			if u.Line > endLine {
 				endLine = u.Line
 			}
+			endLine = lastLineInStmts(u.Body, endLine)
 		}
 	case *ast.ActivityDef:
 		endLine = lastLineInStmts(d.Body, endLine)
@@ -132,12 +135,16 @@ func lastLineInStmts(stmts []ast.Statement, current int) int {
 func lastLineInStmt(stmt ast.Statement) int {
 	line := stmt.NodeLine()
 	switch s := stmt.(type) {
-	case *ast.ParallelBlock:
+	case *ast.AwaitAllBlock:
 		line = lastLineInStmts(s.Body, line)
-	case *ast.SelectBlock:
+	case *ast.AwaitOneBlock:
 		for _, c := range s.Cases {
 			if c.Line > line {
 				line = c.Line
+			}
+			// Handle nested await all if present.
+			if c.AwaitAll != nil {
+				line = lastLineInStmts(c.AwaitAll.Body, line)
 			}
 			line = lastLineInStmts(c.Body, line)
 		}

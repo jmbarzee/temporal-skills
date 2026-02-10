@@ -1,0 +1,7 @@
+workflow TestSignals(input: Input) -> (Result):
+    signal Pause():
+        # Comment inside signal
+        paused = true
+
+    paused = false
+    return Result{success: true}

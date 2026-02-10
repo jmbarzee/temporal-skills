@@ -77,9 +77,10 @@ func (p *Parser) collectRawUntil(terminators ...token.TokenType) string {
 	}
 }
 
-// skipNewlines consumes any NEWLINE tokens at the current position.
-func (p *Parser) skipNewlines() {
-	for p.current.Type == token.NEWLINE {
+// skipBlankLinesAndComments consumes any NEWLINE and COMMENT tokens at the current position.
+// This allows comments to appear between declarations without breaking parsing.
+func (p *Parser) skipBlankLinesAndComments() {
+	for p.current.Type == token.NEWLINE || p.current.Type == token.COMMENT {
 		p.advance()
 	}
 }

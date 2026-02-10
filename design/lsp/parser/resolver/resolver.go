@@ -48,9 +48,8 @@ func Resolve(file *ast.File) []*ResolveError {
 		}
 	}
 
-	if len(errs) > 0 {
-		return errs
-	}
+	// Continue to Pass 2 even if there are duplicate definition errors.
+	// This provides better diagnostics by also reporting undefined references.
 
 	// Pass 2: Walk workflow bodies, resolving references.
 	for _, def := range file.Definitions {
@@ -59,11 +58,15 @@ func Resolve(file *ast.File) []*ResolveError {
 			continue
 		}
 
-		// Build signal and update maps for this workflow.
+		// Build signal, query, and update maps for this workflow.
 		signals := make(map[string]*ast.SignalDecl)
+		queries := make(map[string]*ast.QueryDecl)
 		updates := make(map[string]*ast.UpdateDecl)
 		for _, s := range wf.Signals {
 			signals[s.Name] = s
+		}
+		for _, q := range wf.Queries {
+			queries[q.Name] = q
 		}
 		for _, u := range wf.Updates {
 			updates[u.Name] = u
@@ -73,7 +76,19 @@ func Resolve(file *ast.File) []*ResolveError {
 			workflows:  workflows,
 			activities: activities,
 			signals:    signals,
+			queries:    queries,
 			updates:    updates,
+		}
+
+		// Resolve handler bodies.
+		for _, s := range wf.Signals {
+			ctx.resolveStatements(s.Body)
+		}
+		for _, q := range wf.Queries {
+			ctx.resolveStatements(q.Body)
+		}
+		for _, u := range wf.Updates {
+			ctx.resolveStatements(u.Body)
 		}
 
 		ctx.resolveStatements(wf.Body)
@@ -87,6 +102,7 @@ type resolveCtx struct {
 	workflows  map[string]*ast.WorkflowDef
 	activities map[string]*ast.ActivityDef
 	signals    map[string]*ast.SignalDecl
+	queries    map[string]*ast.QueryDecl
 	updates    map[string]*ast.UpdateDecl
 	errs       []*ResolveError
 }
@@ -121,17 +137,12 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 			})
 		}
 
-	case *ast.AwaitStmt:
-		for _, target := range s.Targets {
-			c.resolveAwaitTarget(target)
-		}
-
-	case *ast.ParallelBlock:
+	case *ast.AwaitAllBlock:
 		c.resolveStatements(s.Body)
 
-	case *ast.SelectBlock:
-		for _, sc := range s.Cases {
-			c.resolveSelectCase(sc)
+	case *ast.AwaitOneBlock:
+		for _, awaitCase := range s.Cases {
+			c.resolveAwaitOneCase(awaitCase)
 		}
 
 	case *ast.SwitchBlock:
@@ -150,68 +161,48 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 
 	case *ast.ForStmt:
 		c.resolveStatements(s.Body)
+
+	case *ast.HintStmt:
+		switch s.Kind {
+		case "signal":
+			if def, ok := c.signals[s.Name]; ok {
+				s.Resolved = def
+			} else {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined signal: %s", s.Name),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		case "query":
+			if def, ok := c.queries[s.Name]; ok {
+				s.Resolved = def
+			} else {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined query: %s", s.Name),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		case "update":
+			if def, ok := c.updates[s.Name]; ok {
+				s.Resolved = def
+			} else {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined update: %s", s.Name),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
 	}
 }
 
-func (c *resolveCtx) resolveAwaitTarget(target *ast.AwaitTarget) {
-	switch target.Kind {
-	case "signal":
-		if def, ok := c.signals[target.Name]; ok {
-			target.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined signal: %s", target.Name),
-				Line:   target.Line,
-				Column: target.Column,
-			})
-		}
-	case "update":
-		if def, ok := c.updates[target.Name]; ok {
-			target.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined update: %s", target.Name),
-				Line:   target.Line,
-				Column: target.Column,
-			})
-		}
+func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
+	// Resolve nested await all block if present.
+	if awaitCase.AwaitAll != nil {
+		c.resolveStatements(awaitCase.AwaitAll.Body)
 	}
-}
-
-func (c *resolveCtx) resolveSelectCase(sc *ast.SelectCase) {
-	switch sc.CaseKind() {
-	case "workflow":
-		if _, ok := c.workflows[sc.WorkflowName]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined workflow: %s", sc.WorkflowName),
-				Line:   sc.Line,
-				Column: sc.Column,
-			})
-		}
-	case "activity":
-		if _, ok := c.activities[sc.ActivityName]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined activity: %s", sc.ActivityName),
-				Line:   sc.Line,
-				Column: sc.Column,
-			})
-		}
-	case "signal":
-		if _, ok := c.signals[sc.SignalName]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined signal: %s", sc.SignalName),
-				Line:   sc.Line,
-				Column: sc.Column,
-			})
-		}
-	case "update":
-		if _, ok := c.updates[sc.UpdateName]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined update: %s", sc.UpdateName),
-				Line:   sc.Line,
-				Column: sc.Column,
-			})
-		}
-	}
-	c.resolveStatements(sc.Body)
+	// Resolve the case body.
+	c.resolveStatements(awaitCase.Body)
 }

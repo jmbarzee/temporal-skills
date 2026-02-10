@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	jsonOutput := flag.Bool("json", false, "Output AST as JSON")
+	jsonOutput := flag.Bool("json", true, "Output AST as JSON")
+	lenient := flag.Bool("lenient", false, "Continue even with resolve errors (for partial/incomplete code)")
 	flag.Parse()
 
 	args := flag.Args()
@@ -47,7 +48,10 @@ func main() {
 		for _, e := range errs {
 			fmt.Fprintf(os.Stderr, "resolve error: %v\n", e)
 		}
-		os.Exit(1)
+		if !*lenient {
+			os.Exit(1)
+		}
+		// In lenient mode, continue with partial AST
 	}
 
 	if *jsonOutput {

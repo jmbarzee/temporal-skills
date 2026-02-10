@@ -32,11 +32,11 @@ const (
 
 	// Keywords -- async
 	AWAIT
-	OR
+	ALL
+	ONE
+	HINT
 
 	// Keywords -- blocks
-	PARALLEL
-	SELECT
 	SWITCH
 	CASE
 
@@ -80,9 +80,9 @@ var tokenNames = map[TokenType]string{
 	TIMER:           "TIMER",
 	OPTIONS:         "OPTIONS",
 	AWAIT:           "AWAIT",
-	OR:              "OR",
-	PARALLEL:        "PARALLEL",
-	SELECT:          "SELECT",
+	ALL:             "ALL",
+	ONE:             "ONE",
+	HINT:            "HINT",
 	SWITCH:          "SWITCH",
 	CASE:            "CASE",
 	IF:              "IF",
@@ -136,9 +136,9 @@ var keywords = map[string]TokenType{
 	"timer":           TIMER,
 	"options":         OPTIONS,
 	"await":           AWAIT,
-	"or":              OR,
-	"parallel":        PARALLEL,
-	"select":          SELECT,
+	"all":             ALL,
+	"one":             ONE,
+	"hint":            HINT,
 	"switch":          SWITCH,
 	"case":            CASE,
 	"if":              IF,

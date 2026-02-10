@@ -145,76 +145,25 @@ func parseTimerStmt(p *Parser) (ast.Statement, error) {
 	}, nil
 }
 
-// parseAwaitStmt parses: AWAIT await_target { OR await_target } NEWLINE
-func parseAwaitStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+// parseAwaitBlock dispatches to parseAwaitAllBlock or parseAwaitOneBlock based on next token.
+// Parses: AWAIT (ALL | ONE) COLON ...
+func parseAwaitBlock(p *Parser) (ast.Statement, error) {
 	p.advance() // consume AWAIT
 
-	var targets []*ast.AwaitTarget
-
-	target, err := parseAwaitTarget(p)
-	if err != nil {
-		return nil, err
-	}
-	targets = append(targets, target)
-
-	for p.current.Type == token.OR {
-		p.advance() // consume OR
-		target, err := parseAwaitTarget(p)
-		if err != nil {
-			return nil, err
-		}
-		targets = append(targets, target)
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.AwaitStmt{
-		Pos:     pos,
-		Targets: targets,
-	}, nil
-}
-
-// parseAwaitTarget parses: SIGNAL IDENT [ ARGS ] | UPDATE IDENT [ ARGS ]
-func parseAwaitTarget(p *Parser) (*ast.AwaitTarget, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-
-	var kind string
 	switch p.current.Type {
-	case token.SIGNAL:
-		kind = "signal"
-	case token.UPDATE:
-		kind = "update"
+	case token.ALL:
+		return parseAwaitAllBlock(p)
+	case token.ONE:
+		return parseAwaitOneBlock(p)
 	default:
-		return nil, p.errorf("await target must be signal or update, got %s", p.current.Type)
+		return nil, p.errorf("expected 'all' or 'one' after 'await', got %s", p.current.Type)
 	}
-	p.advance()
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	var args string
-	if p.current.Type == token.ARGS {
-		args = p.current.Literal
-		p.advance()
-	}
-
-	return &ast.AwaitTarget{
-		Pos:  pos,
-		Kind: kind,
-		Name: name.Literal,
-		Args: args,
-	}, nil
 }
 
-// parseParallelBlock parses: PARALLEL COLON NEWLINE INDENT workflow_body DEDENT
-func parseParallelBlock(p *Parser) (ast.Statement, error) {
+// parseAwaitAllBlock parses: ALL COLON NEWLINE INDENT workflow_body DEDENT
+func parseAwaitAllBlock(p *Parser) (ast.Statement, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume PARALLEL
+	p.advance() // consume ALL
 
 	if _, err := p.expect(token.COLON); err != nil {
 		return nil, err
@@ -231,16 +180,16 @@ func parseParallelBlock(p *Parser) (ast.Statement, error) {
 		return nil, err
 	}
 
-	return &ast.ParallelBlock{
+	return &ast.AwaitAllBlock{
 		Pos:  pos,
 		Body: body,
 	}, nil
 }
 
-// parseSelectBlock parses: SELECT COLON NEWLINE INDENT { select_case } DEDENT
-func parseSelectBlock(p *Parser) (ast.Statement, error) {
+// parseAwaitOneBlock parses: ONE COLON NEWLINE INDENT { await_one_case } DEDENT
+func parseAwaitOneBlock(p *Parser) (ast.Statement, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume SELECT
+	p.advance() // consume ONE
 
 	if _, err := p.expect(token.COLON); err != nil {
 		return nil, err
@@ -252,134 +201,56 @@ func parseSelectBlock(p *Parser) (ast.Statement, error) {
 		return nil, err
 	}
 
-	var cases []*ast.SelectCase
+	var cases []*ast.AwaitOneCase
 	for p.current.Type != token.DEDENT && p.current.Type != token.EOF {
 		if p.current.Type == token.NEWLINE {
 			p.advance()
 			continue
 		}
 
-		sc, err := parseSelectCase(p)
+		c, err := parseAwaitOneCase(p)
 		if err != nil {
 			return nil, err
 		}
-		cases = append(cases, sc)
+		cases = append(cases, c)
 	}
 
 	if p.current.Type == token.DEDENT {
 		p.advance()
 	}
 
-	return &ast.SelectBlock{
+	return &ast.AwaitOneBlock{
 		Pos:   pos,
 		Cases: cases,
 	}, nil
 }
 
-// parseSelectCase parses a single select case.
-func parseSelectCase(p *Parser) (*ast.SelectCase, error) {
+// parseAwaitOneCase parses a single await one case (timer or await all).
+func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	sc := &ast.SelectCase{Pos: pos}
+	c := &ast.AwaitOneCase{Pos: pos}
 
 	switch p.current.Type {
-	case token.DETACH:
-		return nil, p.errorf("detach is not allowed in select cases")
-
-	case token.SPAWN, token.NEXUS, token.WORKFLOW:
-		// Workflow case: [ SPAWN ] [ NEXUS STRING ] WORKFLOW IDENT ARGS [ ARROW IDENT ] COLON
-		mode := ast.CallChild
-		if p.current.Type == token.SPAWN {
-			mode = ast.CallSpawn
-			p.advance()
-		}
-		sc.WorkflowMode = mode
-
-		if p.current.Type == token.NEXUS {
-			p.advance()
-			ns, err := p.expect(token.STRING)
-			if err != nil {
-				return nil, err
-			}
-			sc.WorkflowNamespace = ns.Literal
-		}
-
-		if _, err := p.expect(token.WORKFLOW); err != nil {
-			return nil, err
-		}
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		sc.WorkflowName = name.Literal
-
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		sc.WorkflowArgs = args.Literal
-
-		if p.current.Type == token.ARROW {
-			p.advance()
-			res, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			sc.WorkflowResult = res.Literal
-		}
-
-	case token.ACTIVITY:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		sc.ActivityName = name.Literal
-
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		sc.ActivityArgs = args.Literal
-
-		if p.current.Type == token.ARROW {
-			p.advance()
-			res, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			sc.ActivityResult = res.Literal
-		}
-
-	case token.SIGNAL:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		sc.SignalName = name.Literal
-		if p.current.Type == token.ARGS {
-			sc.SignalArgs = p.current.Literal
-			p.advance()
-		}
-
-	case token.UPDATE:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		sc.UpdateName = name.Literal
-		if p.current.Type == token.ARGS {
-			sc.UpdateArgs = p.current.Literal
-			p.advance()
-		}
-
 	case token.TIMER:
+		// Timer case: TIMER duration COLON NEWLINE INDENT body DEDENT
 		p.advance()
-		sc.TimerDuration = p.collectRawUntil(token.COLON, token.NEWLINE)
+		c.TimerDuration = p.collectRawUntil(token.COLON, token.NEWLINE)
+
+	case token.AWAIT:
+		// Nested await all case: AWAIT ALL COLON NEWLINE INDENT body DEDENT
+		stmt, err := parseAwaitBlock(p)
+		if err != nil {
+			return nil, err
+		}
+		awaitAll, ok := stmt.(*ast.AwaitAllBlock)
+		if !ok {
+			return nil, p.errorf("expected 'await all' in await one case, got await one")
+		}
+		c.AwaitAll = awaitAll
+		return c, nil // await all case has no additional body
 
 	default:
-		return nil, p.errorf("unexpected token %s in select case", p.current.Type)
+		return nil, p.errorf("unexpected token %s in await one case (expected 'timer' or 'await')", p.current.Type)
 	}
 
 	// Expect COLON NEWLINE INDENT body DEDENT
@@ -397,9 +268,9 @@ func parseSelectCase(p *Parser) (*ast.SelectCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	sc.Body = body
+	c.Body = body
 
-	return sc, nil
+	return c, nil
 }
 
 // parseSwitchBlock parses: SWITCH ARGS COLON NEWLINE INDENT { switch_case } [ else ] DEDENT
@@ -671,6 +542,40 @@ func parseContinueStmt(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.ContinueStmt{Pos: pos}, nil
+}
+
+// parseHintStmt parses: HINT (SIGNAL | UPDATE) IDENT NEWLINE
+func parseHintStmt(p *Parser) (ast.Statement, error) {
+	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+	p.advance() // consume HINT
+
+	var kind string
+	switch p.current.Type {
+	case token.SIGNAL:
+		kind = "signal"
+	case token.QUERY:
+		kind = "query"
+	case token.UPDATE:
+		kind = "update"
+	default:
+		return nil, p.errorf("hint target must be signal, query, or update, got %s", p.current.Type)
+	}
+	p.advance()
+
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.current.Type == token.NEWLINE {
+		p.advance()
+	}
+
+	return &ast.HintStmt{
+		Pos:  pos,
+		Kind: kind,
+		Name: name.Literal,
+	}, nil
 }
 
 // parseRawStmt captures the rest of the line as a raw statement.

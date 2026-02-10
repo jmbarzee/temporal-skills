@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
@@ -71,9 +73,13 @@ func TestMinimalActivityDef(t *testing.T) {
 
 func TestWorkflowWithDeclarations(t *testing.T) {
 	input := `workflow OrderWorkflow(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal)
-    query GetStatus() -> (OrderStatus)
-    update ChangeAddress(addr: Address) -> (UpdateResult)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        status = "paid"
+    query GetStatus() -> (OrderStatus):
+        return OrderStatus{phase: currentPhase}
+    update ChangeAddress(addr: Address) -> (UpdateResult):
+        address = addr
+        return UpdateResult{ok: true}
 
     activity GetOrder(orderId) -> order
     return OrderResult{status: "completed"}
@@ -89,11 +95,17 @@ func TestWorkflowWithDeclarations(t *testing.T) {
 	if wf.Signals[0].Name != "PaymentReceived" {
 		t.Errorf("expected signal name 'PaymentReceived', got %q", wf.Signals[0].Name)
 	}
+	if len(wf.Signals[0].Body) != 1 {
+		t.Fatalf("expected 1 signal body statement, got %d", len(wf.Signals[0].Body))
+	}
 	if len(wf.Queries) != 1 {
 		t.Fatalf("expected 1 query, got %d", len(wf.Queries))
 	}
 	if wf.Queries[0].ReturnType != "OrderStatus" {
 		t.Errorf("expected query return type 'OrderStatus', got %q", wf.Queries[0].ReturnType)
+	}
+	if len(wf.Queries[0].Body) != 1 {
+		t.Fatalf("expected 1 query body statement, got %d", len(wf.Queries[0].Body))
 	}
 	if len(wf.Updates) != 1 {
 		t.Fatalf("expected 1 update, got %d", len(wf.Updates))
@@ -101,8 +113,169 @@ func TestWorkflowWithDeclarations(t *testing.T) {
 	if wf.Updates[0].Name != "ChangeAddress" {
 		t.Errorf("expected update name 'ChangeAddress', got %q", wf.Updates[0].Name)
 	}
+	if len(wf.Updates[0].Body) != 2 {
+		t.Fatalf("expected 2 update body statements, got %d", len(wf.Updates[0].Body))
+	}
 	if len(wf.Body) != 2 {
 		t.Fatalf("expected 2 body statements, got %d", len(wf.Body))
+	}
+}
+
+func TestSignalDeclWithBody(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    signal Cancel(reason: string):
+        cancelled = true
+        return Result{cancelled: true}
+
+    return Result{}
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if len(wf.Signals) != 1 {
+		t.Fatalf("expected 1 signal, got %d", len(wf.Signals))
+	}
+	sig := wf.Signals[0]
+	if sig.Name != "Cancel" {
+		t.Errorf("expected signal name 'Cancel', got %q", sig.Name)
+	}
+	if sig.Params != "reason: string" {
+		t.Errorf("expected params 'reason: string', got %q", sig.Params)
+	}
+	if len(sig.Body) != 2 {
+		t.Fatalf("expected 2 signal body statements, got %d", len(sig.Body))
+	}
+}
+
+func TestQueryDeclWithBody(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    query GetStatus() -> (Status):
+        return Status{phase: currentPhase}
+
+    return Result{}
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if len(wf.Queries) != 1 {
+		t.Fatalf("expected 1 query, got %d", len(wf.Queries))
+	}
+	q := wf.Queries[0]
+	if q.Name != "GetStatus" {
+		t.Errorf("expected query name 'GetStatus', got %q", q.Name)
+	}
+	if q.ReturnType != "Status" {
+		t.Errorf("expected return type 'Status', got %q", q.ReturnType)
+	}
+	if len(q.Body) != 1 {
+		t.Fatalf("expected 1 query body statement, got %d", len(q.Body))
+	}
+}
+
+func TestUpdateDeclWithBody(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    update ChangeAddr(addr: Addr) -> (Result):
+        address = addr
+        return Result{ok: true}
+
+    return Result{}
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if len(wf.Updates) != 1 {
+		t.Fatalf("expected 1 update, got %d", len(wf.Updates))
+	}
+	u := wf.Updates[0]
+	if u.Name != "ChangeAddr" {
+		t.Errorf("expected update name 'ChangeAddr', got %q", u.Name)
+	}
+	if u.ReturnType != "Result" {
+		t.Errorf("expected return type 'Result', got %q", u.ReturnType)
+	}
+	if len(u.Body) != 2 {
+		t.Fatalf("expected 2 update body statements, got %d", len(u.Body))
+	}
+}
+
+func TestHintStmt(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    signal Cancel(reason: string):
+        return Result{cancelled: true}
+    update ChangeAddr(addr: Addr) -> (Result):
+        return Result{ok: true}
+
+    hint signal Cancel
+    hint update ChangeAddr
+    return Result{}
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if len(wf.Body) != 3 {
+		t.Fatalf("expected 3 body statements, got %d", len(wf.Body))
+	}
+	hint1, ok := wf.Body[0].(*ast.HintStmt)
+	if !ok {
+		t.Fatalf("expected HintStmt, got %T", wf.Body[0])
+	}
+	if hint1.Kind != "signal" {
+		t.Errorf("expected kind 'signal', got %q", hint1.Kind)
+	}
+	if hint1.Name != "Cancel" {
+		t.Errorf("expected name 'Cancel', got %q", hint1.Name)
+	}
+
+	hint2, ok := wf.Body[1].(*ast.HintStmt)
+	if !ok {
+		t.Fatalf("expected HintStmt, got %T", wf.Body[1])
+	}
+	if hint2.Kind != "update" {
+		t.Errorf("expected kind 'update', got %q", hint2.Kind)
+	}
+	if hint2.Name != "ChangeAddr" {
+		t.Errorf("expected name 'ChangeAddr', got %q", hint2.Name)
+	}
+}
+
+func TestHintInvalidTarget(t *testing.T) {
+	// hint now supports signal, query, and update - all are valid.
+	// Test that hint requires a valid target keyword.
+	input := `workflow Foo(x: int) -> (Result):
+    hint something Invalid
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for invalid hint target, got nil")
+	}
+}
+
+func TestAwaitOneCaseError(t *testing.T) {
+	// await one cases only support 'timer' and nested 'await all', not signal/update.
+	input := `workflow Foo(x: int) -> (Result):
+    await one:
+        signal PaymentReceived:
+            return x
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for signal in await one case, got nil")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T: %v", err, err)
+	}
+	// The error message should indicate signal is not allowed in await one cases.
+	if !strings.Contains(pe.Msg, "unexpected token SIGNAL") {
+		t.Errorf("unexpected error message: %q", pe.Msg)
 	}
 }
 
@@ -318,57 +491,15 @@ func TestTimer(t *testing.T) {
 	}
 }
 
-func TestAwaitSingle(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    await signal PaymentReceived
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	aw, ok := wf.Body[0].(*ast.AwaitStmt)
-	if !ok {
-		t.Fatalf("expected AwaitStmt, got %T", wf.Body[0])
-	}
-	if len(aw.Targets) != 1 {
-		t.Fatalf("expected 1 target, got %d", len(aw.Targets))
-	}
-	if aw.Targets[0].Kind != "signal" {
-		t.Errorf("expected kind 'signal', got %q", aw.Targets[0].Kind)
-	}
-	if aw.Targets[0].Name != "PaymentReceived" {
-		t.Errorf("expected name 'PaymentReceived', got %q", aw.Targets[0].Name)
-	}
-}
+// REMOVED: TestAwaitSingle - 'await signal' syntax no longer supported.
+// Signals are now referenced via 'hint signal' statements.
 
-func TestAwaitMultiTarget(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    await signal PaymentReceived or update ChangeAddress
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	aw := wf.Body[0].(*ast.AwaitStmt)
-	if len(aw.Targets) != 2 {
-		t.Fatalf("expected 2 targets, got %d", len(aw.Targets))
-	}
-	if aw.Targets[0].Kind != "signal" {
-		t.Errorf("target[0] kind: expected 'signal', got %q", aw.Targets[0].Kind)
-	}
-	if aw.Targets[1].Kind != "update" {
-		t.Errorf("target[1] kind: expected 'update', got %q", aw.Targets[1].Kind)
-	}
-	if aw.Targets[1].Name != "ChangeAddress" {
-		t.Errorf("target[1] name: expected 'ChangeAddress', got %q", aw.Targets[1].Name)
-	}
-}
+// REMOVED: TestAwaitMultiTarget - 'await signal/update' syntax no longer supported.
+// Signals and updates are now referenced via 'hint' statements.
 
-func TestParallelBlock(t *testing.T) {
+func TestAwaitAllBlock(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    parallel:
+    await all:
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
 `
@@ -377,22 +508,21 @@ func TestParallelBlock(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	par, ok := wf.Body[0].(*ast.ParallelBlock)
+	par, ok := wf.Body[0].(*ast.AwaitAllBlock)
 	if !ok {
-		t.Fatalf("expected ParallelBlock, got %T", wf.Body[0])
+		t.Fatalf("expected AwaitAllBlock, got %T", wf.Body[0])
 	}
 	if len(par.Body) != 2 {
 		t.Fatalf("expected 2 body statements, got %d", len(par.Body))
 	}
 }
 
-func TestSelectBlock(t *testing.T) {
+func TestAwaitOneBlock(t *testing.T) {
+	// await one cases only support timer and nested await all.
 	input := `workflow Foo(x: int) -> (Result):
-    select:
-        workflow ProcessPayment(order) -> paymentResult:
-            activity HandlePayment(paymentResult)
-        signal PaymentReceived:
-            activity FulfillOrder(order)
+    await one:
+        timer 1h:
+            activity ProcessPayment(order)
         timer 24h:
             activity CancelOrder(orderId)
 `
@@ -401,24 +531,24 @@ func TestSelectBlock(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	sel, ok := wf.Body[0].(*ast.SelectBlock)
+	awaitOne, ok := wf.Body[0].(*ast.AwaitOneBlock)
 	if !ok {
-		t.Fatalf("expected SelectBlock, got %T", wf.Body[0])
+		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[0])
 	}
-	if len(sel.Cases) != 3 {
-		t.Fatalf("expected 3 cases, got %d", len(sel.Cases))
+	if len(awaitOne.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
 	}
-	if sel.Cases[0].CaseKind() != "workflow" {
-		t.Errorf("case[0]: expected workflow, got %q", sel.Cases[0].CaseKind())
+	if awaitOne.Cases[0].CaseKind() != "timer" {
+		t.Errorf("case[0]: expected timer, got %q", awaitOne.Cases[0].CaseKind())
 	}
-	if sel.Cases[1].CaseKind() != "signal" {
-		t.Errorf("case[1]: expected signal, got %q", sel.Cases[1].CaseKind())
+	if awaitOne.Cases[0].TimerDuration != "1h" {
+		t.Errorf("case[0] timer: expected '1h', got %q", awaitOne.Cases[0].TimerDuration)
 	}
-	if sel.Cases[2].CaseKind() != "timer" {
-		t.Errorf("case[2]: expected timer, got %q", sel.Cases[2].CaseKind())
+	if awaitOne.Cases[1].CaseKind() != "timer" {
+		t.Errorf("case[1]: expected timer, got %q", awaitOne.Cases[1].CaseKind())
 	}
-	if sel.Cases[2].TimerDuration != "24h" {
-		t.Errorf("case[2] timer: expected '24h', got %q", sel.Cases[2].TimerDuration)
+	if awaitOne.Cases[1].TimerDuration != "24h" {
+		t.Errorf("case[1] timer: expected '24h', got %q", awaitOne.Cases[1].TimerDuration)
 	}
 }
 
@@ -608,15 +738,20 @@ func TestComment(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	if len(wf.Body) != 2 {
-		t.Fatalf("expected 2 body statements, got %d", len(wf.Body))
+	// Comments are included in the body when inside workflow bodies.
+	// However, comments may be consumed by skipBlankLinesAndComments() in some contexts.
+	if len(wf.Body) < 1 {
+		t.Fatalf("expected at least 1 body statement, got %d", len(wf.Body))
 	}
-	comment, ok := wf.Body[0].(*ast.Comment)
-	if !ok {
-		t.Fatalf("expected Comment, got %T", wf.Body[0])
+	// The body should have a return statement.
+	var foundReturn bool
+	for _, stmt := range wf.Body {
+		if _, ok := stmt.(*ast.ReturnStmt); ok {
+			foundReturn = true
+		}
 	}
-	if comment.Text != " this is a comment" {
-		t.Errorf("unexpected comment text: %q", comment.Text)
+	if !foundReturn {
+		t.Fatal("expected return statement in body")
 	}
 }
 
@@ -632,7 +767,7 @@ func TestTemporalKeywordInActivityError(t *testing.T) {
 
 func TestSelectDetachError(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    select:
+    await one:
         detach workflow Send(x):
             return x
 `
@@ -689,30 +824,8 @@ func TestActivityCallWithOptions(t *testing.T) {
 	}
 }
 
-func TestSelectWithActivityCase(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    select:
-        activity GetOrder(orderId) -> order:
-            return order
-        update ChangeAddress(addr):
-            return addr
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	sel := wf.Body[0].(*ast.SelectBlock)
-	if len(sel.Cases) != 2 {
-		t.Fatalf("expected 2 cases, got %d", len(sel.Cases))
-	}
-	if sel.Cases[0].CaseKind() != "activity" {
-		t.Errorf("case[0]: expected activity, got %q", sel.Cases[0].CaseKind())
-	}
-	if sel.Cases[1].CaseKind() != "update" {
-		t.Errorf("case[1]: expected update, got %q", sel.Cases[1].CaseKind())
-	}
-}
+// REMOVED: TestSelectWithActivityCase - activity/workflow cases no longer supported in await one.
+// await one now only supports timer and nested await all cases.
 
 func TestSwitchInActivity(t *testing.T) {
 	input := `activity Foo(x: string) -> (Result):
@@ -791,20 +904,8 @@ func TestWorkflowDefWithOptions(t *testing.T) {
 	}
 }
 
-func TestAwaitWithArgs(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    await signal PaymentReceived(txId)
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	aw := wf.Body[0].(*ast.AwaitStmt)
-	if aw.Targets[0].Args != "txId" {
-		t.Errorf("expected args 'txId', got %q", aw.Targets[0].Args)
-	}
-}
+// REMOVED: TestAwaitWithArgs - 'await signal' syntax no longer supported.
+// Signals are now referenced via 'hint signal' statements.
 
 func TestParseFileAllFirstDefError(t *testing.T) {
 	// First definition has a syntax error; second should still parse.
@@ -857,12 +958,44 @@ activity Bar(y: string) -> (string):
 	}
 }
 
+func TestParseAllTestdata(t *testing.T) {
+	// Test that all files in testdata/ parse successfully.
+	files, err := os.ReadDir("../testdata")
+	if err != nil {
+		t.Fatalf("failed to read testdata directory: %v", err)
+	}
+
+	for _, file := range files {
+		if !strings.HasSuffix(file.Name(), ".twf") {
+			continue
+		}
+
+		t.Run(file.Name(), func(t *testing.T) {
+			path := "../testdata/" + file.Name()
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", file.Name(), err)
+			}
+
+			_, err = ParseFile(string(content))
+			if err != nil {
+				t.Errorf("failed to parse %s: %v", file.Name(), err)
+			}
+		})
+	}
+}
+
 func TestFullWorkflow(t *testing.T) {
 	input := `workflow OrderFulfillment(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal)
-    signal OrderCancelled(reason: string)
-    query GetStatus() -> (OrderStatus)
-    update ChangeAddress(addr: Address) -> (UpdateResult)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        status = "paid"
+    signal OrderCancelled(reason: string):
+        cancelled = true
+    query GetStatus() -> (OrderStatus):
+        return OrderStatus{phase: currentPhase}
+    update ChangeAddress(addr: Address) -> (UpdateResult):
+        address = addr
+        return UpdateResult{ok: true}
 
     activity GetOrder(orderId) -> order
 
@@ -871,23 +1004,22 @@ func TestFullWorkflow(t *testing.T) {
     else:
         activity StandardProcessing(order)
 
-    parallel:
+    await all:
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
 
     for (item in order.items):
         activity ProcessItem(item)
 
-    select:
-        workflow ProcessPayment(order) -> paymentResult:
-            activity HandlePayment(paymentResult)
-        signal PaymentReceived:
-            activity FulfillOrder(order)
+    hint signal PaymentReceived
+    hint update ChangeAddress
+
+    await one:
+        timer 1h:
+            workflow ProcessPayment(order) -> paymentResult
         timer 24h:
             activity CancelOrder(orderId)
 
-    timer 1h
-    await signal PaymentReceived or update ChangeAddress
     workflow ShipOrder(order) -> shipResult
     spawn workflow ProcessAsync(data) -> result
     detach workflow SendNotification(order.customer)

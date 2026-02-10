@@ -66,22 +66,8 @@ func nameOfNode(node ast.Node) (name, kind string) {
 			return n.Resolved.Name, "workflow"
 		}
 		return n.Name, "workflow"
-	case *ast.AwaitTarget:
-		if n.Resolved != nil {
-			return nameOfNode(n.Resolved)
-		}
+	case *ast.HintStmt:
 		return n.Name, n.Kind
-	case *ast.SelectCase:
-		switch n.CaseKind() {
-		case "workflow":
-			return n.WorkflowName, "workflow"
-		case "activity":
-			return n.ActivityName, "activity"
-		case "signal":
-			return n.SignalName, "signal"
-		case "update":
-			return n.UpdateName, "update"
-		}
 	}
 	return "", ""
 }
@@ -115,6 +101,16 @@ func collectReferences(file *ast.File, name, kind string, includeDecl bool) []as
 					}
 				}
 			}
+			// Walk handler bodies.
+			for _, s := range d.Signals {
+				refs = collectRefsInStmts(s.Body, name, kind, refs)
+			}
+			for _, q := range d.Queries {
+				refs = collectRefsInStmts(q.Body, name, kind, refs)
+			}
+			for _, u := range d.Updates {
+				refs = collectRefsInStmts(u.Body, name, kind, refs)
+			}
 			refs = collectRefsInStmts(d.Body, name, kind, refs)
 
 		case *ast.ActivityDef:
@@ -144,28 +140,20 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 		if kind == "workflow" && s.Name == name {
 			refs = append(refs, s)
 		}
-	case *ast.AwaitStmt:
-		for _, t := range s.Targets {
-			if t.Kind == kind && t.Name == name {
-				refs = append(refs, t)
-			}
+	case *ast.HintStmt:
+		if s.Kind == kind && s.Name == name {
+			refs = append(refs, s)
 		}
-	case *ast.SelectBlock:
+	case *ast.AwaitAllBlock:
+		refs = collectRefsInStmts(s.Body, name, kind, refs)
+	case *ast.AwaitOneBlock:
 		for _, c := range s.Cases {
-			switch {
-			case kind == "workflow" && c.WorkflowName == name:
-				refs = append(refs, c)
-			case kind == "activity" && c.ActivityName == name:
-				refs = append(refs, c)
-			case kind == "signal" && c.SignalName == name:
-				refs = append(refs, c)
-			case kind == "update" && c.UpdateName == name:
-				refs = append(refs, c)
+			// Check nested await all block.
+			if c.AwaitAll != nil {
+				refs = collectRefsInStmts(c.AwaitAll.Body, name, kind, refs)
 			}
 			refs = collectRefsInStmts(c.Body, name, kind, refs)
 		}
-	case *ast.ParallelBlock:
-		refs = collectRefsInStmts(s.Body, name, kind, refs)
 	case *ast.SwitchBlock:
 		for _, c := range s.Cases {
 			refs = collectRefsInStmts(c.Body, name, kind, refs)

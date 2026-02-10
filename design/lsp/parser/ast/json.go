@@ -65,33 +65,57 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 		Body:       make([]json.RawMessage, 0, len(w.Body)),
 	}
 	for _, s := range w.Signals {
-		wj.Signals = append(wj.Signals, &SignalDeclJSON{
+		sj := &SignalDeclJSON{
 			Type:   "signalDecl",
 			Line:   s.Line,
 			Column: s.Column,
 			Name:   s.Name,
 			Params: s.Params,
-		})
+		}
+		for _, stmt := range s.Body {
+			data, err := marshalStatement(stmt)
+			if err != nil {
+				return nil, err
+			}
+			sj.Body = append(sj.Body, data)
+		}
+		wj.Signals = append(wj.Signals, sj)
 	}
 	for _, q := range w.Queries {
-		wj.Queries = append(wj.Queries, &QueryDeclJSON{
+		qj := &QueryDeclJSON{
 			Type:       "queryDecl",
 			Line:       q.Line,
 			Column:     q.Column,
 			Name:       q.Name,
 			Params:     q.Params,
 			ReturnType: q.ReturnType,
-		})
+		}
+		for _, stmt := range q.Body {
+			data, err := marshalStatement(stmt)
+			if err != nil {
+				return nil, err
+			}
+			qj.Body = append(qj.Body, data)
+		}
+		wj.Queries = append(wj.Queries, qj)
 	}
 	for _, u := range w.Updates {
-		wj.Updates = append(wj.Updates, &UpdateDeclJSON{
+		uj := &UpdateDeclJSON{
 			Type:       "updateDecl",
 			Line:       u.Line,
 			Column:     u.Column,
 			Name:       u.Name,
 			Params:     u.Params,
 			ReturnType: u.ReturnType,
-		})
+		}
+		for _, stmt := range u.Body {
+			data, err := marshalStatement(stmt)
+			if err != nil {
+				return nil, err
+			}
+			uj.Body = append(uj.Body, data)
+		}
+		wj.Updates = append(wj.Updates, uj)
 	}
 	for _, stmt := range w.Body {
 		data, err := marshalStatement(stmt)
@@ -138,29 +162,32 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 
 // Declaration JSON types
 type SignalDeclJSON struct {
-	Type   string `json:"type"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
-	Name   string `json:"name"`
-	Params string `json:"params"`
+	Type   string            `json:"type"`
+	Line   int               `json:"line"`
+	Column int               `json:"column"`
+	Name   string            `json:"name"`
+	Params string            `json:"params"`
+	Body   []json.RawMessage `json:"body,omitempty"`
 }
 
 type QueryDeclJSON struct {
-	Type       string `json:"type"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column"`
-	Name       string `json:"name"`
-	Params     string `json:"params"`
-	ReturnType string `json:"returnType,omitempty"`
+	Type       string            `json:"type"`
+	Line       int               `json:"line"`
+	Column     int               `json:"column"`
+	Name       string            `json:"name"`
+	Params     string            `json:"params"`
+	ReturnType string            `json:"returnType,omitempty"`
+	Body       []json.RawMessage `json:"body,omitempty"`
 }
 
 type UpdateDeclJSON struct {
-	Type       string `json:"type"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column"`
-	Name       string `json:"name"`
-	Params     string `json:"params"`
-	ReturnType string `json:"returnType,omitempty"`
+	Type       string            `json:"type"`
+	Line       int               `json:"line"`
+	Column     int               `json:"column"`
+	Name       string            `json:"name"`
+	Params     string            `json:"params"`
+	ReturnType string            `json:"returnType,omitempty"`
+	Body       []json.RawMessage `json:"body,omitempty"`
 }
 
 // marshalStatement marshals a Statement with type discrimination.
@@ -195,22 +222,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Column:   s.Column,
 			Duration: s.Duration,
 		})
-	case *AwaitStmt:
-		targets := make([]awaitTargetJSON, 0, len(s.Targets))
-		for _, t := range s.Targets {
-			targets = append(targets, awaitTargetJSON{
-				Kind: t.Kind,
-				Name: t.Name,
-				Args: t.Args,
-			})
-		}
-		return json.Marshal(awaitStmtJSON{
-			Type:    "await",
-			Line:    s.Line,
-			Column:  s.Column,
-			Targets: targets,
-		})
-	case *ParallelBlock:
+	case *AwaitAllBlock:
 		body := make([]json.RawMessage, 0, len(s.Body))
 		for _, stmt := range s.Body {
 			data, err := marshalStatement(stmt)
@@ -219,14 +231,14 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			}
 			body = append(body, data)
 		}
-		return json.Marshal(parallelBlockJSON{
-			Type:   "parallel",
+		return json.Marshal(awaitAllBlockJSON{
+			Type:   "awaitAll",
 			Line:   s.Line,
 			Column: s.Column,
 			Body:   body,
 		})
-	case *SelectBlock:
-		cases := make([]selectCaseJSON, 0, len(s.Cases))
+	case *AwaitOneBlock:
+		cases := make([]awaitOneCaseJSON, 0, len(s.Cases))
 		for _, c := range s.Cases {
 			caseBody := make([]json.RawMessage, 0, len(c.Body))
 			for _, stmt := range c.Body {
@@ -236,26 +248,23 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				}
 				caseBody = append(caseBody, data)
 			}
-			cases = append(cases, selectCaseJSON{
-				Kind:              c.CaseKind(),
-				WorkflowMode:      workflowCallModeString(c.WorkflowMode),
-				WorkflowNamespace: c.WorkflowNamespace,
-				WorkflowName:      c.WorkflowName,
-				WorkflowArgs:      c.WorkflowArgs,
-				WorkflowResult:    c.WorkflowResult,
-				ActivityName:      c.ActivityName,
-				ActivityArgs:      c.ActivityArgs,
-				ActivityResult:    c.ActivityResult,
-				SignalName:        c.SignalName,
-				SignalArgs:        c.SignalArgs,
-				UpdateName:        c.UpdateName,
-				UpdateArgs:        c.UpdateArgs,
-				TimerDuration:     c.TimerDuration,
-				Body:              caseBody,
+			var awaitAllData json.RawMessage
+			if c.AwaitAll != nil {
+				data, err := marshalStatement(c.AwaitAll)
+				if err != nil {
+					return nil, err
+				}
+				awaitAllData = data
+			}
+			cases = append(cases, awaitOneCaseJSON{
+				Kind:          c.CaseKind(),
+				TimerDuration: c.TimerDuration,
+				AwaitAll:      awaitAllData,
+				Body:          caseBody,
 			})
 		}
-		return json.Marshal(selectBlockJSON{
-			Type:   "select",
+		return json.Marshal(awaitOneBlockJSON{
+			Type:   "awaitOne",
 			Line:   s.Line,
 			Column: s.Column,
 			Cases:  cases,
@@ -369,6 +378,14 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Column: s.Column,
 			Text:   s.Text,
 		})
+	case *HintStmt:
+		return json.Marshal(hintStmtJSON{
+			Type:   "hint",
+			Line:   s.Line,
+			Column: s.Column,
+			Kind:   s.Kind,
+			Name:   s.Name,
+		})
 	case *Comment:
 		return json.Marshal(commentJSON{
 			Type:   "comment",
@@ -437,49 +454,25 @@ type timerStmtJSON struct {
 	Duration string `json:"duration"`
 }
 
-type awaitTargetJSON struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-	Args string `json:"args,omitempty"`
-}
-
-type awaitStmtJSON struct {
-	Type    string            `json:"type"`
-	Line    int               `json:"line"`
-	Column  int               `json:"column"`
-	Targets []awaitTargetJSON `json:"targets"`
-}
-
-type parallelBlockJSON struct {
+type awaitAllBlockJSON struct {
 	Type   string            `json:"type"`
 	Line   int               `json:"line"`
 	Column int               `json:"column"`
 	Body   []json.RawMessage `json:"body"`
 }
 
-type selectCaseJSON struct {
-	Kind              string            `json:"kind"`
-	WorkflowMode      string            `json:"workflowMode,omitempty"`
-	WorkflowNamespace string            `json:"workflowNamespace,omitempty"`
-	WorkflowName      string            `json:"workflowName,omitempty"`
-	WorkflowArgs      string            `json:"workflowArgs,omitempty"`
-	WorkflowResult    string            `json:"workflowResult,omitempty"`
-	ActivityName      string            `json:"activityName,omitempty"`
-	ActivityArgs      string            `json:"activityArgs,omitempty"`
-	ActivityResult    string            `json:"activityResult,omitempty"`
-	SignalName        string            `json:"signalName,omitempty"`
-	SignalArgs        string            `json:"signalArgs,omitempty"`
-	UpdateName        string            `json:"updateName,omitempty"`
-	UpdateArgs        string            `json:"updateArgs,omitempty"`
-	TimerDuration     string            `json:"timerDuration,omitempty"`
-	Body              []json.RawMessage `json:"body"`
+type awaitOneCaseJSON struct {
+	Kind          string          `json:"kind"`
+	TimerDuration string          `json:"timerDuration,omitempty"`
+	AwaitAll      json.RawMessage `json:"awaitAll,omitempty"`
+	Body          []json.RawMessage `json:"body"`
 }
 
-type selectBlockJSON struct {
-	Type   string           `json:"type"`
-	Line   int              `json:"line"`
-	Column int              `json:"column"`
-	Cases  []selectCaseJSON `json:"cases"`
+type awaitOneBlockJSON struct {
+	Type   string             `json:"type"`
+	Line   int                `json:"line"`
+	Column int                `json:"column"`
+	Cases  []awaitOneCaseJSON `json:"cases"`
 }
 
 type switchCaseJSON struct {
@@ -540,6 +533,14 @@ type continueStmtJSON struct {
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
+}
+
+type hintStmtJSON struct {
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
 }
 
 type rawStmtJSON struct {

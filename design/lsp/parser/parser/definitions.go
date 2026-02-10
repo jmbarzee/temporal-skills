@@ -54,8 +54,8 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 	var updates []*ast.UpdateDecl
 
 	for {
-		// Skip blank lines between declarations.
-		p.skipNewlines()
+		// Skip blank lines and comments between declarations.
+		p.skipBlankLinesAndComments()
 
 		switch p.current.Type {
 		case token.SIGNAL:
@@ -170,7 +170,7 @@ func parseActivityDef(p *Parser) (ast.Definition, error) {
 	}, nil
 }
 
-// parseSignalDecl parses: SIGNAL IDENT ARGS NEWLINE
+// parseSignalDecl parses: SIGNAL IDENT [ ARGS ] COLON NEWLINE INDENT body DEDENT
 func parseSignalDecl(p *Parser) (*ast.SignalDecl, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume SIGNAL
@@ -186,18 +186,36 @@ func parseSignalDecl(p *Parser) (*ast.SignalDecl, error) {
 		p.advance()
 	}
 
-	if p.current.Type == token.NEWLINE {
-		p.advance()
+	if _, err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.INDENT); err != nil {
+		return nil, err
+	}
+
+	prevWorkflow := p.inWorkflow
+	prevActivity := p.inActivity
+	p.inWorkflow = true
+	p.inActivity = false
+	body, err := p.parseBody()
+	p.inWorkflow = prevWorkflow
+	p.inActivity = prevActivity
+	if err != nil {
+		return nil, err
 	}
 
 	return &ast.SignalDecl{
 		Pos:    pos,
 		Name:   name.Literal,
 		Params: params,
+		Body:   body,
 	}, nil
 }
 
-// parseQueryDecl parses: QUERY IDENT ARGS [ ARROW ARGS ] NEWLINE
+// parseQueryDecl parses: QUERY IDENT ARGS [ ARROW ARGS ] COLON NEWLINE INDENT body DEDENT
 func parseQueryDecl(p *Parser) (*ast.QueryDecl, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume QUERY
@@ -222,8 +240,26 @@ func parseQueryDecl(p *Parser) (*ast.QueryDecl, error) {
 		returnType = rt.Literal
 	}
 
-	if p.current.Type == token.NEWLINE {
-		p.advance()
+	if _, err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.INDENT); err != nil {
+		return nil, err
+	}
+
+	// Query bodies are restricted like activity bodies (no temporal primitives).
+	prevWorkflow := p.inWorkflow
+	prevActivity := p.inActivity
+	p.inWorkflow = false
+	p.inActivity = true
+	body, err := p.parseBody()
+	p.inWorkflow = prevWorkflow
+	p.inActivity = prevActivity
+	if err != nil {
+		return nil, err
 	}
 
 	return &ast.QueryDecl{
@@ -231,10 +267,11 @@ func parseQueryDecl(p *Parser) (*ast.QueryDecl, error) {
 		Name:       name.Literal,
 		Params:     params.Literal,
 		ReturnType: returnType,
+		Body:       body,
 	}, nil
 }
 
-// parseUpdateDecl parses: UPDATE IDENT ARGS [ ARROW ARGS ] NEWLINE
+// parseUpdateDecl parses: UPDATE IDENT ARGS [ ARROW ARGS ] COLON NEWLINE INDENT body DEDENT
 func parseUpdateDecl(p *Parser) (*ast.UpdateDecl, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume UPDATE
@@ -259,8 +296,25 @@ func parseUpdateDecl(p *Parser) (*ast.UpdateDecl, error) {
 		returnType = rt.Literal
 	}
 
-	if p.current.Type == token.NEWLINE {
-		p.advance()
+	if _, err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.INDENT); err != nil {
+		return nil, err
+	}
+
+	prevWorkflow := p.inWorkflow
+	prevActivity := p.inActivity
+	p.inWorkflow = true
+	p.inActivity = false
+	body, err := p.parseBody()
+	p.inWorkflow = prevWorkflow
+	p.inActivity = prevActivity
+	if err != nil {
+		return nil, err
 	}
 
 	return &ast.UpdateDecl{
@@ -268,5 +322,6 @@ func parseUpdateDecl(p *Parser) (*ast.UpdateDecl, error) {
 		Name:       name.Literal,
 		Params:     params.Literal,
 		ReturnType: returnType,
+		Body:       body,
 	}, nil
 }

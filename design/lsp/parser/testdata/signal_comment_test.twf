@@ -1,0 +1,14 @@
+workflow TestSignals(input: Input) -> (Result):
+    # ===== SIGNALS =====
+
+    signal Pause():
+        # Signal with no parameters
+        paused = true
+        return
+
+    signal Resume(reason: string):
+        # Signal with parameters
+        paused = false
+
+    paused = false
+    return Result{success: true}

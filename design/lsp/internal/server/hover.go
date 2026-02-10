@@ -60,6 +60,22 @@ func findNodeAtLine(file *ast.File, line int) ast.Node {
 					return u
 				}
 			}
+			// Search handler bodies.
+			for _, s := range d.Signals {
+				if n := findNodeInStmts(s.Body, line); n != nil {
+					return n
+				}
+			}
+			for _, q := range d.Queries {
+				if n := findNodeInStmts(q.Body, line); n != nil {
+					return n
+				}
+			}
+			for _, u := range d.Updates {
+				if n := findNodeInStmts(u.Body, line); n != nil {
+					return n
+				}
+			}
 			if n := findNodeInStmts(d.Body, line); n != nil {
 				return n
 			}
@@ -100,23 +116,20 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 		if s.Line == line {
 			return s
 		}
-	case *ast.AwaitStmt:
-		if s.Line == line {
-			return s
-		}
-		for _, t := range s.Targets {
-			if t.Line == line {
-				return t
-			}
-		}
-	case *ast.ParallelBlock:
+	case *ast.AwaitAllBlock:
 		if n := findNodeInStmts(s.Body, line); n != nil {
 			return n
 		}
-	case *ast.SelectBlock:
+	case *ast.AwaitOneBlock:
 		for _, c := range s.Cases {
 			if c.Line == line {
 				return c
+			}
+			// Check nested await all block.
+			if c.AwaitAll != nil {
+				if n := findNodeInStmts(c.AwaitAll.Body, line); n != nil {
+					return n
+				}
 			}
 			if n := findNodeInStmts(c.Body, line); n != nil {
 				return n
@@ -143,6 +156,10 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 			return n
 		}
 	case *ast.ReturnStmt:
+		if s.Line == line {
+			return s
+		}
+	case *ast.HintStmt:
 		if s.Line == line {
 			return s
 		}
@@ -191,13 +208,13 @@ func signatureFor(node ast.Node) string {
 			prefix += " (nexus " + n.Namespace + ")"
 		}
 		return fmt.Sprintf("%s %s(%s)", prefix, n.Name, n.Args)
-	case *ast.AwaitTarget:
+	case *ast.TimerStmt:
+		return fmt.Sprintf("timer %s", n.Duration)
+	case *ast.HintStmt:
 		if n.Resolved != nil {
 			return signatureFor(n.Resolved)
 		}
-		return fmt.Sprintf("%s %s", n.Kind, n.Name)
-	case *ast.TimerStmt:
-		return fmt.Sprintf("timer %s", n.Duration)
+		return fmt.Sprintf("hint %s %s", n.Kind, n.Name)
 	default:
 		return ""
 	}

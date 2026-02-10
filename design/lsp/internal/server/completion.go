@@ -106,6 +106,7 @@ func workflowCompletions(file *ast.File, enclosing *ast.WorkflowDef) []protocol.
 		keywordItem("signal", "Declare a signal handler"),
 		keywordItem("query", "Declare a query handler"),
 		keywordItem("update", "Declare an update handler"),
+		keywordItem("hint", "Hint that a signal or update may arrive here"),
 	}
 
 	// Add defined activity/workflow names as completion targets.

@@ -23,9 +23,12 @@ func NewHandler(name, version string) *protocol.Handler {
 		TextDocumentDefinition:     definitionHandler(store),
 		TextDocumentDocumentSymbol: documentSymbolHandler(store),
 		TextDocumentCompletion:     completionHandler(store),
-		TextDocumentReferences:     referencesHandler(store),
-		TextDocumentRename:         renameHandler(store),
-		TextDocumentPrepareRename:  prepareRenameHandler(store),
+		TextDocumentReferences:          referencesHandler(store),
+		TextDocumentRename:              renameHandler(store),
+		TextDocumentPrepareRename:       prepareRenameHandler(store),
+		TextDocumentSemanticTokensFull:  semanticTokensHandler(store),
+		TextDocumentFoldingRange:        foldingRangeHandler(store),
+		TextDocumentSignatureHelp:       signatureHelpHandler(store),
 	}
 
 	return handler
@@ -45,6 +48,17 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 				CompletionProvider:     &protocol.CompletionOptions{},
 				ReferencesProvider: &protocol.ReferenceOptions{},
 				RenameProvider:     &protocol.RenameOptions{PrepareProvider: boolPtr(true)},
+				FoldingRangeProvider: &protocol.FoldingRangeOptions{},
+				SignatureHelpProvider: &protocol.SignatureHelpOptions{
+					TriggerCharacters: []string{"("},
+				},
+				SemanticTokensProvider: &protocol.SemanticTokensOptions{
+					Legend: protocol.SemanticTokensLegend{
+						TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter"},
+						TokenModifiers: []string{"declaration"},
+					},
+					Full: true,
+				},
 			},
 			ServerInfo: &protocol.InitializeResultServerInfo{
 				Name:    name,

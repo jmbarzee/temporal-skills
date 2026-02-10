@@ -19,13 +19,16 @@ func mustParse(t *testing.T, input string) *ast.File {
 
 func TestSuccessfulResolution(t *testing.T) {
 	input := `workflow OrderWorkflow(orderId: string) -> (OrderResult):
-    signal PaymentReceived(txId: string)
-    update ChangeAddress(addr: Address) -> (Result)
+    signal PaymentReceived(txId: string):
+        status = "paid"
+    update ChangeAddress(addr: Address) -> (Result):
+        address = addr
+        return Result{ok: true}
 
     activity GetOrder(orderId) -> order
     workflow ShipOrder(order) -> shipResult
-    await signal PaymentReceived
-    await update ChangeAddress
+    hint signal PaymentReceived
+    hint update ChangeAddress
 
 activity GetOrder(orderId: string) -> (Order):
     return db.get(orderId)
@@ -58,14 +61,14 @@ workflow ShipOrder(order: Order) -> (ShipResult):
 		t.Errorf("workflow resolved to %q, expected 'ShipOrder'", wfCall.Resolved.Name)
 	}
 
-	awaitSig := wf.Body[2].(*ast.AwaitStmt)
-	if awaitSig.Targets[0].Resolved == nil {
-		t.Error("await signal not resolved")
+	hintSig := wf.Body[2].(*ast.HintStmt)
+	if hintSig.Resolved == nil {
+		t.Error("hint signal not resolved")
 	}
 
-	awaitUpd := wf.Body[3].(*ast.AwaitStmt)
-	if awaitUpd.Targets[0].Resolved == nil {
-		t.Error("await update not resolved")
+	hintUpd := wf.Body[3].(*ast.HintStmt)
+	if hintUpd.Resolved == nil {
+		t.Error("hint update not resolved")
 	}
 }
 
@@ -99,7 +102,7 @@ func TestUndefinedWorkflow(t *testing.T) {
 
 func TestUndefinedSignal(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    await signal Nonexistent
+    hint signal Nonexistent
 `
 	file := mustParse(t, input)
 	errs := Resolve(file)
@@ -113,7 +116,7 @@ func TestUndefinedSignal(t *testing.T) {
 
 func TestUndefinedUpdate(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    await update Nonexistent
+    hint update Nonexistent
 `
 	file := mustParse(t, input)
 	errs := Resolve(file)
@@ -162,7 +165,7 @@ activity Foo(y: int) -> (Result):
 func TestNestedResolution(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     if (x > 0):
-        parallel:
+        await all:
             activity Bar(x)
             workflow Baz(x) -> y
 
@@ -181,64 +184,11 @@ workflow Baz(x: int) -> (int):
 	}
 }
 
-func TestSelectCaseResolution(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    signal PaymentReceived(txId: string)
+// REMOVED: TestSelectCaseResolution - workflow/activity cases in await one are no longer supported.
+// await one now only supports timer and nested await all cases.
 
-    select:
-        workflow Bar(x) -> result:
-            return result
-        signal PaymentReceived:
-            return x
-        activity Baz(x) -> result:
-            return result
-
-workflow Bar(x: int) -> (Result):
-    return x
-
-activity Baz(x: int) -> (Result):
-    return x
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) > 0 {
-		for _, e := range errs {
-			t.Errorf("unexpected error: %v", e)
-		}
-	}
-}
-
-func TestSelectCaseUndefinedWorkflow(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    select:
-        workflow Missing(x) -> result:
-            return result
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Msg, "undefined workflow: Missing") {
-		t.Errorf("unexpected error: %q", errs[0].Msg)
-	}
-}
-
-func TestSelectCaseUndefinedSignal(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    select:
-        signal Missing:
-            return x
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Msg, "undefined signal: Missing") {
-		t.Errorf("unexpected error: %q", errs[0].Msg)
-	}
-}
+// REMOVED: TestSelectCaseUndefinedWorkflow - workflow cases in await one are no longer supported.
+// await one now only supports timer and nested await all cases.
 
 func TestResolutionInsideForLoop(t *testing.T) {
 	input := `workflow Foo(items: []string) -> (Result):
@@ -290,5 +240,95 @@ func TestMultipleUndefinedErrors(t *testing.T) {
 	errs := Resolve(file)
 	if len(errs) != 3 {
 		t.Fatalf("expected 3 errors, got %d", len(errs))
+	}
+}
+
+func TestHintResolution(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    signal Cancel(reason: string):
+        return Result{cancelled: true}
+    update ChangeAddr(addr: Addr) -> (Result):
+        return Result{ok: true}
+
+    hint signal Cancel
+    hint update ChangeAddr
+    return Result{}
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if len(errs) > 0 {
+		for _, e := range errs {
+			t.Errorf("unexpected error: %v", e)
+		}
+		t.FailNow()
+	}
+
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	hint1 := wf.Body[0].(*ast.HintStmt)
+	if hint1.Resolved == nil {
+		t.Error("hint signal not resolved")
+	}
+
+	hint2 := wf.Body[1].(*ast.HintStmt)
+	if hint2.Resolved == nil {
+		t.Error("hint update not resolved")
+	}
+}
+
+func TestHintUndefinedSignal(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    hint signal Missing
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(errs))
+	}
+	if !strings.Contains(errs[0].Msg, "undefined signal: Missing") {
+		t.Errorf("unexpected error: %q", errs[0].Msg)
+	}
+}
+
+func TestHandlerBodyResolution(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    signal Cancel(reason: string):
+        activity LogCancel(reason)
+    update ChangeAddr(addr: Addr) -> (Result):
+        activity ValidateAddr(addr) -> valid
+        return Result{ok: valid}
+
+    return Result{}
+
+activity LogCancel(reason: string) -> (int):
+    return 0
+
+activity ValidateAddr(addr: string) -> (bool):
+    return true
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if len(errs) > 0 {
+		for _, e := range errs {
+			t.Errorf("unexpected error: %v", e)
+		}
+		t.FailNow()
+	}
+
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+
+	// Check signal body resolution
+	sigBody := wf.Signals[0].Body[0].(*ast.ActivityCall)
+	if sigBody.Resolved == nil {
+		t.Error("signal body activity call not resolved")
+	} else if sigBody.Resolved.Name != "LogCancel" {
+		t.Errorf("resolved to %q, expected 'LogCancel'", sigBody.Resolved.Name)
+	}
+
+	// Check update body resolution
+	updBody := wf.Updates[0].Body[0].(*ast.ActivityCall)
+	if updBody.Resolved == nil {
+		t.Error("update body activity call not resolved")
+	} else if updBody.Resolved.Name != "ValidateAddr" {
+		t.Errorf("resolved to %q, expected 'ValidateAddr'", updBody.Resolved.Name)
 	}
 }

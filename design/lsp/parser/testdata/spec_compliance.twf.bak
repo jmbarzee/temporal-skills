@@ -1,0 +1,224 @@
+# TWF Language Spec Compliance Test
+# This file exercises all documented spec features plus edge cases
+
+workflow SpecCompliance(input: Input) -> (Result):
+    signal Pause():
+        paused = true
+        return
+
+    signal Resume(reason: string):
+        paused = false
+        log("Resumed: " + reason)
+
+    query GetStatus() -> (Status):
+        return Status{paused: paused, progress: progress}
+
+    query IsComplete() -> (bool):
+        return progress >= 100
+
+    update SetProgress(value: int) -> (int):
+        progress = value
+        return progress
+
+    # ===== VARIABLE DECLARATIONS =====
+    paused = false
+    progress = 0
+    result = None
+
+    # ===== PATCHED() VERSION GATING =====
+    # Test: patched() built-in (not in spec but in examples)
+    # Note: must assign to variable, can't use directly in if
+    hasFeatureV2 = patched("feature-v2")
+    if (hasFeatureV2):
+        config = ConfigV2{enhanced: true}
+    else:
+        config = ConfigV1{basic: true}
+
+    # ===== ACTIVITY CALLS =====
+    # Test: Basic activity call with options (must use arrow syntax, not assignment)
+    activity ValidateInput(input) -> validated
+        options(startToCloseTimeout: 30s)
+
+    activity FetchData(input.id) -> data
+        options(startToCloseTimeout: 1m, retryPolicy: {maxAttempts: 3}, heartbeatTimeout: 10s)
+
+    # Test: Positional constructor fields (not in spec grammar)
+    result = Result{data, validated}
+
+    # Test: Named constructor fields (in spec)
+    result2 = Result{data: data, validated: validated}
+
+    # ===== CONTROL FLOW =====
+    # Test: If-elif-else
+    if validated.status == "approved":
+        status = "processing"
+    elif validated.status == "pending":
+        status = "waiting"
+    else:
+        status = "rejected"
+        return result
+
+    # Test: While loop
+    attempts = 0
+    while attempts < 3:
+        success = activity ProcessData(data)
+            timeout: 1m
+        if success:
+            break
+        attempts = attempts + 1
+
+    # Test: For loop
+    for item in data.items:
+        processed = activity ProcessItem(item)
+            timeout: 30s
+        result.items.append(processed)
+
+    # ===== CHILD WORKFLOWS =====
+    # Test: Await child workflow
+    subResult = await SubWorkflow(data)
+
+    # Test: Detached child workflow
+    detached SubWorkflow(data)
+
+    # ===== TIMERS =====
+    # Test: Sleep with duration
+    sleep(5m)
+
+    # Test: Sleep until timestamp
+    sleepUntil(input.scheduledTime)
+
+    # ===== SAGA PATTERN =====
+    # Test: Compensate block
+    compensate:
+        booking = activity BookResource(input.resource)
+            timeout: 1m
+    onError:
+        activity ReleaseResource(booking.id)
+            timeout: 30s
+
+    # ===== CONTINUE-AS-NEW =====
+    # Test: Continue as new with condition
+    if progress < 100:
+        continueAsNew(input: Input{id: input.id, iteration: input.iteration + 1})
+
+    # ===== RETURN =====
+    return result
+
+# ===== ACTIVITY DEFINITIONS =====
+# Test: Raw statements in activity bodies (not documented in spec)
+
+activity ValidateInput(input: Input) -> (Validation):
+    # Activity with raw/arbitrary code statements.
+    options(taskQueue: "validation")
+
+    # Raw statements - arbitrary host language code
+    validate(input)
+    if not input.isValid():
+        raise ValidationError("Invalid input")
+
+    heartbeat()
+    return Validation{status: "approved", timestamp: now()}
+
+activity FetchData(id: string) -> (Data):
+    # Activity using built-in functions (not in spec).
+    options(taskQueue: "data-fetch")
+
+    # Built-in functions not documented
+    token = get_activity_task_token()
+    details = get_heartbeat_details()
+
+    data = db.get(id)
+    heartbeat()
+
+    return data
+
+activity ProcessData(data: Data) -> (bool):
+    # Activity with manual completion.
+    options(taskQueue: "processing")
+
+    # do_not_complete built-in (not in spec)
+    do_not_complete()
+
+    async_process(data, callback_with_token)
+    return true
+
+activity LongRunningTask(input: Input) -> (Result):
+    # Activity with heartbeating.
+    options(
+        taskQueue: "long-running",
+        heartbeatTimeout: 10s
+    )
+
+    for i in range(100):
+        process_chunk(i)
+        heartbeat()
+
+    return Result{success: true}
+
+# ===== EDGE CASES =====
+
+workflow EdgeCases(input: Input) -> (void):
+    # Test edge cases and ambiguities.
+
+    # Test: Void return type (not documented as special)
+    # Convention but not in spec
+
+    # Test: Nested parentheses in arguments
+    # Parser comment says "no nested paren support" but do they work?
+    result = activity TestNested(
+        config: Config{
+            nested: Nested{
+                value: "test"
+            }
+        }
+    )
+        timeout: 1m
+
+    # Test: Complex expression in parameters (opaque to parser)
+    computed = activity Compute(
+        value: (x + y) * 2,
+        flag: enabled && validated,
+        nested: obj.field.subfield
+    )
+        timeout: 30s
+
+    # Test: Options block with complex nested structure
+    result2 = activity ComplexOptions(input)
+        options(
+            taskQueue: "default",
+            retry: RetryPolicy{
+                maxAttempts: 3,
+                backoff: ExponentialBackoff{
+                    initial: 1s,
+                    max: 1m
+                }
+            }
+        )
+
+workflow MinimalWorkflow():
+    # Minimal valid workflow - no parameters, no return.
+    activity DoSomething()
+        timeout: 1m
+
+workflow NoReturnWorkflow(input: Input):
+    # Workflow with params but no return type.
+    result = activity Process(input)
+        timeout: 1m
+
+activity MinimalActivity() -> (Result):
+    # Minimal activity - no options.
+    return Result{success: true}
+
+# ===== COMMENT TESTING =====
+# Test: Comments are tokenized but not in AST?
+
+workflow CommentTest():
+    # Single line comment
+    x = 1
+
+    # Another comment
+    # Multiple consecutive comments
+    y = 2
+
+    activity Test()  # Inline comment?
+        timeout: 1m

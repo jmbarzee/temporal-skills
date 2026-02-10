@@ -1,7 +1,14 @@
 workflow OrderFulfillment(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal)
-    query GetStatus() -> (OrderStatus)
-    update ChangeAddress(addr: Address) -> (UpdateResult)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        paymentStatus = "received"
+        paymentAmount = amount
+
+    query GetStatus() -> (OrderStatus):
+        return OrderStatus{phase: currentPhase, paid: paymentStatus}
+
+    update ChangeAddress(addr: Address) -> (UpdateResult):
+        shippingAddress = addr
+        return UpdateResult{ok: true}
 
     activity GetOrder(orderId) -> order
 
@@ -10,11 +17,11 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
     else:
         activity StandardProcessing(order)
 
-    parallel:
+    await all:
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
 
-    await signal PaymentReceived
+    hint signal PaymentReceived
     workflow ShipOrder(order) -> shipResult
     return OrderResult{status: "completed"}
 

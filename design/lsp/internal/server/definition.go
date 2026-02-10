@@ -43,7 +43,7 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Resolved != nil {
 			return n.Resolved
 		}
-	case *ast.AwaitTarget:
+	case *ast.HintStmt:
 		if n.Resolved != nil {
 			return n.Resolved
 		}

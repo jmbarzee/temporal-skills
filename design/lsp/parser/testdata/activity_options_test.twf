@@ -1,0 +1,8 @@
+workflow TestActivityOptions(input: Input) -> (Result):
+    activity Activity1(input) -> result1
+        options(startToCloseTimeout: 30s)
+
+    activity Activity2(input) -> result2
+        options(startToCloseTimeout: 1m)
+
+    return Result{success: true}

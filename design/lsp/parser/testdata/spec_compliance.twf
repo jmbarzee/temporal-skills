@@ -1,0 +1,241 @@
+# TWF Language Spec Compliance Test
+# This file exercises all documented spec features
+
+workflow SpecCompliance(input: Input) -> (Result):
+    signal Pause():
+        paused = true
+        return
+
+    signal Resume(reason: string):
+        paused = false
+        log("Resumed: " + reason)
+
+    query GetStatus() -> (Status):
+        return Status{paused: paused, progress: progress}
+
+    query IsComplete() -> (bool):
+        return progress >= 100
+
+    update SetProgress(value: int) -> (int):
+        progress = value
+        return progress
+
+    # ===== VARIABLE DECLARATIONS =====
+    paused = false
+    progress = 0
+    result = None
+
+    # ===== ACTIVITY CALLS =====
+    # Test: Activity call with options block
+    activity ValidateInput(input) -> validated
+        options(startToCloseTimeout: 30s)
+
+    activity FetchData(input.id) -> data
+        options(startToCloseTimeout: 1m, retryPolicy: {maxAttempts: 3})
+
+    # Test: Positional constructor fields
+    result = Result{data, validated}
+
+    # Test: Named constructor fields
+    result2 = Result{data: data, validated: validated}
+
+    # ===== CONTROL FLOW =====
+    # Test: If-else with parenthesized conditions
+    if (validated.status == "approved"):
+        status = "processing"
+    else:
+        if (validated.status == "pending"):
+            status = "waiting"
+        else:
+            status = "rejected"
+            return result
+
+    # Test: For loop (iteration)
+    for (item in data.items):
+        activity ProcessItem(item) -> processed
+            options(startToCloseTimeout: 30s)
+        result.items.append(processed)
+
+    # Test: For loop (conditional)
+    attempts = 0
+    for (attempts < 3):
+        activity ProcessData(data) -> success
+            options(startToCloseTimeout: 1m)
+        if (success):
+            break
+        attempts = attempts + 1
+
+    # Test: For loop (infinite)
+    for:
+        if (shouldStop):
+            break
+
+    # ===== PARALLEL EXECUTION =====
+    hint signal Pause
+    hint update SetProgress
+
+    await all:
+        activity Task1(input) -> result1
+        activity Task2(input) -> result2
+
+    # ===== CONDITIONAL WAIT =====
+    await one:
+        timer 5m:
+            status = "timeout"
+        timer 10m:
+            status = "extended_timeout"
+
+    # ===== CHILD WORKFLOWS =====
+    # Test: Child workflow call
+    workflow SubWorkflow(data) -> subResult
+
+    # Test: Spawn workflow
+    spawn workflow BackgroundTask(data) -> bgResult
+
+    # Test: Detach workflow
+    detach workflow FireAndForget(data)
+
+    # Test: Nexus workflow
+    nexus "external-service" workflow ExternalTask(data) -> extResult
+
+    # ===== TIMERS =====
+    timer 5m
+
+    # ===== SWITCH STATEMENT =====
+    switch (status):
+        case "approved":
+            activity Approve(input)
+        case "rejected":
+            activity Reject(input)
+        else:
+            activity HandleDefault(input)
+
+    # ===== CONTINUE-AS-NEW =====
+    if (progress < 100):
+        continue_as_new(input.id, input.iteration + 1)
+
+    # ===== RETURN =====
+    return result
+
+# ===== ACTIVITY DEFINITIONS =====
+
+activity ValidateInput(input: Input) -> (Validation):
+    # Raw statements - arbitrary host language code
+    isValid = validate(input)
+    if (!isValid):
+        raise ValidationError("Invalid input")
+
+    heartbeat()
+    return Validation{status: "approved", timestamp: now()}
+
+activity FetchData(id: string) -> (Data):
+    data = db.get(id)
+    heartbeat()
+    return data
+
+activity ProcessData(data: Data) -> (bool):
+    process(data)
+    return true
+
+activity ProcessItem(item: Item) -> (ProcessedItem):
+    return process(item)
+
+activity Task1(input: Input) -> (Result):
+    return process1(input)
+
+activity Task2(input: Input) -> (Result):
+    return process2(input)
+
+# ===== EDGE CASES =====
+
+workflow EdgeCases(input: Input):
+    # Test: Nested parentheses in arguments
+    activity TestNested(config: Config{nested: Nested{value: "test"}}) -> result
+        options(startToCloseTimeout: 1m)
+
+    # Test: Complex expression in parameters
+    computedValue = (x + y) * 2
+    activity Compute(value: computedValue, flag: enabled && validated) -> computed
+        options(startToCloseTimeout: 30s)
+
+    # Test: Options block with complex nested structure
+    activity ComplexOptions(input) -> result2
+        options(taskQueue: "default", retry: RetryPolicy{maxAttempts: 3})
+
+workflow MinimalWorkflow():
+    # Minimal valid workflow
+    activity DoSomething()
+
+workflow NoReturnWorkflow(input: Input):
+    # Workflow with params but no return type
+    activity Process(input) -> result
+
+activity MinimalActivity() -> (Result):
+    return Result{success: true}
+
+activity DoSomething():
+    doSomething()
+
+activity Process(input: Input) -> (Result):
+    return process(input)
+
+# ===== COMMENT TESTING =====
+
+workflow CommentTest():
+    # Single line comment
+    x = 1
+
+    # Another comment
+    # Multiple consecutive comments
+    y = 2
+
+    activity Test()
+
+# ===== NESTED AWAIT ALL IN AWAIT ONE =====
+
+workflow NestedAwaitExample():
+    await one:
+        await all:
+            activity LongTask1() -> r1
+            activity LongTask2() -> r2
+        timer 30m:
+            return timeout
+
+activity LongTask1() -> (Result):
+    return Result{success: true}
+
+activity LongTask2() -> (Result):
+    return Result{success: true}
+
+workflow SubWorkflow(data: Data) -> (Result):
+    return Result{data: data}
+
+workflow BackgroundTask(data: Data) -> (Result):
+    return Result{data: data}
+
+workflow FireAndForget(data: Data):
+    activity LogEvent(data)
+
+workflow ExternalTask(data: Data) -> (Result):
+    return Result{data: data}
+
+activity LogEvent(data: Data):
+    log(data)
+
+activity Approve(input: Input):
+    approve(input)
+
+activity Reject(input: Input):
+    reject(input)
+
+activity HandleDefault(input: Input):
+    handle(input)
+
+activity TestNested(config: Config) -> (Result):
+    return Result{config: config}
+
+activity Compute(value: int, flag: bool) -> (Result):
+    return Result{value: value, flag: flag}
+
+activity ComplexOptions(input: Input) -> (Result):
+    return Result{input: input}

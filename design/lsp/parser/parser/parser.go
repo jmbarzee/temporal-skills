@@ -60,6 +60,7 @@ func init() {
 		token.SWITCH:          parseSwitchBlock,
 		token.IF:              parseIfStmt,
 		token.FOR:             parseForStmt,
+		token.CLOSE:           parseCloseStmt,
 		token.RETURN:          parseReturnStmt,
 		token.CONTINUE_AS_NEW: parseContinueAsNewStmt,
 		token.BREAK:           parseBreakStmt,
@@ -90,7 +91,9 @@ var temporalKeywords = map[token.TokenType]bool{
 	token.AWAIT:           true,
 	token.ALL:             true,
 	token.ONE:             true,
+	token.WATCH:           true,
 	token.CONTINUE_AS_NEW: true,
+	token.CLOSE:           true,
 	token.HINT:            true,
 }
 

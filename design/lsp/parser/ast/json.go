@@ -258,6 +258,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			}
 			cases = append(cases, awaitOneCaseJSON{
 				Kind:          c.CaseKind(),
+				WatchVariable: c.WatchVariable,
 				TimerDuration: c.TimerDuration,
 				AwaitAll:      awaitAllData,
 				Body:          caseBody,
@@ -350,6 +351,14 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Type:   "return",
 			Line:   s.Line,
 			Column: s.Column,
+			Value:  s.Value,
+		})
+	case *CloseStmt:
+		return json.Marshal(closeStmtJSON{
+			Type:   "close",
+			Line:   s.Line,
+			Column: s.Column,
+			Reason: s.Reason,
 			Value:  s.Value,
 		})
 	case *ContinueAsNewStmt:
@@ -462,9 +471,10 @@ type awaitAllBlockJSON struct {
 }
 
 type awaitOneCaseJSON struct {
-	Kind          string          `json:"kind"`
-	TimerDuration string          `json:"timerDuration,omitempty"`
-	AwaitAll      json.RawMessage `json:"awaitAll,omitempty"`
+	Kind          string            `json:"kind"`
+	WatchVariable string            `json:"watchVariable,omitempty"`
+	TimerDuration string            `json:"timerDuration,omitempty"`
+	AwaitAll      json.RawMessage   `json:"awaitAll,omitempty"`
 	Body          []json.RawMessage `json:"body"`
 }
 
@@ -513,6 +523,14 @@ type returnStmtJSON struct {
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
+	Value  string `json:"value,omitempty"`
+}
+
+type closeStmtJSON struct {
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Reason string `json:"reason,omitempty"`
 	Value  string `json:"value,omitempty"`
 }
 

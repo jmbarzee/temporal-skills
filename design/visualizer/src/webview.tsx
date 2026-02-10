@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { WorkflowCanvas } from './components/WorkflowCanvas'
+import { RefocusContext } from './components/blocks/useRefocus'
 import type { TWFFile } from './types/ast'
 import './styles/index.css'
 
@@ -37,6 +38,11 @@ function WebviewApp() {
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
+  // Request focus return to the editor after user interaction
+  const requestRefocus = React.useCallback(() => {
+    vscode.postMessage({ type: 'refocus' })
+  }, [])
+
   if (error) {
     return (
       <div className="error-container">
@@ -54,7 +60,11 @@ function WebviewApp() {
     )
   }
 
-  return <WorkflowCanvas ast={ast} />
+  return (
+    <RefocusContext.Provider value={requestRefocus}>
+      <WorkflowCanvas ast={ast} />
+    </RefocusContext.Provider>
+  )
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

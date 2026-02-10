@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import {
@@ -11,10 +12,21 @@ import {
 const execFileAsync = promisify(execFile);
 
 let client: LanguageClient | undefined;
+// Track the last active text editor for returning focus after webview clicks
+let lastActiveTextEditor: vscode.TextEditor | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   // Start LSP client
   startLanguageClient(context);
+
+  // Track the last active text editor (before webview takes focus)
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor) {
+        lastActiveTextEditor = editor;
+      }
+    })
+  );
 
   // Register visualize file command
   const visualizeCommand = vscode.commands.registerCommand(
@@ -22,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
     async (uri?: vscode.Uri) => {
       // If called from explorer context menu, use the URI
       if (uri) {
-        WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, [uri.fsPath]);
+        await WorkflowVisualizerPanel.createOrShowForFile(context.extensionUri, uri.fsPath);
         return;
       }
       
@@ -32,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Please open a .twf file to visualize");
         return;
       }
-      WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, [editor.document.uri.fsPath]);
+      await WorkflowVisualizerPanel.createOrShowForFile(context.extensionUri, editor.document.uri.fsPath);
     }
   );
 
@@ -71,7 +83,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
       
       const files = uris.map((u) => u.fsPath);
-      WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, files);
+      // No focused file - show all workflows
+      await WorkflowVisualizerPanel.createOrShowForFolder(context.extensionUri, folderPath, files, undefined);
     }
   );
 
@@ -83,6 +96,15 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc.languageId === "twf") {
         WorkflowVisualizerPanel.refreshIfVisible();
+      }
+    })
+  );
+
+  // Watch for active editor changes to update focused file
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && editor.document.languageId === "twf") {
+        WorkflowVisualizerPanel.updateFocusedFile(editor.document.uri.fsPath);
       }
     })
   );
@@ -142,25 +164,58 @@ class WorkflowVisualizerPanel {
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
+  private _folderPath: string;
   private _files: string[];
+  private _focusedFile: string | undefined;
   private _disposables: vscode.Disposable[] = [];
 
-  public static createOrShowForFiles(extensionUri: vscode.Uri, files: string[]) {
+  /**
+   * Create or show the visualizer for a single file.
+   * This will parse all .twf files in the same folder for context,
+   * but only show workflows from the focused file at top level.
+   */
+  public static async createOrShowForFile(extensionUri: vscode.Uri, filePath: string) {
+    const folderPath = path.dirname(filePath);
+    
+    // Find all .twf files in the folder for context
+    const pattern = new vscode.RelativePattern(folderPath, "*.twf");
+    const uris = await vscode.workspace.findFiles(pattern);
+    const files = uris.map((u) => u.fsPath);
+    
+    // Ensure the focused file is included
+    if (!files.includes(filePath)) {
+      files.push(filePath);
+    }
+    
+    await WorkflowVisualizerPanel.createOrShowForFolder(extensionUri, folderPath, files, filePath);
+  }
+
+  /**
+   * Create or show the visualizer for a folder with optional focused file.
+   */
+  public static async createOrShowForFolder(
+    extensionUri: vscode.Uri,
+    folderPath: string,
+    files: string[],
+    focusedFile: string | undefined
+  ) {
     const column = vscode.ViewColumn.Beside;
 
-    // If we already have a panel, update it
+    // If we already have a panel, update it (preserveFocus to not steal from editor)
     if (WorkflowVisualizerPanel.currentPanel) {
-      WorkflowVisualizerPanel.currentPanel._panel.reveal(column);
+      WorkflowVisualizerPanel.currentPanel._panel.reveal(column, true);
+      WorkflowVisualizerPanel.currentPanel._folderPath = folderPath;
       WorkflowVisualizerPanel.currentPanel._files = files;
+      WorkflowVisualizerPanel.currentPanel._focusedFile = focusedFile;
       WorkflowVisualizerPanel.currentPanel._update();
       return;
     }
 
-    // Create a new panel
+    // Create a new panel (preserveFocus to not steal from editor)
     const panel = vscode.window.createWebviewPanel(
       WorkflowVisualizerPanel.viewType,
       "TWF Visualizer",
-      column,
+      { viewColumn: column, preserveFocus: true },
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -173,7 +228,9 @@ class WorkflowVisualizerPanel {
     WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
       panel,
       extensionUri,
-      files
+      folderPath,
+      files,
+      focusedFile
     );
   }
 
@@ -183,14 +240,48 @@ class WorkflowVisualizerPanel {
     }
   }
 
+  /**
+   * Update the focused file and refresh the visualization.
+   * Only updates if the new file is in the same folder or a .twf file.
+   */
+  public static async updateFocusedFile(filePath: string) {
+    if (!WorkflowVisualizerPanel.currentPanel) {
+      return;
+    }
+
+    const panel = WorkflowVisualizerPanel.currentPanel;
+    const newFolderPath = path.dirname(filePath);
+
+    // If the file is in a different folder, reload the folder's files
+    if (newFolderPath !== panel._folderPath) {
+      const pattern = new vscode.RelativePattern(newFolderPath, "*.twf");
+      const uris = await vscode.workspace.findFiles(pattern);
+      const files = uris.map((u) => u.fsPath);
+      
+      if (!files.includes(filePath)) {
+        files.push(filePath);
+      }
+      
+      panel._folderPath = newFolderPath;
+      panel._files = files;
+    }
+
+    panel._focusedFile = filePath;
+    panel._update();
+  }
+
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
-    files: string[]
+    folderPath: string,
+    files: string[],
+    focusedFile: string | undefined
   ) {
     this._panel = panel;
     this._extensionUri = extensionUri;
+    this._folderPath = folderPath;
     this._files = files;
+    this._focusedFile = focusedFile;
 
     // Set initial HTML content
     this._panel.webview.html = this._getHtmlForWebview();
@@ -204,6 +295,15 @@ class WorkflowVisualizerPanel {
         switch (message.type) {
           case "ready":
             this._update();
+            break;
+          case "refocus":
+            // Return focus to the last active text editor after webview interaction
+            if (lastActiveTextEditor) {
+              vscode.window.showTextDocument(
+                lastActiveTextEditor.document,
+                { viewColumn: lastActiveTextEditor.viewColumn, preserveFocus: false }
+              );
+            }
             break;
         }
       },
@@ -227,7 +327,7 @@ class WorkflowVisualizerPanel {
 
   private async _update() {
     try {
-      const ast = await this._parseFiles();
+      const ast = await this._parseFilesWithMetadata();
       this._panel.webview.postMessage({ type: "ast", data: ast });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -235,7 +335,10 @@ class WorkflowVisualizerPanel {
     }
   }
 
-  private async _parseFiles(): Promise<unknown> {
+  /**
+   * Parse files and add metadata for source files and focused file.
+   */
+  private async _parseFilesWithMetadata(): Promise<unknown> {
     const config = vscode.workspace.getConfiguration("twf.parser");
     const configPath = config.get<string>("path", "");
     const parserCommand = configPath || "parse";
@@ -244,23 +347,40 @@ class WorkflowVisualizerPanel {
       throw new Error("No .twf files to parse");
     }
 
-    try {
-      const { stdout, stderr } = await execFileAsync(parserCommand, [
-        "--json",
-        ...this._files,
-      ]);
+    // Parse each file individually to track source files
+    const allDefinitions: unknown[] = [];
+    
+    for (const file of this._files) {
+      try {
+        const { stdout, stderr } = await execFileAsync(parserCommand, [
+          "--json",
+          file,
+        ]);
 
-      if (stderr) {
-        console.warn("Parser stderr:", stderr);
-      }
+        if (stderr) {
+          console.warn("Parser stderr:", stderr);
+        }
 
-      return JSON.parse(stdout);
-    } catch (err) {
-      if (err instanceof Error && "stderr" in err) {
-        throw new Error((err as { stderr: string }).stderr || err.message);
+        const parsed = JSON.parse(stdout) as { definitions?: unknown[] };
+        
+        // Add sourceFile to each definition
+        if (parsed.definitions) {
+          for (const def of parsed.definitions) {
+            (def as { sourceFile?: string }).sourceFile = file;
+            allDefinitions.push(def);
+          }
+        }
+      } catch (err) {
+        // Log but continue with other files
+        console.warn(`Failed to parse ${file}:`, err);
       }
-      throw err;
     }
+
+    // Return combined AST with focusedFile metadata
+    return {
+      definitions: allDefinitions,
+      focusedFile: this._focusedFile,
+    };
   }
 
   private _getHtmlForWebview(): string {

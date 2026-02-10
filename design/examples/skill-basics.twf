@@ -1,5 +1,5 @@
 # Source: SKILL.md
-# Patterns: basic structure, control flow, parallel, timer, child workflow
+# Patterns: basic structure, control flow, parallel, watch/timer, child workflow
 
 # --- Process Order: control flow, parallel, iteration ---
 
@@ -21,7 +21,7 @@ workflow ProcessOrder(order: Order) -> (Result):
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
 
-    return Result{inventory, payment}
+    close Result{inventory, payment}
 
 # --- Order Fulfillment: timer, signal, child, nexus ---
 
@@ -38,16 +38,20 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
         return Result{success: true}
 
     activity GetOrder(orderId) -> order
+    paymentStatus = "pending"
+    status = "awaiting_payment"
 
     # Durable timer
     timer 1h
 
-    # Wait for signal with timeout via select
-    hint signal PaymentReceived
+    # Wait for payment signal with timeout
     await one:
-        timer 24h:
+        watch (paymentStatus):
+            hint signal PaymentReceived
+            status = "processing"
+        timer (24h):
             activity CancelOrder(orderId)
-            return OrderResult{status: "cancelled"}
+            close failed OrderResult{status: "cancelled"}
 
     # Child workflow
     workflow ShipOrder(order) -> shipResult
@@ -55,16 +59,7 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
     # Cross-namespace call
     nexus "notifications" workflow SendNotification(order.customer, "shipped")
 
-    return OrderResult{status: "completed"}
-
-# --- Anti-pattern example: deterministic deadline ---
-
-workflow DeadlineExample(data: Data) -> (Result):
-    await one:
-        activity DoWork(data) -> result:
-            return Result{success: true}
-        timer 30m:
-            return Result{success: false, error: "timeout"}
+    close OrderResult{status: "completed"}
 
 # --- Supporting definitions ---
 
@@ -96,15 +91,13 @@ activity FulfillOrder(order: Order):
 activity CancelOrder(orderId: string):
     cancel(orderId)
 
-activity DoWork(data: Data) -> (Result):
-    return process(data)
-
 workflow ShipOrder(order: Order) -> (ShipResult):
     activity CreateShipment(order) -> shipment
-    return ShipResult{shipment}
+    close ShipResult{shipment}
 
 activity CreateShipment(order: Order) -> (Shipment):
     return ship(order)
 
 workflow SendNotification(customer: Customer, message: string):
     notify(customer, message)
+    close

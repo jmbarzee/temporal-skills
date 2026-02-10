@@ -1,5 +1,5 @@
 # Source: long-running.md
-# Patterns: continue_as_new, entity workflow, signal/query/update, signal draining
+# Patterns: continue_as_new, entity workflow, signal/query/update
 
 # --- Basic continue-as-new pattern ---
 
@@ -12,7 +12,11 @@ workflow LongRunningProcessor(state: State):
     eventCount = 0
 
     for:
-# REMOVED: await signal NewEvent
+        await one:
+            watch (eventCount):
+                hint signal NewEvent
+            timer (24h):
+                activity PeriodicCheck(state)
 
         # Reset history before it gets too large
         if (eventCount >= 1000):
@@ -50,54 +54,20 @@ workflow UserEntity(userId: string, state: UserState):
     shouldDeactivate = false
 
     for:
-        # Wait for commands or periodic triggers
-        hint signal UpdateProfile
-        hint signal AddCredits
-        hint signal Deactivate
         await one:
-            timer 24h:
+            watch (shouldDeactivate):
+                hint signal UpdateProfile
+                hint signal AddCredits
+                hint signal Deactivate
+                close
+            timer (24h):
                 activity DailyMaintenance(userId, state)
-
-        if (shouldDeactivate):
-            return
 
         eventCount = eventCount + 1
 
         # Continue-as-new periodically
         if (eventCount > 500):
             continue_as_new(userId, state)
-
-# --- History management: fixed event count ---
-
-workflow FixedCountProcessor(state: State):
-    signal WorkItem(data: ItemData):
-        activity DoWork(state)
-        eventCount = eventCount + 1
-
-    eventCount = 0
-
-    for:
-# REMOVED: await signal WorkItem
-
-        if (eventCount >= 1000):
-            continue_as_new(state)
-
-# --- Signal draining before continue-as-new ---
-
-workflow DrainingProcessor(state: State):
-    signal IncomingEvent(data: EventData):
-        activity ProcessDrainedEvent(state)
-        count = count + 1
-
-    count = 0
-
-    for:
-# REMOVED: await signal IncomingEvent
-
-        if (count >= 500):
-            # Drain pending signals at natural boundary
-            activity FlushPending(state)
-            continue_as_new(state)
 
 # --- Supporting activities ---
 
@@ -113,11 +83,5 @@ activity PersistUser(userId: string, state: UserState):
 activity DailyMaintenance(userId: string, state: UserState):
     run_maintenance(userId, state)
 
-activity DoWork(state: State):
-    work(state)
-
-activity ProcessDrainedEvent(state: State):
-    process(state)
-
-activity FlushPending(state: State):
-    flush(state)
+activity PeriodicCheck(state: State):
+    check(state)

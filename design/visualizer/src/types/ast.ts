@@ -8,6 +8,8 @@ export interface Position {
 // Top-level file
 export interface TWFFile {
   definitions: Definition[]
+  // Added for focused-file visualization
+  focusedFile?: string
 }
 
 // Definition types
@@ -23,6 +25,8 @@ export interface WorkflowDef extends Position {
   queries: QueryDecl[]
   updates: UpdateDecl[]
   body: Statement[]
+  // Source file path (added by extension)
+  sourceFile?: string
 }
 
 export interface ActivityDef extends Position {
@@ -32,13 +36,16 @@ export interface ActivityDef extends Position {
   returnType?: string
   options?: string
   body: Statement[]
+  // Source file path (added by extension)
+  sourceFile?: string
 }
 
-// Declaration types
+// Declaration types (with handler bodies)
 export interface SignalDecl extends Position {
   type: 'signalDecl'
   name: string
   params: string
+  body?: Statement[]
 }
 
 export interface QueryDecl extends Position {
@@ -46,6 +53,7 @@ export interface QueryDecl extends Position {
   name: string
   params: string
   returnType?: string
+  body?: Statement[]
 }
 
 export interface UpdateDecl extends Position {
@@ -53,6 +61,7 @@ export interface UpdateDecl extends Position {
   name: string
   params: string
   returnType?: string
+  body?: Statement[]
 }
 
 // Statement types
@@ -60,13 +69,14 @@ export type Statement =
   | ActivityCall
   | WorkflowCall
   | TimerStmt
-  | AwaitStmt
-  | ParallelBlock
-  | SelectBlock
+  | AwaitAllBlock
+  | AwaitOneBlock
+  | HintStmt
   | SwitchBlock
   | IfStmt
   | ForStmt
   | ReturnStmt
+  | CloseStmt
   | ContinueAsNewStmt
   | BreakStmt
   | ContinueStmt
@@ -98,51 +108,38 @@ export interface TimerStmt extends Position {
   duration: string
 }
 
-export interface AwaitTarget {
-  kind: 'signal' | 'update'
-  name: string
-  args?: string
-}
-
-export interface AwaitStmt extends Position {
-  type: 'await'
-  targets: AwaitTarget[]
-}
-
-export interface ParallelBlock extends Position {
-  type: 'parallel'
+// await all: waits for all operations to complete
+export interface AwaitAllBlock extends Position {
+  type: 'awaitAll'
   body: Statement[]
 }
 
-export type SelectCaseKind = 'workflow' | 'activity' | 'signal' | 'update' | 'timer'
+// await one case: watch, timer, or nested await all
+export type AwaitOneCaseKind = 'watch' | 'timer' | 'await_all'
 
-export interface SelectCase {
-  kind: SelectCaseKind
-  // Workflow case
-  workflowMode?: WorkflowCallMode
-  workflowNamespace?: string
-  workflowName?: string
-  workflowArgs?: string
-  workflowResult?: string
-  // Activity case
-  activityName?: string
-  activityArgs?: string
-  activityResult?: string
-  // Signal case
-  signalName?: string
-  signalArgs?: string
-  // Update case
-  updateName?: string
-  updateArgs?: string
+export interface AwaitOneCase {
+  kind: AwaitOneCaseKind
+  // Watch case: variable to wait until truthy
+  watchVariable?: string
   // Timer case
   timerDuration?: string
-  // Body
+  // Await all case (nested)
+  awaitAll?: AwaitAllBlock
+  // Body executed when this case wins
   body: Statement[]
 }
 
-export interface SelectBlock extends Position {
-  type: 'select'
-  cases: SelectCase[]
+// await one: waits for first case to complete
+export interface AwaitOneBlock extends Position {
+  type: 'awaitOne'
+  cases: AwaitOneCase[]
+}
+
+// hint: marks where signals/queries/updates may be handled
+export interface HintStmt extends Position {
+  type: 'hint'
+  kind: 'signal' | 'query' | 'update'
+  name: string
 }
 
 export interface SwitchCase {
@@ -177,6 +174,12 @@ export interface ForStmt extends Position {
 
 export interface ReturnStmt extends Position {
   type: 'return'
+  value?: string
+}
+
+export interface CloseStmt extends Position {
+  type: 'close'
+  reason?: string // 'completed', 'failed', or empty (default completed)
   value?: string
 }
 

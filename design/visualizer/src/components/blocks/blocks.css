@@ -23,6 +23,10 @@
   --block-await-border: #81E6D9;
   --block-await-text: #234E47;
 
+  --block-hint-bg: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 100%);
+  --block-hint-border: #38BDF8;
+  --block-hint-text: #0369A1;
+
   --block-signal-bg: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
   --block-signal-border: #F87171;
   --block-signal-text: #B91C1C;
@@ -88,6 +92,10 @@
   --block-await-bg: linear-gradient(135deg, #1E3530 0%, #244038 100%);
   --block-await-border: #4DAA9D;
   --block-await-text: #A8E8DC;
+
+  --block-hint-bg: linear-gradient(135deg, #0C3D5C 0%, #0E4D6E 100%);
+  --block-hint-border: #0EA5E9;
+  --block-hint-text: #7DD3FC;
 
   --block-signal-bg: linear-gradient(135deg, #3D1E1E 0%, #4A2424 100%);
   --block-signal-border: #DC2626;
@@ -222,12 +230,27 @@
 
 .declaration {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  flex-direction: column;
   font-size: 12px;
   border-radius: 4px;
   margin: 2px 0;
+}
+
+.declaration-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.declaration-header:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.declaration.has-body .declaration-header {
+  cursor: pointer;
 }
 
 .declaration-icon {
@@ -250,6 +273,18 @@
 .declaration-return {
   opacity: 0.7;
   margin-left: 4px;
+}
+
+/* Declaration body - for expandable handler bodies */
+.declaration-body {
+  margin-left: 20px;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.vscode-dark .declaration-body,
+[data-theme="dark"] .declaration-body {
+  border-left-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Branch labels */
@@ -326,7 +361,129 @@
   color: var(--block-timer-text);
 }
 
-/* Await - Teal */
+/* === Tagged Composite: Unified "hint" and "option" design === */
+/* A grey tag on the left, content block on the right that can expand */
+
+.tagged-composite {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin: 4px 0;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+}
+
+/* The tag portion (hint/option) */
+.tagged-tag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  background: var(--block-control-bg);
+  border: 1px solid var(--block-control-border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  color: var(--block-control-text);
+  min-width: 50px;
+}
+
+.tagged-tag-label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+}
+
+/* The content portion (signal/query/update/timer/await all) */
+.tagged-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.tagged-content.expandable {
+  cursor: pointer;
+}
+
+.tagged-content.expandable:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.tagged-icon {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.tagged-kind {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.tagged-name {
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Expanded body for tagged composites */
+.tagged-body {
+  width: 100%;
+  margin-left: 60px;
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--block-control-border);
+}
+
+/* Tagged content colors - SOLID colors matching declaration scheme */
+.tagged-signal {
+  background: var(--block-signal-bg);
+  border: 1px solid var(--block-signal-border);
+  color: var(--block-signal-text);
+}
+
+.tagged-query {
+  background: var(--decl-query-bg);
+  border: 1px solid var(--block-workflow-border);
+  color: var(--decl-query-text);
+}
+
+.tagged-update {
+  background: var(--block-update-bg);
+  border: 1px solid var(--block-update-border);
+  color: var(--block-update-text);
+}
+
+.tagged-timer {
+  background: var(--block-timer-bg);
+  border: 1px solid var(--block-timer-border);
+  color: var(--block-timer-text);
+}
+
+.tagged-await-all {
+  background: var(--block-control-bg);
+  border: 1px solid var(--block-control-border);
+  color: var(--block-control-text);
+}
+
+.tagged-raw {
+  background: var(--block-raw-bg);
+  border: 1px solid var(--block-raw-border);
+  color: var(--block-raw-text);
+}
+
+.tagged-watch {
+  background: var(--block-hint-bg);
+  border: 1px solid var(--block-hint-border);
+  color: var(--block-hint-text);
+}
+
+/* Await (legacy) - Teal */
 .block-await {
   background: var(--block-await-bg);
   border: 1px solid var(--block-await-border);
@@ -357,8 +514,8 @@
 }
 
 /* Control Flow - Gray/Slate */
-.block-parallel,
-.block-select,
+.block-await-all,
+.block-await-one,
 .block-switch,
 .block-if,
 .block-for {
@@ -366,30 +523,15 @@
   border: 1px solid var(--block-control-border);
 }
 
-.block-parallel>.block-header,
-.block-select>.block-header,
+.block-await-all>.block-header,
+.block-await-one>.block-header,
 .block-switch>.block-header,
 .block-if>.block-header,
 .block-for>.block-header {
   color: var(--block-control-text);
 }
 
-/* Select option marker - bookmark tab to indicate mutual exclusivity */
-.block-select>.block-body>.block {
-  position: relative;
-  margin-left: 14px;
-}
-
-.block-select>.block-body>.block::before {
-  content: '';
-  position: absolute;
-  left: -13px;
-  top: 5px;
-  width: 12px;
-  height: 20px;
-  background: var(--block-control-border);
-  border-radius: 4px 0 0 4px;
-}
+/* Await one uses tagged-composite styling for cases */
 
 /* Switch cases */
 .block-switch-case,
@@ -412,6 +554,45 @@
 
 .block-return>.block-header {
   color: var(--block-return-text);
+}
+
+/* Close - Workflow termination */
+.block-close {
+  background: var(--block-return-bg);
+  border: 1px solid var(--block-return-border);
+}
+
+.block-close>.block-header {
+  color: var(--block-return-text);
+}
+
+.block-close.close-failed {
+  background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+  border-color: #F87171;
+}
+
+.block-close.close-failed>.block-header {
+  color: #B91C1C;
+}
+
+.vscode-dark .block-close.close-failed,
+[data-theme="dark"] .block-close.close-failed {
+  background: linear-gradient(135deg, #3D1E1E 0%, #4A2424 100%);
+  border-color: #DC2626;
+}
+
+.vscode-dark .block-close.close-failed>.block-header,
+[data-theme="dark"] .block-close.close-failed>.block-header {
+  color: #FCA5A5;
+}
+
+.block-close .close-reason {
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.block-close .close-value {
+  opacity: 0.8;
 }
 
 /* Continue as new - Orange */
@@ -504,4 +685,68 @@
 .declarations-icon.declaration-update {
   background: var(--decl-update-bg);
   color: var(--decl-update-text);
+}
+
+/* Undefined/Missing definition styles */
+.block-undefined-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  background: var(--color-warning, #f59e0b);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.missing-definition {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.missing-definition-icon {
+  font-size: 20px;
+  color: var(--color-warning, #f59e0b);
+}
+
+.missing-definition-text {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.missing-definition-text strong {
+  color: var(--color-workflow);
+  font-family: var(--font-mono);
+}
+
+.missing-definition-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  opacity: 0.8;
+}
+
+/* Empty body indicator */
+.block-empty-body {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-style: italic;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+}
+
+.vscode-dark .block-empty-body {
+  background: rgba(255, 255, 255, 0.03);
 }

@@ -80,10 +80,10 @@ workflow SpecCompliance(input: Input) -> (Result):
 
     # ===== CONDITIONAL WAIT =====
     await one:
-        timer 5m:
-            status = "timeout"
-        timer 10m:
-            status = "extended_timeout"
+        timer (5m):
+            activity TimeoutAction1()
+        timer (10m):
+            activity TimeoutAction2()
 
     # ===== CHILD WORKFLOWS =====
     # Test: Child workflow call
@@ -198,8 +198,8 @@ workflow NestedAwaitExample():
         await all:
             activity LongTask1() -> r1
             activity LongTask2() -> r2
-        timer 30m:
-            return timeout
+        timer (30m):
+            activity HandleTimeout()
 
 activity LongTask1() -> (Result):
     return Result{success: true}
@@ -227,6 +227,15 @@ activity Approve(input: Input):
 
 activity Reject(input: Input):
     reject(input)
+
+activity TimeoutAction1():
+    handle_timeout1()
+
+activity TimeoutAction2():
+    handle_timeout2()
+
+activity HandleTimeout():
+    handle_long_task_timeout()
 
 activity HandleDefault(input: Input):
     handle(input)

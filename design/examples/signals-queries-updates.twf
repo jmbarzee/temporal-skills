@@ -1,5 +1,5 @@
 # Source: signals-queries-updates.md
-# Patterns: declarations, await, multi-target await, approval flow via select
+# Patterns: signal/query/update declarations, watch blocks, approval flows
 
 # --- Signal-driven order workflow ---
 
@@ -21,34 +21,46 @@ workflow OrderWorkflow(orderId: string) -> (OrderResult):
 
     status = "awaiting_payment"
 
-    # Wait for payment signal with timeout via select
-    hint signal PaymentReceived
+    # Wait for payment signal with timeout
     await one:
-        timer 24h:
+        watch (status):
+            hint signal PaymentReceived
+            if (status == "processing"):
+                status = "completed"
+                close OrderResult{status: "completed"}
+        timer (24h):
             status = "payment_timeout"
-            return OrderResult{status: "payment_timeout"}
-
-    status = "completed"
-    return OrderResult{status: "completed"}
+            close failed OrderResult{status: "payment_timeout"}
 
 # --- Approval flow with multi-target await ---
 
 workflow ApprovalWorkflow(request: Request) -> (Decision):
     signal Approved(approver: string):
-        return Decision{status: "approved"}
+        approved = true
+        approver_name = approver
 
     signal Rejected(approver: string, reason: string):
-        return Decision{status: "rejected", reason: reason}
+        rejected = true
+        reject_reason = reason
+
+    approved = false
+    rejected = false
+    approver_name = ""
+    reject_reason = ""
 
     activity NotifyApprovers(request)
 
     # Wait for either Approved or Rejected signal, or timeout
-    hint signal Approved
-    hint signal Rejected
     await one:
-        timer 7d:
+        watch (approved):
+            hint signal Approved
+            close Decision{status: "approved", approver: approver_name}
+        watch (rejected):
+            hint signal Rejected
+            close failed Decision{status: "rejected", reason: reject_reason}
+        timer (7d):
             activity NotifyExpired(request)
-            return Decision{status: "expired"}
+            close failed Decision{status: "expired"}
 
 # --- Batch collector with signal accumulation ---
 
@@ -57,23 +69,22 @@ workflow BatchCollector(batchId: string) -> (Batch):
         items = items + 1
 
     signal CompleteBatch():
-        shouldBreak = true
+        completed = true
 
     items = 0
-    shouldBreak = false
+    completed = false
 
     for:
-        hint signal AddItem
-        hint signal CompleteBatch
         await one:
-            timer 1h:
+            watch (completed):
+                hint signal AddItem
+                hint signal CompleteBatch
+                break
+            timer (1h):
                 break
 
-        if (shouldBreak):
-            break
-
     activity ProcessBatch(batchId, items) -> result
-    return Batch{items: items}
+    close Batch{items: items}
 
 # --- Update-driven subscription workflow ---
 
@@ -97,33 +108,14 @@ workflow SubscriptionWorkflow(userId: string):
     cancelled = false
 
     for:
-        hint signal Cancel
         await one:
-            timer 30d:
+            watch (cancelled):
+                hint signal Cancel
+                break
+            timer (30d):
                 activity BillUser(userId, plan)
 
-        if (cancelled):
-            break
-
-    return
-
-# --- Workflow using await with multi-target ---
-
-workflow MultiAwaitWorkflow(orderId: string) -> (Result):
-    signal PaymentConfirmed(txId: string):
-        paymentTxId = txId
-
-    update UpdateAddress(addr: Address) -> (UpdateResult):
-        address = addr
-        return UpdateResult{success: true}
-
-    activity PrepareOrder(orderId) -> order
-
-    # Wait for either signal or update
-# REMOVED: await signal PaymentConfirmed or update UpdateAddress
-
-    activity FinalizeOrder(order) -> result
-    return Result{result}
+    close
 
 # --- Supporting activities ---
 
@@ -147,9 +139,3 @@ activity ProcessBatch(batchId: string, count: int) -> (BatchResult):
 
 activity BillUser(userId: string, plan: string):
     bill(userId, plan)
-
-activity PrepareOrder(orderId: string) -> (Order):
-    return prepare(orderId)
-
-activity FinalizeOrder(order: Order) -> (Result):
-    return finalize(order)

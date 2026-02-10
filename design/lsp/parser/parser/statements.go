@@ -231,10 +231,57 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 	c := &ast.AwaitOneCase{Pos: pos}
 
 	switch p.current.Type {
-	case token.TIMER:
-		// Timer case: TIMER duration COLON NEWLINE INDENT body DEDENT
+	case token.WATCH:
+		// Watch case: WATCH ARGS COLON NEWLINE INDENT body DEDENT
 		p.advance()
-		c.TimerDuration = p.collectRawUntil(token.COLON, token.NEWLINE)
+		variable, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		c.WatchVariable = variable.Literal
+
+		if _, err := p.expect(token.COLON); err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.NEWLINE); err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.INDENT); err != nil {
+			return nil, err
+		}
+
+		body, err := p.parseBody()
+		if err != nil {
+			return nil, err
+		}
+		c.Body = body
+		return c, nil
+
+	case token.TIMER:
+		// Timer case: TIMER ARGS COLON NEWLINE INDENT body DEDENT
+		p.advance()
+		duration, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		c.TimerDuration = duration.Literal
+
+		if _, err := p.expect(token.COLON); err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.NEWLINE); err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.INDENT); err != nil {
+			return nil, err
+		}
+
+		body, err := p.parseBody()
+		if err != nil {
+			return nil, err
+		}
+		c.Body = body
+		return c, nil
 
 	case token.AWAIT:
 		// Nested await all case: AWAIT ALL COLON NEWLINE INDENT body DEDENT
@@ -247,30 +294,11 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 			return nil, p.errorf("expected 'await all' in await one case, got await one")
 		}
 		c.AwaitAll = awaitAll
-		return c, nil // await all case has no additional body
+		return c, nil
 
 	default:
-		return nil, p.errorf("unexpected token %s in await one case (expected 'timer' or 'await')", p.current.Type)
+		return nil, p.errorf("unexpected token %s in await one case (expected 'watch', 'timer', or 'await')", p.current.Type)
 	}
-
-	// Expect COLON NEWLINE INDENT body DEDENT
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
-		return nil, err
-	}
-
-	body, err := p.parseBody()
-	if err != nil {
-		return nil, err
-	}
-	c.Body = body
-
-	return c, nil
 }
 
 // parseSwitchBlock parses: SWITCH ARGS COLON NEWLINE INDENT { switch_case } [ else ] DEDENT
@@ -497,6 +525,36 @@ func parseReturnStmt(p *Parser) (ast.Statement, error) {
 	return &ast.ReturnStmt{
 		Pos:   pos,
 		Value: value,
+	}, nil
+}
+
+// parseCloseStmt parses: CLOSE [ COMPLETED | FAILED ] [ raw_expr ] NEWLINE
+func parseCloseStmt(p *Parser) (ast.Statement, error) {
+	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+	p.advance() // consume CLOSE
+
+	var reason string
+	if p.current.Type == token.COMPLETED {
+		reason = "completed"
+		p.advance()
+	} else if p.current.Type == token.FAILED {
+		reason = "failed"
+		p.advance()
+	}
+
+	var value string
+	if p.current.Type != token.NEWLINE && p.current.Type != token.DEDENT && p.current.Type != token.EOF {
+		value = p.collectRawUntil(token.NEWLINE)
+	}
+
+	if p.current.Type == token.NEWLINE {
+		p.advance()
+	}
+
+	return &ast.CloseStmt{
+		Pos:    pos,
+		Reason: reason,
+		Value:  value,
 	}, nil
 }
 

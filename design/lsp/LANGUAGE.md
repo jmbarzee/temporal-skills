@@ -105,6 +105,7 @@ statement ::= activity_call
             | switch_block
             | if_stmt
             | for_stmt
+            | close_stmt
             | return_stmt
             | continue_as_new_stmt
             | break_stmt
@@ -169,9 +170,17 @@ duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
 hint_stmt ::= 'hint' ('signal' | 'update' | 'query') IDENT NEWLINE
 ```
 
-Marks a point in the workflow where a signal, update, or query handler may execute. Hints can appear anywhere in the workflow.
+Documents that a signal, update, or query handler may execute at this point. Hints are regular statements that can appear anywhere in the workflow.
 
-**Important:** Signals, queries, and updates are **only ever referenced via `hint` statements**. They cannot be called or awaited directly - you must use `hint` to mark where they may arrive, then use `await one` to wait at that point.
+**Common Pattern:** Place `hint` statements at the beginning of `watch` case bodies to document which signals/updates can affect the watched variable:
+
+```
+await one:
+    watch (approved):
+        hint signal Approved
+        hint update AdminOverride
+        close
+```
 
 **Note:** The IDENT must refer to a signal, query, or update declared in the current workflow. Each is declared once at the workflow level and can be referenced multiple times via hints throughout the workflow.
 
@@ -194,18 +203,31 @@ await_one_block ::= 'await' 'one' ':' NEWLINE
                     await_one_case+
                     DEDENT
 
-await_one_case ::= timer_case | await_all_case
+await_one_case ::= watch_case | timer_case | await_all_case
 
-timer_case ::= 'timer' duration ':' NEWLINE
+watch_case ::= 'watch' '(' IDENT ')' ':' NEWLINE
+               INDENT statement* DEDENT
+
+timer_case ::= 'timer' '(' duration ')' ':' NEWLINE
                INDENT statement* DEDENT
 
 await_all_case ::= 'await' 'all' ':' NEWLINE
                    INDENT statement* DEDENT
+
+duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
 ```
 
-Waits for the FIRST case to complete (races between timer and await all operations). Combined with `hint` statements to indicate where signals/updates may arrive.
+Waits for the FIRST case to complete (races between watch conditions, timers, and nested await all operations).
 
-**Note:** Signal and update cases are NOT allowed in select blocks. Signal/update arrival is handled via signal/update handler bodies and annotated with `hint` statements.
+**Watch cases** wait for a state variable to become truthy. When the watched variable becomes true (typically set by a signal or update handler), the watch case body executes. Use `hint` statements within watch case bodies to document which signals/updates can affect the watched variable.
+
+**Timer cases** wait for a duration to elapse. When the timer fires, the timer case body executes.
+
+**Await all cases** wait for all statements in their body to complete. When all statements complete, the await all case wins.
+
+The case that completes first "wins" the race, its body executes, and then execution continues after the `await one` block.
+
+**Note:** Signals and updates modify state variables which are then watched. They cannot directly terminate workflows - only the main workflow body can call `close`.
 
 ### Switch Block
 
@@ -244,11 +266,29 @@ for_header ::= '(' expr ')' | '(' IDENT 'in' expr ')'
 - `(expr)`: conditional loop (while expr)
 - `(item in items)`: iteration loop
 
+### Close Statement
+
+```
+close_stmt ::= 'close' [close_reason] [expr] NEWLINE
+close_reason ::= 'completed' | 'failed'
+```
+
+Terminates workflow execution with a completion status. Only valid in workflow context (not in activities or queries).
+
+- `close` or `close completed` - Normal successful completion
+- `close failed` - Terminates workflow in failed state, optionally with error message/data
+
+**Important:** Signals and updates cannot call `close` - they can only mutate state. Only the main workflow body can terminate execution using `close`.
+
+**Note:** `return` is still valid in queries (which must return values without terminating the workflow) and can be used in workflows for backward compatibility, but `close` is preferred for workflow termination as it makes the intent explicit.
+
 ### Return Statement
 
 ```
 return_stmt ::= 'return' [expr] NEWLINE
 ```
+
+Used in queries and activities to return values. In workflows, prefer `close` for termination.
 
 ### Continue As New
 
@@ -425,9 +465,9 @@ These keywords are **blocked in:**
 
 ### Handler Body Contexts
 
-- **Signal handlers:** Full workflow statement set
-- **Update handlers:** Full workflow statement set
-- **Query handlers:** Activity statement set (no temporal primitives)
+- **Signal handlers:** Full workflow statement set, but cannot call `close` (can only mutate state)
+- **Update handlers:** Full workflow statement set, but cannot call `close` (can only mutate state)
+- **Query handlers:** Activity statement set (no temporal primitives), use `return` for values
 
 ## Semantic Rules
 
@@ -481,9 +521,14 @@ update_decl ::= 'update' IDENT params '->' return_type ':' NEWLINE INDENT statem
 
 statement ::= activity_call | workflow_call | timer_stmt
             | hint_stmt | await_all_block | await_one_block | switch_block
-            | if_stmt | for_stmt | return_stmt | continue_as_new_stmt
+            | if_stmt | for_stmt | close_stmt | return_stmt | continue_as_new_stmt
             | break_stmt | continue_stmt | assignment
 
-await_one_case ::= timer_case | await_all_case
-                 # Note: Uses hint statements to mark signal/update arrival points
+await_one_case ::= watch_case | timer_case | await_all_case
+
+watch_case ::= 'watch' '(' IDENT ')' ':' NEWLINE INDENT statement* DEDENT
+
+timer_case ::= 'timer' '(' duration ')' ':' NEWLINE INDENT statement* DEDENT
+
+close_stmt ::= 'close' ['completed' | 'failed'] [expr] NEWLINE
 ```

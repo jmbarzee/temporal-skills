@@ -6,12 +6,12 @@
 workflow OrderWorkflow(order: Order) -> (OrderResult):
     activity ValidateOrder(order) -> validated
     if (validated.success == false):
-        return OrderResult{status: "invalid"}
+        close failed OrderResult{status: "invalid"}
 
     activity ProcessPayment(order.payment) -> payment
     activity ShipOrder(order)
 
-    return OrderResult{status: "completed", paymentId: payment.id}
+    close OrderResult{status: "completed", paymentId: payment.id}
 
 # --- Workflow with timer for testing ---
 
@@ -25,23 +25,35 @@ workflow ReminderWorkflow(userId: string):
     timer 48h
 
     activity SendFinalReminder(userId)
+    close
 
 # --- Workflow with signals for testing ---
 
 workflow ApprovalWorkflow(request: Request) -> (Decision):
     signal Approved(approver: string):
-        return Decision{status: "approved", approver: approver}
+        approved = true
+        approverName = approver
 
     signal Rejected(approver: string, reason: string):
-        return Decision{status: "rejected", reason: reason}
+        rejected = true
+        rejectReason = reason
+
+    approved = false
+    rejected = false
+    approverName = ""
+    rejectReason = ""
 
     activity NotifyApprovers(request)
 
-    hint signal Approved
-    hint signal Rejected
     await one:
-        timer 1h:
-            return Decision{status: "timeout"}
+        watch (approved):
+            hint signal Approved
+            close Decision{status: "approved", approver: approverName}
+        watch (rejected):
+            hint signal Rejected
+            close failed Decision{status: "rejected", reason: rejectReason}
+        timer (1h):
+            close Decision{status: "timeout"}
 
 # --- Workflow with query for testing ---
 
@@ -56,17 +68,7 @@ workflow StatusWorkflow(orderId: string) -> (OrderResult):
     activity ProcessItems(orderId)
 
     status = "completed"
-    return OrderResult{status: status}
-
-# --- Parent-child workflow for testing ---
-
-workflow ParentWorkflow(data: Data) -> (Result):
-    workflow ChildWorkflow(data.item) -> childResult
-    return Result{childData: childResult}
-
-workflow ChildWorkflow(item: Item) -> (ChildResult):
-    activity ProcessItem(item)
-    return ChildResult{processed: true}
+    close OrderResult{status: status, orderId: orderId}
 
 # --- Supporting activities ---
 
@@ -80,13 +82,13 @@ activity ShipOrder(order: Order):
     ship(order)
 
 activity SendFirstReminder(userId: string):
-    send_reminder(userId, 1)
+    remind(userId, "first")
 
 activity SendSecondReminder(userId: string):
-    send_reminder(userId, 2)
+    remind(userId, "second")
 
 activity SendFinalReminder(userId: string):
-    send_reminder(userId, 3)
+    remind(userId, "final")
 
 activity NotifyApprovers(request: Request):
     notify(request.approvers)
@@ -95,7 +97,4 @@ activity StartProcessing(orderId: string):
     start(orderId)
 
 activity ProcessItems(orderId: string):
-    process_all(orderId)
-
-activity ProcessItem(item: Item):
-    process(item)
+    process(orderId)

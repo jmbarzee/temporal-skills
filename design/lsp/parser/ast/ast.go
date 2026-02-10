@@ -156,9 +156,12 @@ type AwaitAllBlock struct {
 func (*AwaitAllBlock) stmtNode() {}
 
 // AwaitOneCase represents a single case in an "await one:" block.
-// Can be a timer case or a nested await all case.
+// Can be a watch case, timer case, or nested await all case.
 type AwaitOneCase struct {
 	Pos
+	// Watch case
+	WatchVariable string
+
 	// Timer case
 	TimerDuration string
 
@@ -171,6 +174,8 @@ type AwaitOneCase struct {
 // CaseKind returns the kind of this await one case.
 func (c *AwaitOneCase) CaseKind() string {
 	switch {
+	case c.WatchVariable != "":
+		return "watch"
 	case c.TimerDuration != "":
 		return "timer"
 	case c.AwaitAll != nil:
@@ -241,6 +246,14 @@ type ReturnStmt struct {
 }
 
 func (*ReturnStmt) stmtNode() {}
+
+type CloseStmt struct {
+	Pos
+	Reason string // "completed", "failed", or "" (default is completed)
+	Value  string // opaque, optional
+}
+
+func (*CloseStmt) stmtNode() {}
 
 type ContinueAsNewStmt struct {
 	Pos

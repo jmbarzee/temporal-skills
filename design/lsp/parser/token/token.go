@@ -34,6 +34,7 @@ const (
 	AWAIT
 	ALL
 	ONE
+	WATCH
 	HINT
 
 	// Keywords -- blocks
@@ -47,6 +48,9 @@ const (
 	IN
 
 	// Keywords -- simple statements
+	CLOSE
+	COMPLETED
+	FAILED
 	RETURN
 	CONTINUE_AS_NEW
 	BREAK
@@ -82,6 +86,7 @@ var tokenNames = map[TokenType]string{
 	AWAIT:           "AWAIT",
 	ALL:             "ALL",
 	ONE:             "ONE",
+	WATCH:           "WATCH",
 	HINT:            "HINT",
 	SWITCH:          "SWITCH",
 	CASE:            "CASE",
@@ -89,6 +94,9 @@ var tokenNames = map[TokenType]string{
 	ELSE:            "ELSE",
 	FOR:             "FOR",
 	IN:              "IN",
+	CLOSE:           "CLOSE",
+	COMPLETED:       "COMPLETED",
+	FAILED:          "FAILED",
 	RETURN:          "RETURN",
 	CONTINUE_AS_NEW: "CONTINUE_AS_NEW",
 	BREAK:           "BREAK",
@@ -138,6 +146,7 @@ var keywords = map[string]TokenType{
 	"await":           AWAIT,
 	"all":             ALL,
 	"one":             ONE,
+	"watch":           WATCH,
 	"hint":            HINT,
 	"switch":          SWITCH,
 	"case":            CASE,
@@ -145,6 +154,9 @@ var keywords = map[string]TokenType{
 	"else":            ELSE,
 	"for":             FOR,
 	"in":              IN,
+	"close":           CLOSE,
+	"completed":       COMPLETED,
+	"failed":          FAILED,
 	"return":          RETURN,
 	"continue_as_new": CONTINUE_AS_NEW,
 	"break":           BREAK,

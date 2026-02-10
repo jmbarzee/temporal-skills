@@ -1,5 +1,5 @@
 # Source: patterns.md
-# Patterns: process, entity, saga (adapted), fan-out/fan-in, pipeline, state machine, polling
+# Patterns: process, entity, saga, fan-out/fan-in, pipeline, state machine, polling
 
 # --- Process Workflow ---
 
@@ -7,7 +7,7 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Step 1: Validate
     activity ValidateOrder(order) -> validated
     if (validated.success == false):
-        return OrderResult{status: "invalid", error: validated.error}
+        close failed OrderResult{status: "invalid", error: validated.error}
 
     # Step 2: Reserve
     activity ReserveInventory(order.items) -> reservation
@@ -21,7 +21,7 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Step 5: Notify
     activity SendConfirmation(order.customer)
 
-    return OrderResult{status: "completed", trackingId: reservation.trackingId}
+    close OrderResult{status: "completed", trackingId: reservation.trackingId}
 
 # --- Entity Workflow ---
 
@@ -55,15 +55,14 @@ workflow AccountEntity(accountId: string, state: AccountState):
     shouldClose = false
 
     for:
-        hint signal Deposit
-        hint signal Withdraw
-        hint signal Close
         await one:
-            timer 24h:
+            watch (shouldClose):
+                hint signal Deposit
+                hint signal Withdraw
+                hint signal Close
+                close
+            timer (24h):
                 activity DailyReconciliation(accountId)
-
-        if (shouldClose):
-            return
 
         eventCount = eventCount + 1
         if (eventCount > 1000):
@@ -85,7 +84,7 @@ workflow BookingWorkflow(booking: Booking) -> (BookingResult):
     activity ChargePayment(booking.payment) -> payment
 
     # All succeeded
-    return BookingResult{status: "confirmed"}
+    close BookingResult{status: "confirmed"}
 
 # --- Saga compensation workflow (called on failure) ---
 
@@ -94,6 +93,7 @@ workflow CompensateBooking(flight: string, hotel: string, car: string):
     activity CancelFlight(flight)
     activity CancelHotel(hotel)
     activity CancelCar(car)
+    close
 
 # --- Fan-Out/Fan-In ---
 
@@ -105,7 +105,7 @@ workflow BatchProcessor(items: []Item) -> (BatchResult):
 
     # Fan-in: aggregate results
     activity AggregateResults(result) -> aggregated
-    return BatchResult{processed: aggregated.count}
+    close BatchResult{processed: aggregated.count}
 
 # --- Pipeline ---
 
@@ -116,7 +116,7 @@ workflow DataPipeline(rawData: RawData) -> (ProcessedData):
     # Stage 2: Validate
     activity Validate(ingested) -> validated
     if (validated.valid == false):
-        return ProcessedData{status: "invalid", errors: validated.errors}
+        close failed ProcessedData{status: "invalid", errors: validated.errors}
 
     # Stage 3: Transform
     activity Transform(validated.data) -> transformed
@@ -127,7 +127,7 @@ workflow DataPipeline(rawData: RawData) -> (ProcessedData):
     # Stage 5: Load
     activity Load(enriched)
 
-    return ProcessedData{status: "complete", recordCount: enriched.count}
+    close ProcessedData{status: "complete", recordCount: enriched.count}
 
 # --- State Machine ---
 
@@ -153,30 +153,36 @@ workflow DocumentApproval(doc: Document) -> (ApprovalResult):
     for:
         switch (state):
             case "draft":
-                await signal Submit
+                await one:
+                    watch (state):
+                        hint signal Submit
+                    timer (90d):
+                        state = "expired"
             case "pending_review":
-                hint signal Approve
-                hint signal Reject
-                hint signal RequestChanges
-                select:
-                    timer 30d:
+                await one:
+                    watch (state):
+                        hint signal Approve
+                        hint signal Reject
+                        hint signal RequestChanges
+                    timer (30d):
                         state = "expired"
             case "changes_requested":
-                hint signal Submit
-                hint signal Withdraw
-                select:
-                    timer 30d:
+                await one:
+                    watch (state):
+                        hint signal Submit
+                        hint signal Withdraw
+                    timer (30d):
                         state = "expired"
             case "approved":
                 activity PublishDocument(doc)
-                return ApprovalResult{status: "approved"}
+                close ApprovalResult{status: "approved"}
             case "rejected":
                 activity ArchiveDocument(doc)
-                return ApprovalResult{status: "rejected"}
+                close ApprovalResult{status: "rejected"}
             case "withdrawn":
-                return ApprovalResult{status: "withdrawn"}
+                close ApprovalResult{status: "withdrawn"}
             case "expired":
-                return ApprovalResult{status: "expired"}
+                close ApprovalResult{status: "expired"}
 
 # --- Polling ---
 
@@ -188,10 +194,10 @@ workflow WaitForResource(resourceId: string) -> (Resource):
 
         if (status.ready):
             activity GetResource(resourceId) -> resource
-            return resource
+            close resource
 
         if (status.failed):
-            return Resource{error: status.error}
+            close failed Resource{error: status.error}
 
         # Wait with backoff
         timer backoff

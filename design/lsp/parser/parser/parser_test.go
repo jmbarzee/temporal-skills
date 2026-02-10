@@ -204,80 +204,10 @@ func TestUpdateDeclWithBody(t *testing.T) {
 	}
 }
 
-func TestHintStmt(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    signal Cancel(reason: string):
-        return Result{cancelled: true}
-    update ChangeAddr(addr: Addr) -> (Result):
-        return Result{ok: true}
+// REMOVED: TestHintStmt - hint statements are no longer supported.
+// REMOVED: TestHintInvalidTarget - hint statements are no longer supported.
 
-    hint signal Cancel
-    hint update ChangeAddr
-    return Result{}
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	if len(wf.Body) != 3 {
-		t.Fatalf("expected 3 body statements, got %d", len(wf.Body))
-	}
-	hint1, ok := wf.Body[0].(*ast.HintStmt)
-	if !ok {
-		t.Fatalf("expected HintStmt, got %T", wf.Body[0])
-	}
-	if hint1.Kind != "signal" {
-		t.Errorf("expected kind 'signal', got %q", hint1.Kind)
-	}
-	if hint1.Name != "Cancel" {
-		t.Errorf("expected name 'Cancel', got %q", hint1.Name)
-	}
-
-	hint2, ok := wf.Body[1].(*ast.HintStmt)
-	if !ok {
-		t.Fatalf("expected HintStmt, got %T", wf.Body[1])
-	}
-	if hint2.Kind != "update" {
-		t.Errorf("expected kind 'update', got %q", hint2.Kind)
-	}
-	if hint2.Name != "ChangeAddr" {
-		t.Errorf("expected name 'ChangeAddr', got %q", hint2.Name)
-	}
-}
-
-func TestHintInvalidTarget(t *testing.T) {
-	// hint now supports signal, query, and update - all are valid.
-	// Test that hint requires a valid target keyword.
-	input := `workflow Foo(x: int) -> (Result):
-    hint something Invalid
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for invalid hint target, got nil")
-	}
-}
-
-func TestAwaitOneCaseError(t *testing.T) {
-	// await one cases only support 'timer' and nested 'await all', not signal/update.
-	input := `workflow Foo(x: int) -> (Result):
-    await one:
-        signal PaymentReceived:
-            return x
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for signal in await one case, got nil")
-	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected ParseError, got %T: %v", err, err)
-	}
-	// The error message should indicate signal is not allowed in await one cases.
-	if !strings.Contains(pe.Msg, "unexpected token SIGNAL") {
-		t.Errorf("unexpected error message: %q", pe.Msg)
-	}
-}
+// REMOVED: TestAwaitOneCaseError - signal cases are now supported in await one blocks.
 
 func TestActivityCallWithResult(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
@@ -473,23 +403,8 @@ func TestOptionsOnDefinition(t *testing.T) {
 	}
 }
 
-func TestTimer(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    timer 1h
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	timer, ok := wf.Body[0].(*ast.TimerStmt)
-	if !ok {
-		t.Fatalf("expected TimerStmt, got %T", wf.Body[0])
-	}
-	if timer.Duration != "1h" {
-		t.Errorf("expected duration '1h', got %q", timer.Duration)
-	}
-}
+// REMOVED: TestTimer - TimerStmt is no longer a standalone statement.
+// Timers are now used via await timer(duration) or await one cases.
 
 // REMOVED: TestAwaitSingle - 'await signal' syntax no longer supported.
 // Signals are now referenced via 'hint signal' statements.
@@ -518,7 +433,7 @@ func TestAwaitAllBlock(t *testing.T) {
 }
 
 func TestAwaitOneBlock(t *testing.T) {
-	// await one cases support watch, timer (with bodies), and nested await all.
+	// await one cases support timer (with bodies), and nested await all.
 	input := `workflow Foo(x: int) -> (Result):
     await one:
         timer (1h):
@@ -541,8 +456,8 @@ func TestAwaitOneBlock(t *testing.T) {
 	if awaitOne.Cases[0].CaseKind() != "timer" {
 		t.Errorf("case[0]: expected timer, got %q", awaitOne.Cases[0].CaseKind())
 	}
-	if awaitOne.Cases[0].TimerDuration != "1h" {
-		t.Errorf("case[0] timer: expected '1h', got %q", awaitOne.Cases[0].TimerDuration)
+	if awaitOne.Cases[0].Timer != "1h" {
+		t.Errorf("case[0] timer: expected '1h', got %q", awaitOne.Cases[0].Timer)
 	}
 	if len(awaitOne.Cases[0].Body) != 1 {
 		t.Errorf("case[0] body: expected 1 statement, got %d", len(awaitOne.Cases[0].Body))
@@ -550,8 +465,8 @@ func TestAwaitOneBlock(t *testing.T) {
 	if awaitOne.Cases[1].CaseKind() != "timer" {
 		t.Errorf("case[1]: expected timer, got %q", awaitOne.Cases[1].CaseKind())
 	}
-	if awaitOne.Cases[1].TimerDuration != "24h" {
-		t.Errorf("case[1] timer: expected '24h', got %q", awaitOne.Cases[1].TimerDuration)
+	if awaitOne.Cases[1].Timer != "24h" {
+		t.Errorf("case[1] timer: expected '24h', got %q", awaitOne.Cases[1].Timer)
 	}
 	if len(awaitOne.Cases[1].Body) != 1 {
 		t.Errorf("case[1] body: expected 1 statement, got %d", len(awaitOne.Cases[1].Body))
@@ -771,17 +686,7 @@ func TestTemporalKeywordInActivityError(t *testing.T) {
 	}
 }
 
-func TestSelectDetachError(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    await one:
-        detach workflow Send(x):
-            return x
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for detach in select case, got nil")
-	}
-}
+// REMOVED: TestSelectDetachError - detach workflow cases are now supported in await one blocks.
 
 func TestMultipleDefinitions(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
@@ -1017,9 +922,6 @@ func TestFullWorkflow(t *testing.T) {
     for (item in order.items):
         activity ProcessItem(item)
 
-    hint signal PaymentReceived
-    hint update ChangeAddress
-
     await one:
         timer (1h):
             activity CheckPayment(orderId) -> checkResult
@@ -1066,55 +968,8 @@ func TestFullWorkflow(t *testing.T) {
 
 // === New Syntax Tests ===
 
-func TestWatchCase(t *testing.T) {
-	input := `workflow Test() -> (Result):
-    signal Done():
-        done = true
-
-    done = false
-
-    await one:
-        watch (done):
-            hint signal Done
-            close Result{success: true}
-        timer (7d):
-            close failed Result{success: false}
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	awaitOne, ok := wf.Body[1].(*ast.AwaitOneBlock)
-	if !ok {
-		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[1])
-	}
-	if len(awaitOne.Cases) != 2 {
-		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
-	}
-
-	// Check watch case
-	if awaitOne.Cases[0].CaseKind() != "watch" {
-		t.Errorf("case[0]: expected watch, got %q", awaitOne.Cases[0].CaseKind())
-	}
-	if awaitOne.Cases[0].WatchVariable != "done" {
-		t.Errorf("case[0] watch: expected 'done', got %q", awaitOne.Cases[0].WatchVariable)
-	}
-	if len(awaitOne.Cases[0].Body) != 2 {
-		t.Errorf("case[0] body: expected 2 statements, got %d", len(awaitOne.Cases[0].Body))
-	}
-
-	// Check timer case
-	if awaitOne.Cases[1].CaseKind() != "timer" {
-		t.Errorf("case[1]: expected timer, got %q", awaitOne.Cases[1].CaseKind())
-	}
-	if awaitOne.Cases[1].TimerDuration != "7d" {
-		t.Errorf("case[1] timer: expected '7d', got %q", awaitOne.Cases[1].TimerDuration)
-	}
-	if len(awaitOne.Cases[1].Body) != 1 {
-		t.Errorf("case[1] body: expected 1 statement, got %d", len(awaitOne.Cases[1].Body))
-	}
-}
+// REMOVED: TestWatchCase - watch keyword is no longer supported.
+// The watch functionality has been removed from the language.
 
 func TestTimerCaseWithBody(t *testing.T) {
 	input := `workflow Test():
@@ -1140,8 +995,8 @@ func TestTimerCaseWithBody(t *testing.T) {
 	if c.CaseKind() != "timer" {
 		t.Errorf("expected timer case, got %q", c.CaseKind())
 	}
-	if c.TimerDuration != "5m" {
-		t.Errorf("timer duration: expected '5m', got %q", c.TimerDuration)
+	if c.Timer != "5m" {
+		t.Errorf("timer duration: expected '5m', got %q", c.Timer)
 	}
 	if len(c.Body) != 2 {
 		t.Errorf("expected 2 statements in timer body, got %d", len(c.Body))
@@ -1211,94 +1066,5 @@ func TestCloseStatement(t *testing.T) {
 	}
 }
 
-func TestWatchWithMultipleHints(t *testing.T) {
-	input := `workflow Approval():
-    signal Approved():
-        approved = true
-
-    signal AdminOverride():
-        approved = true
-
-    approved = false
-
-    await one:
-        watch (approved):
-            hint signal Approved
-            hint signal AdminOverride
-            close
-        timer (7d):
-            close failed
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	awaitOne, ok := wf.Body[1].(*ast.AwaitOneBlock)
-	if !ok {
-		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[1])
-	}
-
-	watchCase := awaitOne.Cases[0]
-	if watchCase.CaseKind() != "watch" {
-		t.Errorf("expected watch case, got %q", watchCase.CaseKind())
-	}
-	if len(watchCase.Body) != 3 {
-		t.Errorf("expected 3 statements (2 hints + close), got %d", len(watchCase.Body))
-	}
-}
-
-func TestMultipleWatchCases(t *testing.T) {
-	input := `workflow Test():
-    signal Approved():
-        approved = true
-
-    signal Rejected():
-        rejected = true
-
-    approved = false
-    rejected = false
-
-    await one:
-        watch (approved):
-            hint signal Approved
-            close
-        watch (rejected):
-            hint signal Rejected
-            close failed
-        timer (7d):
-            close failed "timeout"
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	awaitOne, ok := wf.Body[2].(*ast.AwaitOneBlock)
-	if !ok {
-		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[2])
-	}
-
-	if len(awaitOne.Cases) != 3 {
-		t.Fatalf("expected 3 cases, got %d", len(awaitOne.Cases))
-	}
-
-	// Verify all case kinds
-	if awaitOne.Cases[0].CaseKind() != "watch" {
-		t.Errorf("case[0]: expected watch, got %q", awaitOne.Cases[0].CaseKind())
-	}
-	if awaitOne.Cases[0].WatchVariable != "approved" {
-		t.Errorf("case[0]: expected watch 'approved', got %q", awaitOne.Cases[0].WatchVariable)
-	}
-
-	if awaitOne.Cases[1].CaseKind() != "watch" {
-		t.Errorf("case[1]: expected watch, got %q", awaitOne.Cases[1].CaseKind())
-	}
-	if awaitOne.Cases[1].WatchVariable != "rejected" {
-		t.Errorf("case[1]: expected watch 'rejected', got %q", awaitOne.Cases[1].WatchVariable)
-	}
-
-	if awaitOne.Cases[2].CaseKind() != "timer" {
-		t.Errorf("case[2]: expected timer, got %q", awaitOne.Cases[2].CaseKind())
-	}
-}
+// REMOVED: TestWatchWithMultipleHints - watch keyword and hint statements are no longer supported.
+// REMOVED: TestMultipleWatchCases - watch keyword is no longer supported.

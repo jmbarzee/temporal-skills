@@ -112,7 +112,7 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 		if s.Line == line {
 			return s
 		}
-	case *ast.TimerStmt:
+	case *ast.AwaitStmt:
 		if s.Line == line {
 			return s
 		}
@@ -156,10 +156,6 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 			return n
 		}
 	case *ast.ReturnStmt:
-		if s.Line == line {
-			return s
-		}
-	case *ast.HintStmt:
 		if s.Line == line {
 			return s
 		}
@@ -208,13 +204,38 @@ func signatureFor(node ast.Node) string {
 			prefix += " (nexus " + n.Namespace + ")"
 		}
 		return fmt.Sprintf("%s %s(%s)", prefix, n.Name, n.Args)
-	case *ast.TimerStmt:
-		return fmt.Sprintf("timer %s", n.Duration)
-	case *ast.HintStmt:
-		if n.Resolved != nil {
-			return signatureFor(n.Resolved)
+	case *ast.AwaitStmt:
+		switch n.AwaitKind() {
+		case "timer":
+			return fmt.Sprintf("await timer(%s)", n.Timer)
+		case "signal":
+			if n.SignalParams != "" {
+				return fmt.Sprintf("await signal %s -> %s", n.Signal, n.SignalParams)
+			}
+			return fmt.Sprintf("await signal %s", n.Signal)
+		case "update":
+			if n.UpdateParams != "" {
+				return fmt.Sprintf("await update %s -> %s", n.Update, n.UpdateParams)
+			}
+			return fmt.Sprintf("await update %s", n.Update)
+		case "activity":
+			if n.ActivityResult != "" {
+				return fmt.Sprintf("await activity %s(%s) -> %s", n.Activity, n.ActivityArgs, n.ActivityResult)
+			}
+			return fmt.Sprintf("await activity %s(%s)", n.Activity, n.ActivityArgs)
+		case "workflow":
+			prefix := "await workflow"
+			if n.WorkflowMode == ast.CallSpawn {
+				prefix = "await spawn workflow"
+			} else if n.WorkflowMode == ast.CallDetach {
+				prefix = "await detach workflow"
+			}
+			if n.WorkflowResult != "" {
+				return fmt.Sprintf("%s %s(%s) -> %s", prefix, n.Workflow, n.WorkflowArgs, n.WorkflowResult)
+			}
+			return fmt.Sprintf("%s %s(%s)", prefix, n.Workflow, n.WorkflowArgs)
 		}
-		return fmt.Sprintf("hint %s %s", n.Kind, n.Name)
+		return "await"
 	default:
 		return ""
 	}

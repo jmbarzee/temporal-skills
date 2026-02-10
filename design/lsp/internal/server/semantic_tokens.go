@@ -111,7 +111,7 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int) (
 		token.SIGNAL, token.QUERY, token.UPDATE,
 		token.SPAWN, token.DETACH, token.NEXUS,
 		token.TIMER, token.OPTIONS,
-		token.AWAIT, token.ALL, token.ONE, token.HINT,
+		token.AWAIT, token.ALL, token.ONE,
 		token.SWITCH, token.CASE,
 		token.IF, token.ELSE, token.FOR, token.IN,
 		token.RETURN, token.CONTINUE_AS_NEW, token.BREAK, token.CONTINUE:

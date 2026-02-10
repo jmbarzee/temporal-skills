@@ -162,34 +162,47 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 	case *ast.ForStmt:
 		c.resolveStatements(s.Body)
 
-	case *ast.HintStmt:
-		switch s.Kind {
-		case "signal":
-			if def, ok := c.signals[s.Name]; ok {
-				s.Resolved = def
+	case *ast.AwaitStmt:
+		// Resolve signal/update/activity/workflow references
+		if s.Signal != "" {
+			if def, ok := c.signals[s.Signal]; ok {
+				s.SignalResolved = def
 			} else {
 				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined signal: %s", s.Name),
+					Msg:    fmt.Sprintf("undefined signal: %s", s.Signal),
 					Line:   s.Line,
 					Column: s.Column,
 				})
 			}
-		case "query":
-			if def, ok := c.queries[s.Name]; ok {
-				s.Resolved = def
+		}
+		if s.Update != "" {
+			if def, ok := c.updates[s.Update]; ok {
+				s.UpdateResolved = def
 			} else {
 				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined query: %s", s.Name),
+					Msg:    fmt.Sprintf("undefined update: %s", s.Update),
 					Line:   s.Line,
 					Column: s.Column,
 				})
 			}
-		case "update":
-			if def, ok := c.updates[s.Name]; ok {
-				s.Resolved = def
+		}
+		if s.Activity != "" {
+			if def, ok := c.activities[s.Activity]; ok {
+				s.ActivityResolved = def
 			} else {
 				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined update: %s", s.Name),
+					Msg:    fmt.Sprintf("undefined activity: %s", s.Activity),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+		if s.Workflow != "" {
+			if def, ok := c.workflows[s.Workflow]; ok {
+				s.WorkflowResolved = def
+			} else {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined workflow: %s", s.Workflow),
 					Line:   s.Line,
 					Column: s.Column,
 				})
@@ -199,6 +212,52 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 }
 
 func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
+	// Resolve signal/update/activity/workflow references
+	if awaitCase.Signal != "" {
+		if def, ok := c.signals[awaitCase.Signal]; ok {
+			awaitCase.SignalResolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined signal: %s", awaitCase.Signal),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+	}
+	if awaitCase.Update != "" {
+		if def, ok := c.updates[awaitCase.Update]; ok {
+			awaitCase.UpdateResolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined update: %s", awaitCase.Update),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+	}
+	if awaitCase.Activity != "" {
+		if def, ok := c.activities[awaitCase.Activity]; ok {
+			awaitCase.ActivityResolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined activity: %s", awaitCase.Activity),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+	}
+	if awaitCase.Workflow != "" {
+		if def, ok := c.workflows[awaitCase.Workflow]; ok {
+			awaitCase.WorkflowResolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined workflow: %s", awaitCase.Workflow),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+	}
+
 	// Resolve nested await all block if present.
 	if awaitCase.AwaitAll != nil {
 		c.resolveStatements(awaitCase.AwaitAll.Body)

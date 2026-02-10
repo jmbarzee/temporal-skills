@@ -94,15 +94,6 @@ type UpdateDecl struct {
 
 func (*UpdateDecl) stmtNode() {}
 
-type HintStmt struct {
-	Pos
-	Kind     string // "signal", "query", or "update"
-	Name     string
-	Resolved Node // *SignalDecl, *QueryDecl, or *UpdateDecl after resolution
-}
-
-func (*HintStmt) stmtNode() {}
-
 // ---------------------------------------------------------------------------
 // Statements
 // ---------------------------------------------------------------------------
@@ -140,12 +131,56 @@ type WorkflowCall struct {
 
 func (*WorkflowCall) stmtNode() {}
 
-type TimerStmt struct {
+// AwaitStmt represents a single await statement.
+type AwaitStmt struct {
 	Pos
-	Duration string // opaque
+	// Timer await
+	Timer string // duration, e.g. "5m"
+
+	// Signal await
+	Signal       string // signal name
+	SignalParams string // optional parameter binding, e.g. "(approver, timestamp)"
+	SignalResolved *SignalDecl
+
+	// Update await
+	Update       string // update name
+	UpdateParams string // optional parameter binding
+	UpdateResolved *UpdateDecl
+
+	// Activity await
+	Activity string // activity name
+	ActivityArgs string
+	ActivityResult string // optional result binding
+	ActivityResolved *ActivityDef
+
+	// Workflow await
+	Workflow string // workflow name
+	WorkflowMode WorkflowCallMode // spawn/detach
+	WorkflowNamespace string // optional nexus namespace
+	WorkflowArgs string
+	WorkflowResult string // optional result binding
+	WorkflowResolved *WorkflowDef
 }
 
-func (*TimerStmt) stmtNode() {}
+// AwaitKind returns the kind of await statement.
+func (a *AwaitStmt) AwaitKind() string {
+	switch {
+	case a.Timer != "":
+		return "timer"
+	case a.Signal != "":
+		return "signal"
+	case a.Update != "":
+		return "update"
+	case a.Activity != "":
+		return "activity"
+	case a.Workflow != "":
+		return "workflow"
+	default:
+		return "unknown"
+	}
+}
+
+func (*AwaitStmt) stmtNode() {}
 
 // AwaitAllBlock represents an "await all:" block that waits for all operations to complete.
 type AwaitAllBlock struct {
@@ -156,28 +191,56 @@ type AwaitAllBlock struct {
 func (*AwaitAllBlock) stmtNode() {}
 
 // AwaitOneCase represents a single case in an "await one:" block.
-// Can be a watch case, timer case, or nested await all case.
+// Can be signal, update, timer, activity, workflow, or nested await all.
 type AwaitOneCase struct {
 	Pos
-	// Watch case
-	WatchVariable string
+
+	// Signal case
+	Signal string // signal name
+	SignalParams string // optional parameter binding, e.g. "(approver, timestamp)"
+	SignalResolved *SignalDecl
+
+	// Update case
+	Update string // update name
+	UpdateParams string // optional parameter binding
+	UpdateResolved *UpdateDecl
 
 	// Timer case
-	TimerDuration string
+	Timer string // duration
+
+	// Activity case
+	Activity string // activity name
+	ActivityArgs string
+	ActivityResult string // optional result binding
+	ActivityResolved *ActivityDef
+
+	// Workflow case
+	Workflow string // workflow name
+	WorkflowMode WorkflowCallMode // spawn/detach/child
+	WorkflowNamespace string // optional nexus namespace
+	WorkflowArgs string
+	WorkflowResult string // optional result binding
+	WorkflowResolved *WorkflowDef
 
 	// Await all case (nested)
 	AwaitAll *AwaitAllBlock
 
-	Body []Statement
+	Body []Statement // optional body (can be empty)
 }
 
 // CaseKind returns the kind of this await one case.
 func (c *AwaitOneCase) CaseKind() string {
 	switch {
-	case c.WatchVariable != "":
-		return "watch"
-	case c.TimerDuration != "":
+	case c.Signal != "":
+		return "signal"
+	case c.Update != "":
+		return "update"
+	case c.Timer != "":
 		return "timer"
+	case c.Activity != "":
+		return "activity"
+	case c.Workflow != "":
+		return "workflow"
 	case c.AwaitAll != nil:
 		return "await_all"
 	default:

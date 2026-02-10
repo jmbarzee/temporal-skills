@@ -66,8 +66,19 @@ func nameOfNode(node ast.Node) (name, kind string) {
 			return n.Resolved.Name, "workflow"
 		}
 		return n.Name, "workflow"
-	case *ast.HintStmt:
-		return n.Name, n.Kind
+	case *ast.AwaitStmt:
+		if n.Signal != "" {
+			return n.Signal, "signal"
+		}
+		if n.Update != "" {
+			return n.Update, "update"
+		}
+		if n.Activity != "" {
+			return n.Activity, "activity"
+		}
+		if n.Workflow != "" {
+			return n.Workflow, "workflow"
+		}
 	}
 	return "", ""
 }
@@ -140,8 +151,14 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 		if kind == "workflow" && s.Name == name {
 			refs = append(refs, s)
 		}
-	case *ast.HintStmt:
-		if s.Kind == kind && s.Name == name {
+	case *ast.AwaitStmt:
+		if kind == "signal" && s.Signal == name {
+			refs = append(refs, s)
+		} else if kind == "update" && s.Update == name {
+			refs = append(refs, s)
+		} else if kind == "activity" && s.Activity == name {
+			refs = append(refs, s)
+		} else if kind == "workflow" && s.Workflow == name {
 			refs = append(refs, s)
 		}
 	case *ast.AwaitAllBlock:

@@ -98,8 +98,7 @@ Available in workflow context (workflow definitions and signal/update handlers):
 ```
 statement ::= activity_call
             | workflow_call
-            | timer_stmt
-            | hint_stmt
+            | await_stmt
             | await_all_block
             | await_one_block
             | switch_block
@@ -157,32 +156,42 @@ Modifiers:
 - `detach`: Fire-and-forget child workflow (no result)
 - `nexus STRING`: Cross-namespace workflow call
 
-### Timer
+### Single Await Statement
 
 ```
-timer_stmt ::= 'timer' duration NEWLINE
+await_stmt ::= 'await' await_target NEWLINE
+
+await_target ::= timer_target
+               | signal_target
+               | update_target
+               | activity_target
+               | workflow_target
+
+timer_target ::= 'timer' '(' duration ')'
+
+signal_target ::= 'signal' IDENT ['->' params]
+
+update_target ::= 'update' IDENT ['->' params]
+
+activity_target ::= 'activity' IDENT args ['->' result]
+
+workflow_target ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result]
+
 duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
+params ::= '(' IDENT (',' IDENT)* ')'
+result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 ```
 
-### Hint Statement
+Single await blocks until the specified operation completes. For signals and updates, the handler body executes first, then the await continues. For activities and workflows, the result is bound to the specified variable(s).
 
+**Examples:**
 ```
-hint_stmt ::= 'hint' ('signal' | 'update' | 'query') IDENT NEWLINE
+await timer(5m)
+await signal Approved
+await signal Approved -> (approver, timestamp)
+await activity Process(data) -> result
+await workflow Child(input) -> output
 ```
-
-Documents that a signal, update, or query handler may execute at this point. Hints are regular statements that can appear anywhere in the workflow.
-
-**Common Pattern:** Place `hint` statements at the beginning of `watch` case bodies to document which signals/updates can affect the watched variable:
-
-```
-await one:
-    watch (approved):
-        hint signal Approved
-        hint update AdminOverride
-        close
-```
-
-**Note:** The IDENT must refer to a signal, query, or update declared in the current workflow. Each is declared once at the workflow level and can be referenced multiple times via hints throughout the workflow.
 
 ### Await All Block
 
@@ -203,31 +212,61 @@ await_one_block ::= 'await' 'one' ':' NEWLINE
                     await_one_case+
                     DEDENT
 
-await_one_case ::= watch_case | timer_case | await_all_case
+await_one_case ::= signal_case
+                 | update_case
+                 | timer_case
+                 | activity_case
+                 | workflow_case
+                 | await_all_case
 
-watch_case ::= 'watch' '(' IDENT ')' ':' NEWLINE
-               INDENT statement* DEDENT
+signal_case ::= 'signal' IDENT ['->' params] ':' NEWLINE
+                [INDENT statement+ DEDENT]
+
+update_case ::= 'update' IDENT ['->' params] ':' NEWLINE
+                [INDENT statement+ DEDENT]
 
 timer_case ::= 'timer' '(' duration ')' ':' NEWLINE
-               INDENT statement* DEDENT
+               [INDENT statement+ DEDENT]
+
+activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE
+                  [INDENT statement+ DEDENT]
+
+workflow_case ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE
+                  [INDENT statement+ DEDENT]
 
 await_all_case ::= 'await' 'all' ':' NEWLINE
-                   INDENT statement* DEDENT
+                   INDENT statement+ DEDENT
 
 duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
+params ::= '(' IDENT (',' IDENT)* ')'
+result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 ```
 
-Waits for the FIRST case to complete (races between watch conditions, timers, and nested await all operations).
+Waits for the FIRST case to complete (races between signals, updates, timers, activities, workflows, and nested await all operations).
 
-**Watch cases** wait for a state variable to become truthy. When the watched variable becomes true (typically set by a signal or update handler), the watch case body executes. Use `hint` statements within watch case bodies to document which signals/updates can affect the watched variable.
+**Signal cases** wait for a specific signal to arrive. When the signal arrives, the handler body executes first (if defined), then the case body executes (if present). Signal parameters can be bound using `->`.
 
-**Timer cases** wait for a duration to elapse. When the timer fires, the timer case body executes.
+**Update cases** wait for a specific update to arrive. When the update arrives, the handler body executes and returns a value to the caller, then the case body executes (if present). Update parameters can be bound using `->`.
+
+**Timer cases** wait for a duration to elapse. When the timer fires, the case body executes (if present).
+
+**Activity cases** wait for an activity to complete. When the activity completes, the case body executes (if present). Activity results can be bound using `->`.
+
+**Workflow cases** wait for a child workflow to complete. When the workflow completes, the case body executes (if present). Workflow results can be bound using `->`.
 
 **Await all cases** wait for all statements in their body to complete. When all statements complete, the await all case wins.
 
-The case that completes first "wins" the race, its body executes, and then execution continues after the `await one` block.
+**Case bodies are optional.** If a case has no body, the colon is still required. This is useful for consuming signals/results without additional processing:
+```
+await one:
+    signal Ready:
+    timer(5m):
+        close failed "timeout"
+```
 
-**Note:** Signals and updates modify state variables which are then watched. They cannot directly terminate workflows - only the main workflow body can call `close`.
+The case that completes first "wins" the race, its body executes (if present), and then execution continues after the `await one` block.
+
+**Cancellation:** When one case completes, all other pending operations are automatically cancelled. Activities receive cancellation signals, child workflows are cancelled, and timers are stopped.
 
 ### Switch Block
 
@@ -358,18 +397,17 @@ field ::= IDENT ':' expr
 - `spawn` - Asynchronous child workflow
 - `detach` - Fire-and-forget child workflow
 - `nexus` - Cross-namespace call
-- `await` - Wait for operations (`await all`, `await one`)
+- `await` - Wait for operations (`await timer`, `await signal`, `await all`, `await one`)
 - `all` - Wait for all operations (used with `await`)
 - `one` - Wait for first operation (used with `await`)
 
 **Workflow primitives:**
 - `workflow` - Workflow definition or child call
 - `activity` - Activity definition or call
-- `timer` - Durable sleep
-- `signal` - Signal declaration (referenced via `hint`)
-- `query` - Query declaration (referenced via `hint`)
-- `update` - Update declaration (referenced via `hint`)
-- `hint` - Mark where signal/update may arrive
+- `timer` - Durable sleep (used with `await`)
+- `signal` - Signal declaration and await target
+- `query` - Query declaration
+- `update` - Update declaration and await target
 
 **Activity primitives:**
 - `heartbeat` - Report activity progress (activity-only)
@@ -436,9 +474,8 @@ workflow Example(x: int) -> (Result):
 
     if (x > 0):
         activity DoWork(x)
-        hint signal Done
     else:
-        timer 1h
+        await timer(1h)
 
     return Result{status: status}
 ```
@@ -451,12 +488,9 @@ Certain keywords are only valid in workflow context and produce errors in activi
 
 - `spawn`, `detach`, `nexus` - Workflow calls
 - `workflow` - Child workflow calls
-- `timer` - Durable sleep
-- `signal`, `query`, `update` - Handler declarations
-- `await` - Signal/update waiting
-- `hint` - Signal/update annotation
-- `parallel` - Concurrent execution
-- `select` - Racing branches
+- `timer` - Durable sleep (with `await`)
+- `signal`, `query`, `update` - Handler declarations and await targets
+- `await` - Async operation waiting
 - `continue_as_new` - History reset
 
 These keywords are **blocked in:**
@@ -480,8 +514,7 @@ After parsing, the resolver performs symbol resolution:
    - Build signal/query/update maps for the workflow
    - Resolve activity calls to activity definitions
    - Resolve workflow calls to workflow definitions
-   - Resolve await targets to signal/update declarations
-   - Resolve hint targets to signal/update declarations
+   - Resolve await targets to signal/update/activity/workflow declarations
    - Walk signal/query/update handler bodies and resolve references
 3. **Report errors:** Undefined references, duplicate definitions, etc.
 
@@ -492,9 +525,8 @@ The parser and resolver collect multiple errors before failing, allowing users t
 Common error types:
 - Undefined activity/workflow/signal/update
 - Duplicate definitions
-- Signal/update cases in select blocks (not allowed)
 - Temporal keywords in activity context
-- Hint referencing query (only signal/update allowed)
+- Invalid await targets (e.g., awaiting a query)
 
 ## Examples
 
@@ -519,16 +551,24 @@ signal_decl ::= 'signal' IDENT params ':' NEWLINE INDENT statement* DEDENT
 query_decl ::= 'query' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 update_decl ::= 'update' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 
-statement ::= activity_call | workflow_call | timer_stmt
-            | hint_stmt | await_all_block | await_one_block | switch_block
+statement ::= activity_call | workflow_call | await_stmt
+            | await_all_block | await_one_block | switch_block
             | if_stmt | for_stmt | close_stmt | return_stmt | continue_as_new_stmt
             | break_stmt | continue_stmt | assignment
 
-await_one_case ::= watch_case | timer_case | await_all_case
+await_stmt ::= 'await' (timer_target | signal_target | update_target | activity_target | workflow_target) NEWLINE
 
-watch_case ::= 'watch' '(' IDENT ')' ':' NEWLINE INDENT statement* DEDENT
+await_one_case ::= signal_case | update_case | timer_case | activity_case | workflow_case | await_all_case
 
-timer_case ::= 'timer' '(' duration ')' ':' NEWLINE INDENT statement* DEDENT
+signal_case ::= 'signal' IDENT ['->' params] ':' NEWLINE [INDENT statement+ DEDENT]
+
+update_case ::= 'update' IDENT ['->' params] ':' NEWLINE [INDENT statement+ DEDENT]
+
+timer_case ::= 'timer' '(' duration ')' ':' NEWLINE [INDENT statement+ DEDENT]
+
+activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
+
+workflow_case ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 
 close_stmt ::= 'close' ['completed' | 'failed'] [expr] NEWLINE
 ```

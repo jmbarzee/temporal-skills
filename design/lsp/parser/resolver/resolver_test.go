@@ -27,8 +27,6 @@ func TestSuccessfulResolution(t *testing.T) {
 
     activity GetOrder(orderId) -> order
     workflow ShipOrder(order) -> shipResult
-    hint signal PaymentReceived
-    hint update ChangeAddress
 
 activity GetOrder(orderId: string) -> (Order):
     return db.get(orderId)
@@ -60,16 +58,6 @@ workflow ShipOrder(order: Order) -> (ShipResult):
 	} else if wfCall.Resolved.Name != "ShipOrder" {
 		t.Errorf("workflow resolved to %q, expected 'ShipOrder'", wfCall.Resolved.Name)
 	}
-
-	hintSig := wf.Body[2].(*ast.HintStmt)
-	if hintSig.Resolved == nil {
-		t.Error("hint signal not resolved")
-	}
-
-	hintUpd := wf.Body[3].(*ast.HintStmt)
-	if hintUpd.Resolved == nil {
-		t.Error("hint update not resolved")
-	}
 }
 
 func TestUndefinedActivity(t *testing.T) {
@@ -100,33 +88,8 @@ func TestUndefinedWorkflow(t *testing.T) {
 	}
 }
 
-func TestUndefinedSignal(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    hint signal Nonexistent
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Msg, "undefined signal: Nonexistent") {
-		t.Errorf("unexpected error: %q", errs[0].Msg)
-	}
-}
-
-func TestUndefinedUpdate(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    hint update Nonexistent
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Msg, "undefined update: Nonexistent") {
-		t.Errorf("unexpected error: %q", errs[0].Msg)
-	}
-}
+// REMOVED: TestUndefinedSignal - hint statements are no longer supported.
+// REMOVED: TestUndefinedUpdate - hint statements are no longer supported.
 
 func TestDuplicateWorkflow(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
@@ -243,51 +206,8 @@ func TestMultipleUndefinedErrors(t *testing.T) {
 	}
 }
 
-func TestHintResolution(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    signal Cancel(reason: string):
-        return Result{cancelled: true}
-    update ChangeAddr(addr: Addr) -> (Result):
-        return Result{ok: true}
-
-    hint signal Cancel
-    hint update ChangeAddr
-    return Result{}
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) > 0 {
-		for _, e := range errs {
-			t.Errorf("unexpected error: %v", e)
-		}
-		t.FailNow()
-	}
-
-	wf := file.Definitions[0].(*ast.WorkflowDef)
-	hint1 := wf.Body[0].(*ast.HintStmt)
-	if hint1.Resolved == nil {
-		t.Error("hint signal not resolved")
-	}
-
-	hint2 := wf.Body[1].(*ast.HintStmt)
-	if hint2.Resolved == nil {
-		t.Error("hint update not resolved")
-	}
-}
-
-func TestHintUndefinedSignal(t *testing.T) {
-	input := `workflow Foo(x: int) -> (Result):
-    hint signal Missing
-`
-	file := mustParse(t, input)
-	errs := Resolve(file)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Msg, "undefined signal: Missing") {
-		t.Errorf("unexpected error: %q", errs[0].Msg)
-	}
-}
+// REMOVED: TestHintResolution - hint statements are no longer supported.
+// REMOVED: TestHintUndefinedSignal - hint statements are no longer supported.
 
 func TestHandlerBodyResolution(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):

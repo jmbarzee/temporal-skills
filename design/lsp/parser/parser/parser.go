@@ -54,9 +54,7 @@ func init() {
 		token.SPAWN:           parseWorkflowCall,
 		token.DETACH:          parseWorkflowCall,
 		token.NEXUS:           parseWorkflowCall,
-		token.TIMER:           parseTimerStmt,
-		token.AWAIT:           parseAwaitBlock,
-		token.HINT:            parseHintStmt,
+		token.AWAIT:           parseAwaitStmt, // handles both single await and await blocks
 		token.SWITCH:          parseSwitchBlock,
 		token.IF:              parseIfStmt,
 		token.FOR:             parseForStmt,
@@ -91,10 +89,8 @@ var temporalKeywords = map[token.TokenType]bool{
 	token.AWAIT:           true,
 	token.ALL:             true,
 	token.ONE:             true,
-	token.WATCH:           true,
 	token.CONTINUE_AS_NEW: true,
 	token.CLOSE:           true,
-	token.HINT:            true,
 }
 
 // ParseFile parses a .twf source string into an AST File.

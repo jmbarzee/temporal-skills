@@ -43,9 +43,19 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Resolved != nil {
 			return n.Resolved
 		}
-	case *ast.HintStmt:
-		if n.Resolved != nil {
-			return n.Resolved
+	case *ast.AwaitStmt:
+		// Check which type of await and return appropriate resolved reference
+		if n.Signal != "" && n.SignalResolved != nil {
+			return n.SignalResolved
+		}
+		if n.Update != "" && n.UpdateResolved != nil {
+			return n.UpdateResolved
+		}
+		if n.Activity != "" && n.ActivityResolved != nil {
+			return n.ActivityResolved
+		}
+		if n.Workflow != "" && n.WorkflowResolved != nil {
+			return n.WorkflowResolved
 		}
 	}
 	return nil

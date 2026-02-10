@@ -34,8 +34,6 @@ const (
 	AWAIT
 	ALL
 	ONE
-	WATCH
-	HINT
 
 	// Keywords -- blocks
 	SWITCH
@@ -86,8 +84,6 @@ var tokenNames = map[TokenType]string{
 	AWAIT:           "AWAIT",
 	ALL:             "ALL",
 	ONE:             "ONE",
-	WATCH:           "WATCH",
-	HINT:            "HINT",
 	SWITCH:          "SWITCH",
 	CASE:            "CASE",
 	IF:              "IF",
@@ -146,8 +142,6 @@ var keywords = map[string]TokenType{
 	"await":           AWAIT,
 	"all":             ALL,
 	"one":             ONE,
-	"watch":           WATCH,
-	"hint":            HINT,
 	"switch":          SWITCH,
 	"case":            CASE,
 	"if":              IF,

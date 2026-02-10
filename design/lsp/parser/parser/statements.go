@@ -128,36 +128,181 @@ func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 	}, nil
 }
 
-// parseTimerStmt parses: TIMER duration_expr NEWLINE
-func parseTimerStmt(p *Parser) (ast.Statement, error) {
+// parseAwaitStmt handles both single await and await blocks (await all/one).
+// Single await: await timer(5m), await signal Name -> params, etc.
+// Block await: await all: ..., await one: ...
+func parseAwaitStmt(p *Parser) (ast.Statement, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume TIMER
-
-	duration := p.collectRawUntil(token.NEWLINE, token.COLON)
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.TimerStmt{
-		Pos:      pos,
-		Duration: duration,
-	}, nil
-}
-
-// parseAwaitBlock dispatches to parseAwaitAllBlock or parseAwaitOneBlock based on next token.
-// Parses: AWAIT (ALL | ONE) COLON ...
-func parseAwaitBlock(p *Parser) (ast.Statement, error) {
 	p.advance() // consume AWAIT
 
+	// Check if this is a block form (await all/one) or single await
 	switch p.current.Type {
 	case token.ALL:
 		return parseAwaitAllBlock(p)
 	case token.ONE:
 		return parseAwaitOneBlock(p)
 	default:
-		return nil, p.errorf("expected 'all' or 'one' after 'await', got %s", p.current.Type)
+		// Single await form
+		return parseSingleAwait(p, pos)
 	}
+}
+
+// parseSingleAwait parses a single await target:
+// timer(duration), signal Name [-> params], update Name [-> params],
+// activity Name(args) [-> result], workflow Name(args) [-> result]
+func parseSingleAwait(p *Parser, pos ast.Pos) (*ast.AwaitStmt, error) {
+	stmt := &ast.AwaitStmt{Pos: pos}
+
+	switch p.current.Type {
+	case token.TIMER:
+		// await timer(duration)
+		p.advance()
+		duration, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Timer = duration.Literal
+
+	case token.SIGNAL:
+		// await signal Name [-> params]
+		p.advance()
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Signal = name.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			params, err := parseParamBinding(p)
+			if err != nil {
+				return nil, err
+			}
+			stmt.SignalParams = params
+		}
+
+	case token.UPDATE:
+		// await update Name [-> params]
+		p.advance()
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Update = name.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			params, err := parseParamBinding(p)
+			if err != nil {
+				return nil, err
+			}
+			stmt.UpdateParams = params
+		}
+
+	case token.ACTIVITY:
+		// await activity Name(args) [-> result]
+		p.advance()
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Activity = name.Literal
+
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		stmt.ActivityArgs = args.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			result, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			stmt.ActivityResult = result.Literal
+		}
+
+	case token.SPAWN, token.DETACH, token.WORKFLOW:
+		// await [spawn|detach] workflow Name(args) [-> result]
+		mode := ast.CallChild
+		if p.current.Type == token.SPAWN {
+			mode = ast.CallSpawn
+			p.advance()
+		} else if p.current.Type == token.DETACH {
+			mode = ast.CallDetach
+			p.advance()
+		}
+		stmt.WorkflowMode = mode
+
+		// Optional nexus namespace
+		if p.current.Type == token.NEXUS {
+			p.advance()
+			ns, err := p.expect(token.STRING)
+			if err != nil {
+				return nil, err
+			}
+			stmt.WorkflowNamespace = ns.Literal
+		}
+
+		if _, err := p.expect(token.WORKFLOW); err != nil {
+			return nil, err
+		}
+
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Workflow = name.Literal
+
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		stmt.WorkflowArgs = args.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			result, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			stmt.WorkflowResult = result.Literal
+		}
+
+		// Validate: detach + arrow = error
+		if mode == ast.CallDetach && stmt.WorkflowResult != "" {
+			return nil, &ParseError{
+				Msg:    "detach workflow cannot have a result (-> identifier)",
+				Line:   pos.Line,
+				Column: pos.Column,
+			}
+		}
+
+	default:
+		return nil, p.errorf("expected timer, signal, update, activity, or workflow after 'await', got %s", p.current.Type)
+	}
+
+	if p.current.Type == token.NEWLINE {
+		p.advance()
+	}
+
+	return stmt, nil
+}
+
+// parseParamBinding parses parameter binding after ARROW:
+// either IDENT (single param) or ARGS (multiple params in parens)
+func parseParamBinding(p *Parser) (string, error) {
+	if p.current.Type == token.IDENT {
+		result := p.current.Literal
+		p.advance()
+		return result, nil
+	} else if p.current.Type == token.ARGS {
+		result := p.current.Literal
+		p.advance()
+		return result, nil
+	}
+	return "", p.errorf("expected identifier or ( after ->, got %s", p.current.Type)
 }
 
 // parseAwaitAllBlock parses: ALL COLON NEWLINE INDENT workflow_body DEDENT
@@ -225,32 +370,70 @@ func parseAwaitOneBlock(p *Parser) (ast.Statement, error) {
 	}, nil
 }
 
-// parseAwaitOneCase parses a single await one case (timer or await all).
+// parseAwaitOneCase parses a single await one case.
+// Supports: signal Name [-> params]:, update Name [-> params]:,
+// timer(duration):, activity Name(args) [-> result]:,
+// workflow Name(args) [-> result]:, or await all:
+// Case bodies are optional (can be empty after colon).
 func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	c := &ast.AwaitOneCase{Pos: pos}
 
 	switch p.current.Type {
-	case token.WATCH:
-		// Watch case: WATCH ARGS COLON NEWLINE INDENT body DEDENT
+	case token.SIGNAL:
+		// signal Name [-> params]: [body]
 		p.advance()
-		variable, err := p.expect(token.ARGS)
+		name, err := p.expect(token.IDENT)
 		if err != nil {
 			return nil, err
 		}
-		c.WatchVariable = variable.Literal
+		c.Signal = name.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			params, err := parseParamBinding(p)
+			if err != nil {
+				return nil, err
+			}
+			c.SignalParams = params
+		}
 
 		if _, err := p.expect(token.COLON); err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(token.NEWLINE); err != nil {
+
+		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
+		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(token.INDENT); err != nil {
+		c.Body = body
+		return c, nil
+
+	case token.UPDATE:
+		// update Name [-> params]: [body]
+		p.advance()
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		c.Update = name.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			params, err := parseParamBinding(p)
+			if err != nil {
+				return nil, err
+			}
+			c.UpdateParams = params
+		}
+
+		if _, err := p.expect(token.COLON); err != nil {
 			return nil, err
 		}
 
-		body, err := p.parseBody()
+		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
 		if err != nil {
 			return nil, err
 		}
@@ -258,25 +441,124 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 		return c, nil
 
 	case token.TIMER:
-		// Timer case: TIMER ARGS COLON NEWLINE INDENT body DEDENT
+		// timer(duration): [body]
 		p.advance()
 		duration, err := p.expect(token.ARGS)
 		if err != nil {
 			return nil, err
 		}
-		c.TimerDuration = duration.Literal
+		c.Timer = duration.Literal
 
 		if _, err := p.expect(token.COLON); err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(token.NEWLINE); err != nil {
+
+		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
+		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(token.INDENT); err != nil {
+		c.Body = body
+		return c, nil
+
+	case token.ACTIVITY:
+		// activity Name(args) [-> result]: [body]
+		p.advance()
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		c.Activity = name.Literal
+
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		c.ActivityArgs = args.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			result, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			c.ActivityResult = result.Literal
+		}
+
+		if _, err := p.expect(token.COLON); err != nil {
 			return nil, err
 		}
 
-		body, err := p.parseBody()
+		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
+		if err != nil {
+			return nil, err
+		}
+		c.Body = body
+		return c, nil
+
+	case token.SPAWN, token.DETACH, token.WORKFLOW:
+		// [spawn|detach] workflow Name(args) [-> result]: [body]
+		mode := ast.CallChild
+		if p.current.Type == token.SPAWN {
+			mode = ast.CallSpawn
+			p.advance()
+		} else if p.current.Type == token.DETACH {
+			mode = ast.CallDetach
+			p.advance()
+		}
+		c.WorkflowMode = mode
+
+		// Optional nexus namespace
+		if p.current.Type == token.NEXUS {
+			p.advance()
+			ns, err := p.expect(token.STRING)
+			if err != nil {
+				return nil, err
+			}
+			c.WorkflowNamespace = ns.Literal
+		}
+
+		if _, err := p.expect(token.WORKFLOW); err != nil {
+			return nil, err
+		}
+
+		name, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		c.Workflow = name.Literal
+
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		c.WorkflowArgs = args.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			result, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			c.WorkflowResult = result.Literal
+		}
+
+		// Validate: detach + arrow = error
+		if mode == ast.CallDetach && c.WorkflowResult != "" {
+			return nil, &ParseError{
+				Msg:    "detach workflow cannot have a result (-> identifier)",
+				Line:   pos.Line,
+				Column: pos.Column,
+			}
+		}
+
+		if _, err := p.expect(token.COLON); err != nil {
+			return nil, err
+		}
+
+		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
 		if err != nil {
 			return nil, err
 		}
@@ -284,21 +566,52 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 		return c, nil
 
 	case token.AWAIT:
-		// Nested await all case: AWAIT ALL COLON NEWLINE INDENT body DEDENT
-		stmt, err := parseAwaitBlock(p)
+		// Nested await all case: await all: ...
+		stmt, err := parseAwaitStmt(p)
 		if err != nil {
 			return nil, err
 		}
 		awaitAll, ok := stmt.(*ast.AwaitAllBlock)
 		if !ok {
-			return nil, p.errorf("expected 'await all' in await one case, got await one")
+			return nil, p.errorf("expected 'await all' in await one case, got %s", stmt)
 		}
 		c.AwaitAll = awaitAll
 		return c, nil
 
 	default:
-		return nil, p.errorf("unexpected token %s in await one case (expected 'watch', 'timer', or 'await')", p.current.Type)
+		return nil, p.errorf("unexpected token %s in await one case (expected signal, update, timer, activity, workflow, or await)", p.current.Type)
 	}
+}
+
+// parseOptionalCaseBody parses an optional case body after colon.
+// If the next token after NEWLINE is DEDENT or another case keyword, the body is empty.
+func parseOptionalCaseBody(p *Parser) ([]ast.Statement, error) {
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return nil, err
+	}
+
+	// Check if body is empty (next token is DEDENT or case keyword)
+	if p.current.Type == token.DEDENT || isCaseKeyword(p.current.Type) {
+		return nil, nil
+	}
+
+	if _, err := p.expect(token.INDENT); err != nil {
+		return nil, err
+	}
+
+	body, err := p.parseBody()
+	if err != nil {
+		return nil, err
+	}
+
+	return body, nil
+}
+
+// isCaseKeyword checks if a token type is a valid await one case keyword.
+func isCaseKeyword(t token.TokenType) bool {
+	return t == token.SIGNAL || t == token.UPDATE || t == token.TIMER ||
+		t == token.ACTIVITY || t == token.WORKFLOW || t == token.SPAWN ||
+		t == token.DETACH || t == token.AWAIT
 }
 
 // parseSwitchBlock parses: SWITCH ARGS COLON NEWLINE INDENT { switch_case } [ else ] DEDENT
@@ -600,40 +913,6 @@ func parseContinueStmt(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.ContinueStmt{Pos: pos}, nil
-}
-
-// parseHintStmt parses: HINT (SIGNAL | UPDATE) IDENT NEWLINE
-func parseHintStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume HINT
-
-	var kind string
-	switch p.current.Type {
-	case token.SIGNAL:
-		kind = "signal"
-	case token.QUERY:
-		kind = "query"
-	case token.UPDATE:
-		kind = "update"
-	default:
-		return nil, p.errorf("hint target must be signal, query, or update, got %s", p.current.Type)
-	}
-	p.advance()
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.HintStmt{
-		Pos:  pos,
-		Kind: kind,
-		Name: name.Literal,
-	}, nil
 }
 
 // parseRawStmt captures the rest of the line as a raw statement.

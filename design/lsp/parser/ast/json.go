@@ -215,12 +215,25 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Result:    s.Result,
 			Options:   s.Options,
 		})
-	case *TimerStmt:
-		return json.Marshal(timerStmtJSON{
-			Type:     "timer",
-			Line:     s.Line,
-			Column:   s.Column,
-			Duration: s.Duration,
+	case *AwaitStmt:
+		return json.Marshal(awaitStmtJSON{
+			Type:          "await",
+			Line:          s.Line,
+			Column:        s.Column,
+			Kind:          s.AwaitKind(),
+			Timer:         s.Timer,
+			Signal:        s.Signal,
+			SignalParams:  s.SignalParams,
+			Update:        s.Update,
+			UpdateParams:  s.UpdateParams,
+			Activity:      s.Activity,
+			ActivityArgs:  s.ActivityArgs,
+			ActivityResult: s.ActivityResult,
+			Workflow:      s.Workflow,
+			WorkflowMode:  workflowCallModeString(s.WorkflowMode),
+			WorkflowNamespace: s.WorkflowNamespace,
+			WorkflowArgs:  s.WorkflowArgs,
+			WorkflowResult: s.WorkflowResult,
 		})
 	case *AwaitAllBlock:
 		body := make([]json.RawMessage, 0, len(s.Body))
@@ -257,11 +270,22 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				awaitAllData = data
 			}
 			cases = append(cases, awaitOneCaseJSON{
-				Kind:          c.CaseKind(),
-				WatchVariable: c.WatchVariable,
-				TimerDuration: c.TimerDuration,
-				AwaitAll:      awaitAllData,
-				Body:          caseBody,
+				Kind:              c.CaseKind(),
+				Signal:            c.Signal,
+				SignalParams:      c.SignalParams,
+				Update:            c.Update,
+				UpdateParams:      c.UpdateParams,
+				Timer:             c.Timer,
+				Activity:          c.Activity,
+				ActivityArgs:      c.ActivityArgs,
+				ActivityResult:    c.ActivityResult,
+				Workflow:          c.Workflow,
+				WorkflowMode:      workflowCallModeString(c.WorkflowMode),
+				WorkflowNamespace: c.WorkflowNamespace,
+				WorkflowArgs:      c.WorkflowArgs,
+				WorkflowResult:    c.WorkflowResult,
+				AwaitAll:          awaitAllData,
+				Body:              caseBody,
 			})
 		}
 		return json.Marshal(awaitOneBlockJSON{
@@ -387,14 +411,6 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Column: s.Column,
 			Text:   s.Text,
 		})
-	case *HintStmt:
-		return json.Marshal(hintStmtJSON{
-			Type:   "hint",
-			Line:   s.Line,
-			Column: s.Column,
-			Kind:   s.Kind,
-			Name:   s.Name,
-		})
 	case *Comment:
 		return json.Marshal(commentJSON{
 			Type:   "comment",
@@ -456,11 +472,24 @@ type workflowCallJSON struct {
 	Options   string `json:"options,omitempty"`
 }
 
-type timerStmtJSON struct {
-	Type     string `json:"type"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column"`
-	Duration string `json:"duration"`
+type awaitStmtJSON struct {
+	Type              string `json:"type"`
+	Line              int    `json:"line"`
+	Column            int    `json:"column"`
+	Kind              string `json:"kind"`
+	Timer             string `json:"timer,omitempty"`
+	Signal            string `json:"signal,omitempty"`
+	SignalParams      string `json:"signalParams,omitempty"`
+	Update            string `json:"update,omitempty"`
+	UpdateParams      string `json:"updateParams,omitempty"`
+	Activity          string `json:"activity,omitempty"`
+	ActivityArgs      string `json:"activityArgs,omitempty"`
+	ActivityResult    string `json:"activityResult,omitempty"`
+	Workflow          string `json:"workflow,omitempty"`
+	WorkflowMode      string `json:"workflowMode,omitempty"`
+	WorkflowNamespace string `json:"workflowNamespace,omitempty"`
+	WorkflowArgs      string `json:"workflowArgs,omitempty"`
+	WorkflowResult    string `json:"workflowResult,omitempty"`
 }
 
 type awaitAllBlockJSON struct {
@@ -471,11 +500,22 @@ type awaitAllBlockJSON struct {
 }
 
 type awaitOneCaseJSON struct {
-	Kind          string            `json:"kind"`
-	WatchVariable string            `json:"watchVariable,omitempty"`
-	TimerDuration string            `json:"timerDuration,omitempty"`
-	AwaitAll      json.RawMessage   `json:"awaitAll,omitempty"`
-	Body          []json.RawMessage `json:"body"`
+	Kind              string            `json:"kind"`
+	Signal            string            `json:"signal,omitempty"`
+	SignalParams      string            `json:"signalParams,omitempty"`
+	Update            string            `json:"update,omitempty"`
+	UpdateParams      string            `json:"updateParams,omitempty"`
+	Timer             string            `json:"timer,omitempty"`
+	Activity          string            `json:"activity,omitempty"`
+	ActivityArgs      string            `json:"activityArgs,omitempty"`
+	ActivityResult    string            `json:"activityResult,omitempty"`
+	Workflow          string            `json:"workflow,omitempty"`
+	WorkflowMode      string            `json:"workflowMode,omitempty"`
+	WorkflowNamespace string            `json:"workflowNamespace,omitempty"`
+	WorkflowArgs      string            `json:"workflowArgs,omitempty"`
+	WorkflowResult    string            `json:"workflowResult,omitempty"`
+	AwaitAll          json.RawMessage   `json:"awaitAll,omitempty"`
+	Body              []json.RawMessage `json:"body"`
 }
 
 type awaitOneBlockJSON struct {
@@ -553,15 +593,7 @@ type continueStmtJSON struct {
 	Column int    `json:"column"`
 }
 
-type hintStmtJSON struct {
-	Type   string `json:"type"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
-	Kind   string `json:"kind"`
-	Name   string `json:"name"`
-}
-
-type rawStmtJSON struct {
+type rawStmtJSON struct{
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`

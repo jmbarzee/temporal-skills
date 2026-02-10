@@ -19,16 +19,17 @@ func NewHandler(name, version string) *protocol.Handler {
 		TextDocumentDidChange: didChangeHandler(store),
 		TextDocumentDidClose: didCloseHandler(store),
 
-		TextDocumentHover:          hoverHandler(store),
-		TextDocumentDefinition:     definitionHandler(store),
-		TextDocumentDocumentSymbol: documentSymbolHandler(store),
-		TextDocumentCompletion:     completionHandler(store),
+		TextDocumentHover:               hoverHandler(store),
+		TextDocumentDefinition:          definitionHandler(store),
+		TextDocumentDocumentSymbol:      documentSymbolHandler(store),
+		TextDocumentCompletion:          completionHandler(store),
 		TextDocumentReferences:          referencesHandler(store),
 		TextDocumentRename:              renameHandler(store),
 		TextDocumentPrepareRename:       prepareRenameHandler(store),
 		TextDocumentSemanticTokensFull:  semanticTokensHandler(store),
 		TextDocumentFoldingRange:        foldingRangeHandler(store),
 		TextDocumentSignatureHelp:       signatureHelpHandler(store),
+		TextDocumentCodeAction:          codeActionHandler(store),
 	}
 
 	return handler
@@ -46,9 +47,15 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 				DefinitionProvider:     &protocol.DefinitionOptions{},
 				DocumentSymbolProvider: &protocol.DocumentSymbolOptions{},
 				CompletionProvider:     &protocol.CompletionOptions{},
-				ReferencesProvider: &protocol.ReferenceOptions{},
-				RenameProvider:     &protocol.RenameOptions{PrepareProvider: boolPtr(true)},
-				FoldingRangeProvider: &protocol.FoldingRangeOptions{},
+				ReferencesProvider:     &protocol.ReferenceOptions{},
+				RenameProvider:         &protocol.RenameOptions{PrepareProvider: boolPtr(true)},
+				FoldingRangeProvider:   &protocol.FoldingRangeOptions{},
+				CodeActionProvider: &protocol.CodeActionOptions{
+					CodeActionKinds: []protocol.CodeActionKind{
+						protocol.CodeActionKindQuickFix,
+						protocol.CodeActionKindRefactor,
+					},
+				},
 				SignatureHelpProvider: &protocol.SignatureHelpOptions{
 					TriggerCharacters: []string{"("},
 				},

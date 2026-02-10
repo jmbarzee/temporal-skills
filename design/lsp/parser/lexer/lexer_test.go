@@ -7,11 +7,11 @@ import (
 )
 
 func TestKeywords(t *testing.T) {
-	input := "workflow activity signal query update spawn detach nexus timer options await all one hint switch case if else for in return continue_as_new break continue"
+	input := "workflow activity signal query update spawn detach nexus timer options await all one switch case if else for in return continue_as_new break continue"
 	expected := []token.TokenType{
 		token.WORKFLOW, token.ACTIVITY, token.SIGNAL, token.QUERY, token.UPDATE,
 		token.SPAWN, token.DETACH, token.NEXUS, token.TIMER, token.OPTIONS,
-		token.AWAIT, token.ALL, token.ONE, token.HINT, token.SWITCH,
+		token.AWAIT, token.ALL, token.ONE, token.SWITCH,
 		token.CASE, token.IF, token.ELSE, token.FOR, token.IN,
 		token.RETURN, token.CONTINUE_AS_NEW, token.BREAK, token.CONTINUE,
 		token.NEWLINE, token.EOF,

@@ -1,0 +1,507 @@
+/* Hierarchical Block Styles */
+
+/* === Theme Variables === */
+:root {
+  /* Light theme (default) */
+  --block-workflow-bg: linear-gradient(135deg, #E9E4F5 0%, #DDD6EE 100%);
+  --block-workflow-border: #B8ABE3;
+  --block-workflow-text: #4A3B78;
+
+  --block-activity-bg: linear-gradient(135deg, #EDF5FC 0%, #E3F0FA 100%);
+  --block-activity-border: #B8D9F5;
+  --block-activity-text: #2C5282;
+
+  --block-workflow-call-bg: linear-gradient(135deg, #F3F0FA 0%, #EBE6F5 100%);
+  --block-workflow-call-border: #C4B8E8;
+  --block-workflow-call-text: #5A4B88;
+
+  --block-timer-bg: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+  --block-timer-border: #FCD34D;
+  --block-timer-text: #78350F;
+
+  --block-await-bg: linear-gradient(135deg, #E0F5F1 0%, #CCF0E8 100%);
+  --block-await-border: #81E6D9;
+  --block-await-text: #234E47;
+
+  --block-signal-bg: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+  --block-signal-border: #F87171;
+  --block-signal-text: #B91C1C;
+
+  --block-update-bg: linear-gradient(135deg, #FFEDD5 0%, #FED7AA 100%);
+  --block-update-border: #FB923C;
+  --block-update-text: #C2410C;
+
+  --block-control-bg: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%);
+  --block-control-border: #CBD5E1;
+  --block-control-text: #334155;
+
+  --block-case-bg: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+  --block-case-border: #E2E8F0;
+  --block-case-text: #475569;
+
+  --block-return-bg: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
+  --block-return-border: #6EE7B7;
+  --block-return-text: #065F46;
+
+  --block-continue-new-bg: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+  --block-continue-new-border: #FDBA74;
+  --block-continue-new-text: #9A3412;
+
+  --block-raw-bg: #F8FAFC;
+  --block-raw-border: #E2E8F0;
+  --block-raw-text: #64748B;
+
+  --block-subtle-bg: #F8FAFC;
+  --block-subtle-border: #E2E8F0;
+  --block-subtle-text: #94A3B8;
+
+  --decl-signal-bg: rgba(239, 68, 68, 0.15);
+  --decl-signal-text: #B91C1C;
+  --decl-query-bg: rgba(167, 139, 250, 0.2);
+  --decl-query-text: #5B21B6;
+  --decl-update-bg: rgba(251, 146, 60, 0.2);
+  --decl-update-text: #C2410C;
+
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --hover-brightness: 0.95;
+}
+
+/* Dark theme - applied when VSCode is in dark mode */
+.vscode-dark,
+[data-theme="dark"] {
+  --block-workflow-bg: linear-gradient(135deg, #2D2640 0%, #352D4A 100%);
+  --block-workflow-border: #6B5B95;
+  --block-workflow-text: #D4C8F0;
+
+  --block-activity-bg: linear-gradient(135deg, #1E2D3D 0%, #243647 100%);
+  --block-activity-border: #4A7BA7;
+  --block-activity-text: #A8D4F0;
+
+  --block-workflow-call-bg: linear-gradient(135deg, #2A2440 0%, #322B4A 100%);
+  --block-workflow-call-border: #7B6BA5;
+  --block-workflow-call-text: #C8BDE8;
+
+  --block-timer-bg: linear-gradient(135deg, #3D3520 0%, #4A4028 100%);
+  --block-timer-border: #B8962D;
+  --block-timer-text: #F5E6A8;
+
+  --block-await-bg: linear-gradient(135deg, #1E3530 0%, #244038 100%);
+  --block-await-border: #4DAA9D;
+  --block-await-text: #A8E8DC;
+
+  --block-signal-bg: linear-gradient(135deg, #3D1E1E 0%, #4A2424 100%);
+  --block-signal-border: #DC2626;
+  --block-signal-text: #FCA5A5;
+
+  --block-update-bg: linear-gradient(135deg, #3D2D1E 0%, #4A3524 100%);
+  --block-update-border: #EA580C;
+  --block-update-text: #FDBA74;
+
+  --block-control-bg: linear-gradient(135deg, #252830 0%, #2D3138 100%);
+  --block-control-border: #4A5568;
+  --block-control-text: #CBD5E1;
+
+  --block-case-bg: linear-gradient(135deg, #1E2024 0%, #252830 100%);
+  --block-case-border: #3D4550;
+  --block-case-text: #A0AEC0;
+
+  --block-return-bg: linear-gradient(135deg, #1E3028 0%, #243830 100%);
+  --block-return-border: #48BB78;
+  --block-return-text: #A8E6C0;
+
+  --block-continue-new-bg: linear-gradient(135deg, #3D2D20 0%, #4A3528 100%);
+  --block-continue-new-border: #C87D3D;
+  --block-continue-new-text: #F5D4A8;
+
+  --block-raw-bg: #1E2024;
+  --block-raw-border: #3D4550;
+  --block-raw-text: #A0AEC0;
+
+  --block-subtle-bg: #1E2024;
+  --block-subtle-border: #3D4550;
+  --block-subtle-text: #718096;
+
+  --decl-signal-bg: rgba(239, 68, 68, 0.2);
+  --decl-signal-text: #FCA5A5;
+  --decl-query-bg: rgba(167, 139, 250, 0.2);
+  --decl-query-text: #C8B8F0;
+  --decl-update-bg: rgba(251, 146, 60, 0.2);
+  --decl-update-text: #FDBA74;
+
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --hover-brightness: 1.1;
+}
+
+/* === Base Block Styles === */
+.block {
+  position: relative;
+  margin: 4px 0;
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  transition: box-shadow 0.15s;
+}
+
+.block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.15s;
+}
+
+.block-header:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.block-toggle {
+  font-size: 10px;
+  width: 14px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.block-toggle-placeholder {
+  width: 14px;
+}
+
+.block-icon {
+  font-size: 12px;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  width: 16px;
+  justify-content: center;
+}
+
+.block-icon-placeholder {
+  width: 16px;
+}
+
+.block-keyword {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.block-signature {
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block-code {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Body - nested content offset to the right (no line) */
+.block-body {
+  position: relative;
+  margin-left: 20px;
+  padding: 4px 0 4px 12px;
+}
+
+/* When expanded, add subtle shadow */
+.block.expanded {
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.block.expanded>.block-header {
+  border-radius: 6px 6px 0 0;
+}
+
+/* Declarations (signals, queries, updates) */
+.block-declarations {
+  margin-bottom: 8px;
+  padding: 4px 0;
+}
+
+.declaration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  margin: 2px 0;
+}
+
+.declaration-icon {
+  font-size: 11px;
+}
+
+.declaration-keyword {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.declaration-name {
+  font-weight: 600;
+}
+
+.declaration-params {
+  opacity: 0.7;
+}
+
+.declaration-return {
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
+/* Branch labels */
+.branch-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.block-branch {
+  margin: 8px 0;
+}
+
+/* === Block Type Colors === */
+
+/* Workflow Definition - Purple */
+.block-workflow {
+  background: var(--block-workflow-bg);
+  border: 2px solid var(--block-workflow-border);
+}
+
+.block-workflow>.block-header {
+  color: var(--block-workflow-text);
+}
+
+/* Activity Call - Blue */
+.block-activity {
+  background: var(--block-activity-bg);
+  border: 1px solid var(--block-activity-border);
+}
+
+.block-activity>.block-header {
+  color: var(--block-activity-text);
+}
+
+/* Activity Definition - Blue (same as call) */
+.block-activity-def {
+  background: var(--block-activity-bg);
+  border: 2px solid var(--block-activity-border);
+}
+
+.block-activity-def>.block-header {
+  color: var(--block-activity-text);
+}
+
+/* Workflow Call - Purple (lighter) */
+.block-workflow-call {
+  background: var(--block-workflow-call-bg);
+  border: 1px solid var(--block-workflow-call-border);
+}
+
+.block-workflow-call>.block-header {
+  color: var(--block-workflow-call-text);
+}
+
+.block-workflow-call.block-mode-spawn {
+  border-color: #68D391;
+}
+
+.block-workflow-call.block-mode-detach {
+  border-style: dashed;
+}
+
+/* Timer - Yellow */
+.block-timer {
+  background: var(--block-timer-bg);
+  border: 1px solid var(--block-timer-border);
+}
+
+.block-timer>.block-header {
+  color: var(--block-timer-text);
+}
+
+/* Await - Teal */
+.block-await {
+  background: var(--block-await-bg);
+  border: 1px solid var(--block-await-border);
+}
+
+.block-await>.block-header {
+  color: var(--block-await-text);
+}
+
+/* Signal - Red (matches declaration color) */
+.block-signal {
+  background: var(--block-signal-bg);
+  border: 1px solid var(--block-signal-border);
+}
+
+.block-signal>.block-header {
+  color: var(--block-signal-text);
+}
+
+/* Update - Orange (matches declaration color) */
+.block-update {
+  background: var(--block-update-bg);
+  border: 1px solid var(--block-update-border);
+}
+
+.block-update>.block-header {
+  color: var(--block-update-text);
+}
+
+/* Control Flow - Gray/Slate */
+.block-parallel,
+.block-select,
+.block-switch,
+.block-if,
+.block-for {
+  background: var(--block-control-bg);
+  border: 1px solid var(--block-control-border);
+}
+
+.block-parallel>.block-header,
+.block-select>.block-header,
+.block-switch>.block-header,
+.block-if>.block-header,
+.block-for>.block-header {
+  color: var(--block-control-text);
+}
+
+/* Select option marker - bookmark tab to indicate mutual exclusivity */
+.block-select>.block-body>.block {
+  position: relative;
+  margin-left: 14px;
+}
+
+.block-select>.block-body>.block::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 5px;
+  width: 12px;
+  height: 20px;
+  background: var(--block-control-border);
+  border-radius: 4px 0 0 4px;
+}
+
+/* Switch cases */
+.block-switch-case,
+.block-switch-default {
+  background: var(--block-case-bg);
+  border: 1px solid var(--block-case-border);
+  margin-left: 0;
+}
+
+.block-switch-case>.block-header,
+.block-switch-default>.block-header {
+  color: var(--block-case-text);
+}
+
+/* Return - Green */
+.block-return {
+  background: var(--block-return-bg);
+  border: 1px solid var(--block-return-border);
+}
+
+.block-return>.block-header {
+  color: var(--block-return-text);
+}
+
+/* Continue as new - Orange */
+.block-continue-as-new {
+  background: var(--block-continue-new-bg);
+  border: 1px solid var(--block-continue-new-border);
+}
+
+.block-continue-as-new>.block-header {
+  color: var(--block-continue-new-text);
+}
+
+/* Raw code - Light gray */
+.block-raw {
+  background: var(--block-raw-bg);
+  border: 1px solid var(--block-raw-border);
+}
+
+.block-raw>.block-header {
+  color: var(--block-raw-text);
+}
+
+/* Break/Continue - Subtle */
+.block-break,
+.block-continue {
+  background: var(--block-subtle-bg);
+  border: 1px solid var(--block-subtle-border);
+}
+
+.block-break>.block-header,
+.block-continue>.block-header {
+  color: var(--block-subtle-text);
+}
+
+/* Declarations group header */
+.block-declarations-group {
+  margin-bottom: 8px;
+}
+
+.declarations-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.declarations-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.declarations-header .block-toggle {
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+.declarations-icon {
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.declarations-label {
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.declarations-count {
+  opacity: 0.5;
+  font-size: 11px;
+}
+
+/* Declarations coloring */
+.declaration-signal,
+.declarations-icon.declaration-signal {
+  background: var(--decl-signal-bg);
+  color: var(--decl-signal-text);
+}
+
+.declaration-query,
+.declarations-icon.declaration-query {
+  background: var(--decl-query-bg);
+  color: var(--decl-query-text);
+}
+
+.declaration-update,
+.declarations-icon.declaration-update {
+  background: var(--decl-update-bg);
+  color: var(--decl-update-text);
+}

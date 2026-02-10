@@ -61,6 +61,12 @@
         "title": "Visualize Workflow",
         "category": "TWF",
         "icon": "$(graph)"
+      },
+      {
+        "command": "twf.visualizeFolder",
+        "title": "Visualize All Workflows in Folder",
+        "category": "TWF",
+        "icon": "$(folder)"
       }
     ],
     "menus": {
@@ -78,10 +84,25 @@
           "group": "navigation"
         }
       ],
+      "explorer/context": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        },
+        {
+          "when": "explorerResourceIsFolder",
+          "command": "twf.visualizeFolder",
+          "group": "navigation"
+        }
+      ],
       "commandPalette": [
         {
           "command": "twf.visualize",
           "when": "resourceLangId == twf"
+        },
+        {
+          "command": "twf.visualizeFolder"
         }
       ]
     },

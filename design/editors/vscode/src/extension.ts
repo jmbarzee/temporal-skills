@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import {
@@ -17,26 +16,73 @@ export function activate(context: vscode.ExtensionContext) {
   // Start LSP client
   startLanguageClient(context);
 
-  // Register visualize command
+  // Register visualize file command
   const visualizeCommand = vscode.commands.registerCommand(
     "twf.visualize",
-    () => {
+    async (uri?: vscode.Uri) => {
+      // If called from explorer context menu, use the URI
+      if (uri) {
+        WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, [uri.fsPath]);
+        return;
+      }
+      
+      // Otherwise use active editor
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== "twf") {
         vscode.window.showWarningMessage("Please open a .twf file to visualize");
         return;
       }
-      WorkflowVisualizerPanel.createOrShow(context.extensionUri, editor.document);
+      WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, [editor.document.uri.fsPath]);
+    }
+  );
+
+  // Register visualize folder command
+  const visualizeFolderCommand = vscode.commands.registerCommand(
+    "twf.visualizeFolder",
+    async (uri?: vscode.Uri) => {
+      let folderPath: string | undefined;
+      
+      if (uri) {
+        folderPath = uri.fsPath;
+      } else {
+        // Prompt user to select a folder
+        const folders = await vscode.window.showOpenDialog({
+          canSelectFiles: false,
+          canSelectFolders: true,
+          canSelectMany: false,
+          title: "Select folder containing .twf files",
+        });
+        if (folders && folders.length > 0) {
+          folderPath = folders[0].fsPath;
+        }
+      }
+      
+      if (!folderPath) {
+        return;
+      }
+      
+      // Find all .twf files in the folder
+      const pattern = new vscode.RelativePattern(folderPath, "**/*.twf");
+      const uris = await vscode.workspace.findFiles(pattern);
+      
+      if (uris.length === 0) {
+        vscode.window.showWarningMessage("No .twf files found in the selected folder");
+        return;
+      }
+      
+      const files = uris.map((u) => u.fsPath);
+      WorkflowVisualizerPanel.createOrShowForFiles(context.extensionUri, files);
     }
   );
 
   context.subscriptions.push(visualizeCommand);
+  context.subscriptions.push(visualizeFolderCommand);
 
   // Watch for document changes to update visualization
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc.languageId === "twf") {
-        WorkflowVisualizerPanel.updateIfVisible(doc);
+        WorkflowVisualizerPanel.refreshIfVisible();
       }
     })
   );
@@ -96,19 +142,16 @@ class WorkflowVisualizerPanel {
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
-  private _document: vscode.TextDocument;
+  private _files: string[];
   private _disposables: vscode.Disposable[] = [];
 
-  public static createOrShow(
-    extensionUri: vscode.Uri,
-    document: vscode.TextDocument
-  ) {
+  public static createOrShowForFiles(extensionUri: vscode.Uri, files: string[]) {
     const column = vscode.ViewColumn.Beside;
 
-    // If we already have a panel, show it
+    // If we already have a panel, update it
     if (WorkflowVisualizerPanel.currentPanel) {
       WorkflowVisualizerPanel.currentPanel._panel.reveal(column);
-      WorkflowVisualizerPanel.currentPanel._document = document;
+      WorkflowVisualizerPanel.currentPanel._files = files;
       WorkflowVisualizerPanel.currentPanel._update();
       return;
     }
@@ -130,13 +173,12 @@ class WorkflowVisualizerPanel {
     WorkflowVisualizerPanel.currentPanel = new WorkflowVisualizerPanel(
       panel,
       extensionUri,
-      document
+      files
     );
   }
 
-  public static updateIfVisible(document: vscode.TextDocument) {
+  public static refreshIfVisible() {
     if (WorkflowVisualizerPanel.currentPanel) {
-      WorkflowVisualizerPanel.currentPanel._document = document;
       WorkflowVisualizerPanel.currentPanel._update();
     }
   }
@@ -144,11 +186,11 @@ class WorkflowVisualizerPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
-    document: vscode.TextDocument
+    files: string[]
   ) {
     this._panel = panel;
     this._extensionUri = extensionUri;
-    this._document = document;
+    this._files = files;
 
     // Set initial HTML content
     this._panel.webview.html = this._getHtmlForWebview();
@@ -185,7 +227,7 @@ class WorkflowVisualizerPanel {
 
   private async _update() {
     try {
-      const ast = await this._parseDocument();
+      const ast = await this._parseFiles();
       this._panel.webview.postMessage({ type: "ast", data: ast });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -193,31 +235,19 @@ class WorkflowVisualizerPanel {
     }
   }
 
-  private async _parseDocument(): Promise<unknown> {
+  private async _parseFiles(): Promise<unknown> {
     const config = vscode.workspace.getConfiguration("twf.parser");
     const configPath = config.get<string>("path", "");
     const parserCommand = configPath || "parse";
 
-    // Get all .twf files in the workspace that might be needed for resolution
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(this._document.uri);
-    let twfFiles: string[] = [];
-    
-    if (workspaceFolder) {
-      const pattern = new vscode.RelativePattern(workspaceFolder, "**/*.twf");
-      const uris = await vscode.workspace.findFiles(pattern);
-      twfFiles = uris.map((uri) => uri.fsPath);
-    }
-    
-    // Ensure current file is included
-    const currentPath = this._document.uri.fsPath;
-    if (!twfFiles.includes(currentPath)) {
-      twfFiles.push(currentPath);
+    if (this._files.length === 0) {
+      throw new Error("No .twf files to parse");
     }
 
     try {
       const { stdout, stderr } = await execFileAsync(parserCommand, [
         "--json",
-        ...twfFiles,
+        ...this._files,
       ]);
 
       if (stderr) {
@@ -261,7 +291,7 @@ class WorkflowVisualizerPanel {
         width: 100%;
         margin: 0;
         padding: 0;
-        overflow: hidden;
+        overflow: auto;
       }
     </style>
 </head>

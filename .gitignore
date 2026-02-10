@@ -3,4 +3,6 @@ node_modules/
 out/
 dist/
 *.vsix
-publish-extension.sh
+
+# Publish tokens (contains secrets)
+.env.publish

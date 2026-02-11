@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TWFFile, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl } from '../types/ast'
+import type { TWFFile, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
 
 interface WorkflowCanvasProps {
@@ -61,6 +61,12 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
   // Extract just the filename for display
   const focusedFileName = ast.focusedFile?.split('/').pop() || 'All Workflows'
 
+  // Filter errors relevant to the focused file (or show all if no focused file)
+  const errors = ast.errors || []
+  const relevantErrors = ast.focusedFile
+    ? errors.filter(e => e.file === ast.focusedFile)
+    : errors
+
   return (
     <DefinitionContextProvider.Provider value={context}>
       <div className="workflow-canvas">
@@ -70,7 +76,10 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
             <span className="file-name">{focusedFileName}</span>
           </div>
         )}
-        {workflows.length === 0 ? (
+        {relevantErrors.length > 0 && (
+          <ParseErrors errors={relevantErrors} />
+        )}
+        {workflows.length === 0 && relevantErrors.length === 0 ? (
           <div className="no-workflows">
             <p>No workflows defined in this file</p>
           </div>
@@ -79,7 +88,58 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
             <DefinitionBlock key={workflow.name} definition={workflow} />
           ))
         )}
+        {/* Show other file errors collapsed if viewing a specific file */}
+        {ast.focusedFile && errors.length > relevantErrors.length && (
+          <OtherFileErrors errors={errors.filter(e => e.file !== ast.focusedFile)} />
+        )}
       </div>
     </DefinitionContextProvider.Provider>
+  )
+}
+
+/** Display parse errors prominently */
+function ParseErrors({ errors }: { errors: FileError[] }) {
+  return (
+    <div className="parse-errors">
+      <div className="parse-errors-header">
+        <span className="parse-errors-icon">⚠</span>
+        <span className="parse-errors-title">
+          {errors.length === 1 ? 'Parse error' : `${errors.length} parse errors`}
+        </span>
+      </div>
+      {errors.map((err, i) => (
+        <div key={i} className="parse-error-item">
+          <div className="parse-error-file">{err.file.split('/').pop()}</div>
+          <pre className="parse-error-message">{err.stderr || err.error}</pre>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Collapsed section for errors in other files */
+function OtherFileErrors({ errors }: { errors: FileError[] }) {
+  const [expanded, setExpanded] = React.useState(false)
+
+  return (
+    <div className="other-file-errors">
+      <div className="other-file-errors-header" onClick={() => setExpanded(!expanded)}>
+        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="other-file-errors-icon">⚠</span>
+        <span className="other-file-errors-title">
+          {errors.length} error{errors.length !== 1 ? 's' : ''} in other files
+        </span>
+      </div>
+      {expanded && (
+        <div className="other-file-errors-body">
+          {errors.map((err, i) => (
+            <div key={i} className="parse-error-item">
+              <div className="parse-error-file">{err.file.split('/').pop()}</div>
+              <pre className="parse-error-message">{err.stderr || err.error}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

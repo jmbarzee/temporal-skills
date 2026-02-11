@@ -242,3 +242,106 @@ body {
 .file-upload-btn input {
   display: none;
 }
+
+/* Parse errors displayed in the canvas */
+.parse-errors {
+  margin-bottom: 20px;
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.parse-errors-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-error);
+  border-bottom: 1px solid var(--color-error-border);
+}
+
+.parse-errors-icon {
+  font-size: 16px;
+}
+
+.parse-error-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-error-border);
+}
+
+.parse-error-item:last-child {
+  border-bottom: none;
+}
+
+.parse-error-file {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-error-text);
+  margin-bottom: 6px;
+}
+
+.parse-error-message {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-error-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Other file errors (collapsed) */
+.other-file-errors {
+  margin-top: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.other-file-errors-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-warning);
+  user-select: none;
+}
+
+.other-file-errors-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.vscode-dark .other-file-errors-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.other-file-errors-icon {
+  font-size: 14px;
+}
+
+.other-file-errors-title {
+  font-weight: 500;
+}
+
+.other-file-errors-body {
+  border-top: 1px solid var(--color-border);
+}
+
+.other-file-errors-body .parse-error-item {
+  border-bottom-color: var(--color-border);
+}
+
+.other-file-errors-body .parse-error-file {
+  color: var(--color-warning);
+}
+
+.other-file-errors-body .parse-error-message {
+  color: var(--color-text-muted);
+}

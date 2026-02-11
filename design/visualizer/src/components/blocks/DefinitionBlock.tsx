@@ -151,6 +151,8 @@ function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
     refocus()
   }
 
+  const signature = `${decl.name}(${decl.params})`
+
   return (
     <div className={`declaration declaration-signal ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
       <div className="declaration-header" onClick={handleToggle}>
@@ -158,8 +160,7 @@ function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">↪</span>
         <span className="declaration-keyword">signal</span>
-        <span className="declaration-name">{decl.name}</span>
-        <span className="declaration-params">({decl.params})</span>
+        <span className="declaration-name">{signature}</span>
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">
@@ -183,6 +184,9 @@ function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
     refocus()
   }
 
+  let signature = `${decl.name}(${decl.params})`
+  if (decl.returnType) signature += ` → ${decl.returnType}`
+
   return (
     <div className={`declaration declaration-query ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
       <div className="declaration-header" onClick={handleToggle}>
@@ -190,9 +194,7 @@ function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">↩</span>
         <span className="declaration-keyword">query</span>
-        <span className="declaration-name">{decl.name}</span>
-        <span className="declaration-params">({decl.params})</span>
-        {decl.returnType && <span className="declaration-return">→ {decl.returnType}</span>}
+        <span className="declaration-name">{signature}</span>
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">
@@ -216,6 +218,9 @@ function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
     refocus()
   }
 
+  let signature = `${decl.name}(${decl.params})`
+  if (decl.returnType) signature += ` → ${decl.returnType}`
+
   return (
     <div className={`declaration declaration-update ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
       <div className="declaration-header" onClick={handleToggle}>
@@ -223,9 +228,7 @@ function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">⇄</span>
         <span className="declaration-keyword">update</span>
-        <span className="declaration-name">{decl.name}</span>
-        <span className="declaration-params">({decl.params})</span>
-        {decl.returnType && <span className="declaration-return">→ {decl.returnType}</span>}
+        <span className="declaration-name">{signature}</span>
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">

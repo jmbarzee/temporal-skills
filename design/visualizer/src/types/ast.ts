@@ -5,11 +5,20 @@ export interface Position {
   column: number
 }
 
+// Per-file parse error
+export interface FileError {
+  file: string
+  error: string
+  stderr?: string
+}
+
 // Top-level file
 export interface TWFFile {
   definitions: Definition[]
   // Added for focused-file visualization
   focusedFile?: string
+  // Per-file parse errors and warnings
+  errors?: FileError[]
 }
 
 // Definition types
@@ -68,10 +77,9 @@ export interface UpdateDecl extends Position {
 export type Statement =
   | ActivityCall
   | WorkflowCall
-  | TimerStmt
+  | AwaitStmt
   | AwaitAllBlock
   | AwaitOneBlock
-  | HintStmt
   | SwitchBlock
   | IfStmt
   | ForStmt
@@ -103,9 +111,25 @@ export interface WorkflowCall extends Position {
   options?: string
 }
 
-export interface TimerStmt extends Position {
-  type: 'timer'
-  duration: string
+// Single await statement: await timer/signal/update/activity/workflow
+export type AwaitStmtKind = 'timer' | 'signal' | 'update' | 'activity' | 'workflow'
+
+export interface AwaitStmt extends Position {
+  type: 'await'
+  kind: AwaitStmtKind
+  timer?: string
+  signal?: string
+  signalParams?: string
+  update?: string
+  updateParams?: string
+  activity?: string
+  activityArgs?: string
+  activityResult?: string
+  workflow?: string
+  workflowMode?: string
+  workflowNamespace?: string
+  workflowArgs?: string
+  workflowResult?: string
 }
 
 // await all: waits for all operations to complete
@@ -114,18 +138,32 @@ export interface AwaitAllBlock extends Position {
   body: Statement[]
 }
 
-// await one case: watch, timer, or nested await all
-export type AwaitOneCaseKind = 'watch' | 'timer' | 'await_all'
+// await one case: signal, update, timer, activity, workflow, or nested await all
+export type AwaitOneCaseKind = 'signal' | 'update' | 'timer' | 'activity' | 'workflow' | 'await_all'
 
 export interface AwaitOneCase {
   kind: AwaitOneCaseKind
-  // Watch case: variable to wait until truthy
-  watchVariable?: string
+  // Signal case
+  signal?: string
+  signalParams?: string
+  // Update case
+  update?: string
+  updateParams?: string
   // Timer case
-  timerDuration?: string
+  timer?: string
+  // Activity case
+  activity?: string
+  activityArgs?: string
+  activityResult?: string
+  // Workflow case
+  workflow?: string
+  workflowMode?: string
+  workflowNamespace?: string
+  workflowArgs?: string
+  workflowResult?: string
   // Await all case (nested)
   awaitAll?: AwaitAllBlock
-  // Body executed when this case wins
+  // Body executed when this case wins (optional - can be empty)
   body: Statement[]
 }
 
@@ -133,13 +171,6 @@ export interface AwaitOneCase {
 export interface AwaitOneBlock extends Position {
   type: 'awaitOne'
   cases: AwaitOneCase[]
-}
-
-// hint: marks where signals/queries/updates may be handled
-export interface HintStmt extends Position {
-  type: 'hint'
-  kind: 'signal' | 'query' | 'update'
-  name: string
 }
 
 export interface SwitchCase {

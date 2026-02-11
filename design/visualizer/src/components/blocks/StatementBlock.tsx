@@ -3,11 +3,10 @@ import type {
   Statement,
   ActivityCall,
   WorkflowCall,
-  TimerStmt,
+  AwaitStmt,
   AwaitAllBlock,
   AwaitOneBlock,
   AwaitOneCase,
-  HintStmt,
   SwitchBlock,
   IfStmt,
   ForStmt,
@@ -31,14 +30,12 @@ export function StatementBlock({ statement }: StatementBlockProps) {
       return <ActivityCallBlock stmt={statement} />
     case 'workflowCall':
       return <WorkflowCallBlock stmt={statement} />
-    case 'timer':
-      return <TimerBlock stmt={statement} />
+    case 'await':
+      return <AwaitStmtBlock stmt={statement} />
     case 'awaitAll':
       return <AwaitAllBlockComponent stmt={statement} />
     case 'awaitOne':
       return <AwaitOneBlockComponent stmt={statement} />
-    case 'hint':
-      return <HintBlock stmt={statement} />
     case 'switch':
       return <SwitchBlockComponent stmt={statement} />
     case 'if':
@@ -231,70 +228,85 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   )
 }
 
-// Timer
-function TimerBlock({ stmt }: { stmt: TimerStmt }) {
-  return (
-    <div className="block block-timer collapsed">
-      <div className="block-header">
-        <span className="block-toggle-placeholder" />
-        <span className="block-icon">⏱</span>
-        <span className="block-keyword">timer</span>
-        <span className="block-signature">{stmt.duration}</span>
-      </div>
-    </div>
-  )
-}
-
-// Hint - marks where signals/queries/updates may be handled
-// Rendered as layered blocks: tag on left, signal/query/update on right (expandable)
-function HintBlock({ stmt }: { stmt: HintStmt }) {
+// Single await statement - await timer/signal/update/activity/workflow
+function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   const [expanded, setExpanded] = React.useState(false)
-  const refocus = useRefocus()
+  const context = React.useContext(DefinitionContextProvider)
   const handlers = React.useContext(HandlerContextProvider)
-  
-  const iconMap = {
-    signal: '↪',
-    query: '↩',
-    update: '⇄',
+  const refocus = useRefocus()
+
+  const { icon, keyword, signature, blockClass, expandableDef } = getAwaitStmtDisplay(stmt, context, handlers)
+
+  const handleToggle = () => {
+    if (expandableDef) { setExpanded(!expanded) }
+    refocus()
   }
-  
-  // Look up the handler declaration
-  const handler = stmt.kind === 'signal' 
-    ? handlers.signals.get(stmt.name)
-    : stmt.kind === 'query'
-    ? handlers.queries.get(stmt.name)
-    : handlers.updates.get(stmt.name)
-  
-  const hasBody = handler?.body && handler.body.length > 0
-  
-  const handleToggle = () => { 
-    if (hasBody) { 
-      setExpanded(!expanded)
-    }
-    refocus() 
-  }
-  
+
   return (
-    <div className={`tagged-composite ${expanded ? 'expanded' : ''}`}>
-      <div className="tagged-tag">
-        <span className="tagged-tag-label">hint</span>
+    <div className={`block ${blockClass} ${expanded ? 'expanded' : 'collapsed'}`}>
+      <div className="block-header" onClick={handleToggle}>
+        {expandableDef ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon">{icon}</span>
+        <span className="block-keyword">{keyword}</span>
+        <span className="block-signature">{signature}</span>
       </div>
-      <div className={`tagged-content tagged-${stmt.kind} ${hasBody ? 'expandable' : ''}`} onClick={handleToggle}>
-        {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
-        {!hasBody && <span className="block-toggle-placeholder" />}
-        <span className="tagged-icon">{iconMap[stmt.kind]}</span>
-        <span className="tagged-kind">{stmt.kind}</span>
-        <span className="tagged-name">{stmt.name}</span>
-      </div>
-      {expanded && hasBody && (
-        <div className="tagged-body">
-          {handler!.body!.map((s, i) => (
-            <StatementBlock key={i} statement={s} />
-          ))}
+
+      {expanded && expandableDef && (
+        <div className="block-body">
+          {(expandableDef.body || []).length > 0 ? (
+            (expandableDef.body || []).map((s, i) => (
+              <StatementBlock key={i} statement={s} />
+            ))
+          ) : (
+            <div className="block-empty-body">No implementation defined</div>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+// Get display info for single await statements
+function getAwaitStmtDisplay(
+  stmt: AwaitStmt,
+  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  handlers: { signals: Map<string, any>; updates: Map<string, any> },
+): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] } } {
+  switch (stmt.kind) {
+    case 'timer':
+      return { icon: '⏱', keyword: 'await timer', signature: `(${stmt.timer || ''})`, blockClass: 'block-await-stmt block-await-stmt-timer' }
+    case 'signal': {
+      const sig = stmt.signal || ''
+      const params = stmt.signalParams ? ` → ${stmt.signalParams}` : ''
+      const handler = handlers.signals.get(sig)
+      return { icon: '↪', keyword: 'await signal', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-signal', expandableDef: handler }
+    }
+    case 'update': {
+      const sig = stmt.update || ''
+      const params = stmt.updateParams ? ` → ${stmt.updateParams}` : ''
+      const handler = handlers.updates.get(sig)
+      return { icon: '⇄', keyword: 'await update', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-update', expandableDef: handler }
+    }
+    case 'activity': {
+      const sig = `${stmt.activity || ''}(${stmt.activityArgs || ''})`
+      const result = stmt.activityResult ? ` → ${stmt.activityResult}` : ''
+      const def = context.activities.get(stmt.activity || '')
+      return { icon: '', keyword: 'await activity', signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-activity', expandableDef: def }
+    }
+    case 'workflow': {
+      const modePrefix = stmt.workflowMode === 'spawn' ? 'spawn ' : stmt.workflowMode === 'detach' ? 'detach ' : ''
+      const sig = `${stmt.workflow || ''}(${stmt.workflowArgs || ''})`
+      const result = stmt.workflowResult ? ` → ${stmt.workflowResult}` : ''
+      const def = context.workflows.get(stmt.workflow || '')
+      return { icon: '', keyword: `await ${modePrefix}workflow`, signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-workflow', expandableDef: def }
+    }
+    default:
+      return { icon: '?', keyword: 'await', signature: '', blockClass: 'block-await-stmt' }
+  }
 }
 
 // Await All - expandable to show body (waits for all operations to complete)
@@ -398,10 +410,27 @@ function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
 // Get display info for await one cases
 function getAwaitOneCaseDisplay(c: AwaitOneCase): { contentClass: string; icon: string; keyword: string; signature: string } {
   switch (c.kind) {
-    case 'watch':
-      return { contentClass: 'tagged-watch', icon: '👁', keyword: 'watch', signature: `(${c.watchVariable || ''})` }
+    case 'signal': {
+      const params = c.signalParams ? ` → ${c.signalParams}` : ''
+      return { contentClass: 'tagged-signal', icon: '↪', keyword: 'signal', signature: `${c.signal || ''}${params}` }
+    }
+    case 'update': {
+      const params = c.updateParams ? ` → ${c.updateParams}` : ''
+      return { contentClass: 'tagged-update', icon: '⇄', keyword: 'update', signature: `${c.update || ''}${params}` }
+    }
     case 'timer':
-      return { contentClass: 'tagged-timer', icon: '⏱', keyword: 'timer', signature: `(${c.timerDuration || ''})` }
+      return { contentClass: 'tagged-timer', icon: '⏱', keyword: 'timer', signature: `(${c.timer || ''})` }
+    case 'activity': {
+      const sig = `${c.activity || ''}(${c.activityArgs || ''})`
+      const result = c.activityResult ? ` → ${c.activityResult}` : ''
+      return { contentClass: 'tagged-activity', icon: '⚙', keyword: 'activity', signature: `${sig}${result}` }
+    }
+    case 'workflow': {
+      const modePrefix = c.workflowMode === 'spawn' ? 'spawn ' : c.workflowMode === 'detach' ? 'detach ' : ''
+      const sig = `${c.workflow || ''}(${c.workflowArgs || ''})`
+      const result = c.workflowResult ? ` → ${c.workflowResult}` : ''
+      return { contentClass: 'tagged-workflow', icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}` }
+    }
     case 'await_all':
       return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)` }
     default:

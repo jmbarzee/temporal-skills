@@ -2,7 +2,7 @@
   "name": "twf-syntax",
   "displayName": "Temporal Workflow (.twf)",
   "description": "Syntax highlighting, language support, and visualization for Temporal Workflow Definition (.twf) files",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "jmbarzee",
   "license": "MIT",
   "repository": {
@@ -112,7 +112,7 @@
         "twf.lsp.path": {
           "type": "string",
           "default": "",
-          "description": "Path to the twf-lsp binary. If empty, looks for 'twf-lsp' on PATH."
+          "description": "Path to the twf binary. If empty, looks for 'twf' on PATH."
         },
         "twf.parser.path": {
           "type": "string",

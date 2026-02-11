@@ -57,6 +57,20 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Workflow != "" && n.WorkflowResolved != nil {
 			return n.WorkflowResolved
 		}
+	case *ast.AwaitOneCase:
+		// Check which type of case and return appropriate resolved reference
+		if n.Signal != "" && n.SignalResolved != nil {
+			return n.SignalResolved
+		}
+		if n.Update != "" && n.UpdateResolved != nil {
+			return n.UpdateResolved
+		}
+		if n.Activity != "" && n.ActivityResolved != nil {
+			return n.ActivityResolved
+		}
+		if n.Workflow != "" && n.WorkflowResolved != nil {
+			return n.WorkflowResolved
+		}
 	}
 	return nil
 }

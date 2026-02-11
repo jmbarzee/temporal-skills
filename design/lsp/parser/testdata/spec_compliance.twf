@@ -71,18 +71,15 @@ workflow SpecCompliance(input: Input) -> (Result):
             break
 
     # ===== PARALLEL EXECUTION =====
-    hint signal Pause
-    hint update SetProgress
-
     await all:
         activity Task1(input) -> result1
         activity Task2(input) -> result2
 
     # ===== CONDITIONAL WAIT =====
     await one:
-        timer (5m):
+        timer(5m):
             activity TimeoutAction1()
-        timer (10m):
+        timer(10m):
             activity TimeoutAction2()
 
     # ===== CHILD WORKFLOWS =====
@@ -99,7 +96,7 @@ workflow SpecCompliance(input: Input) -> (Result):
     nexus "external-service" workflow ExternalTask(data) -> extResult
 
     # ===== TIMERS =====
-    timer 5m
+    await timer(5m)
 
     # ===== SWITCH STATEMENT =====
     switch (status):
@@ -114,8 +111,8 @@ workflow SpecCompliance(input: Input) -> (Result):
     if (progress < 100):
         continue_as_new(input.id, input.iteration + 1)
 
-    # ===== RETURN =====
-    return result
+    # ===== CLOSE =====
+    close result
 
 # ===== ACTIVITY DEFINITIONS =====
 
@@ -198,7 +195,7 @@ workflow NestedAwaitExample():
         await all:
             activity LongTask1() -> r1
             activity LongTask2() -> r2
-        timer (30m):
+        timer(30m):
             activity HandleTimeout()
 
 activity LongTask1() -> (Result):
@@ -208,16 +205,16 @@ activity LongTask2() -> (Result):
     return Result{success: true}
 
 workflow SubWorkflow(data: Data) -> (Result):
-    return Result{data: data}
+    close Result{data: data}
 
 workflow BackgroundTask(data: Data) -> (Result):
-    return Result{data: data}
+    close Result{data: data}
 
 workflow FireAndForget(data: Data):
     activity LogEvent(data)
 
 workflow ExternalTask(data: Data) -> (Result):
-    return Result{data: data}
+    close Result{data: data}
 
 activity LogEvent(data: Data):
     log(data)

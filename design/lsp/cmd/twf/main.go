@@ -6,9 +6,18 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jmbarzee/temporal-skills/design/lsp/internal/server"
 	"github.com/jmbarzee/temporal-skills/design/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/design/lsp/parser/parser"
 	"github.com/jmbarzee/temporal-skills/design/lsp/parser/resolver"
+	"github.com/tliron/commonlog"
+	_ "github.com/tliron/commonlog/simple"
+	glspServer "github.com/tliron/glsp/server"
+)
+
+const (
+	name    = "twf"
+	version = "0.1.0"
 )
 
 const usage = `twf - Temporal Workflow Format CLI
@@ -20,6 +29,7 @@ Commands:
   check     Parse and validate TWF files
   parse     Output AST as JSON
   symbols   List workflows and activities
+  lsp       Start the language server (stdio)
   help      Show this help
 
 Options:
@@ -30,6 +40,7 @@ Examples:
   twf check workflow.twf
   twf parse --json workflow.twf
   twf symbols workflow.twf
+  twf lsp
 `
 
 func main() {
@@ -47,6 +58,8 @@ func main() {
 		os.Exit(parseCommand(os.Args[2:]))
 	case "symbols":
 		os.Exit(symbolsCommand(os.Args[2:]))
+	case "lsp":
+		lspCommand()
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 		os.Exit(0)
@@ -238,6 +251,17 @@ type symbolJSON struct {
 	Signals    []string `json:"signals,omitempty"`
 	Queries    []string `json:"queries,omitempty"`
 	Updates    []string `json:"updates,omitempty"`
+}
+
+// lspCommand starts the LSP server over stdio
+func lspCommand() {
+	commonlog.Configure(1, nil)
+
+	handler, _ := server.NewHandler(name, version)
+
+	s := glspServer.NewServer(handler, name, false)
+
+	s.RunStdio()
 }
 
 func printSymbolsJSON(file *ast.File) int {

@@ -3,10 +3,11 @@ package server
 import (
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
+	glspServer "github.com/tliron/glsp/server"
 )
 
 // NewHandler creates a protocol.Handler with all LSP methods registered.
-func NewHandler(name, version string) *protocol.Handler {
+func NewHandler(name, version string) (*protocol.Handler, *DocumentStore) {
 	store := NewDocumentStore()
 
 	handler := &protocol.Handler{
@@ -32,7 +33,16 @@ func NewHandler(name, version string) *protocol.Handler {
 		TextDocumentCodeAction:          codeActionHandler(store),
 	}
 
-	return handler
+	return handler, store
+}
+
+// RegisterCustomHandlers registers handlers for LSP features not in protocol_3_16
+func RegisterCustomHandlers(s *glspServer.Server, store *DocumentStore) {
+	// Register InlayHint handler (LSP 3.17)
+	// Note: glsp doesn't expose Handle() publicly, so we'll need to wait for
+	// library support or use a different approach
+	// TODO: Once glsp supports 3.17, register here:
+	// s.Handle("textDocument/inlayHint", inlayHintHandler(store))
 }
 
 func initializeHandler(name, version string) protocol.InitializeFunc {

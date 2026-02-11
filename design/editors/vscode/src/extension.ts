@@ -1,12 +1,12 @@
-import * as vscode from "vscode";
-import * as path from "path";
 import { execFile } from "child_process";
+import * as path from "path";
 import { promisify } from "util";
+import * as vscode from "vscode";
 import {
+  Executable,
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
-  Executable,
 } from "vscode-languageclient/node";
 
 const execFileAsync = promisify(execFile);
@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
         await WorkflowVisualizerPanel.createOrShowForFile(context.extensionUri, uri.fsPath);
         return;
       }
-      
+
       // Otherwise use active editor
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== "twf") {
@@ -53,7 +53,7 @@ export function activate(context: vscode.ExtensionContext) {
     "twf.visualizeFolder",
     async (uri?: vscode.Uri) => {
       let folderPath: string | undefined;
-      
+
       if (uri) {
         folderPath = uri.fsPath;
       } else {
@@ -68,20 +68,20 @@ export function activate(context: vscode.ExtensionContext) {
           folderPath = folders[0].fsPath;
         }
       }
-      
+
       if (!folderPath) {
         return;
       }
-      
+
       // Find all .twf files in the folder
       const pattern = new vscode.RelativePattern(folderPath, "**/*.twf");
       const uris = await vscode.workspace.findFiles(pattern);
-      
+
       if (uris.length === 0) {
         vscode.window.showWarningMessage("No .twf files found in the selected folder");
         return;
       }
-      
+
       const files = uris.map((u) => u.fsPath);
       // No focused file - show all workflows
       await WorkflowVisualizerPanel.createOrShowForFolder(context.extensionUri, folderPath, files, undefined);
@@ -113,11 +113,11 @@ export function activate(context: vscode.ExtensionContext) {
 function startLanguageClient(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration("twf.lsp");
   const configPath = config.get<string>("path", "");
-  const command = configPath || "twf-lsp";
+  const command = configPath || "twf";
 
   const serverOptions: ServerOptions = {
-    run: { command } as Executable,
-    debug: { command } as Executable,
+    run: { command, args: ["lsp"] } as Executable,
+    debug: { command, args: ["lsp"] } as Executable,
   };
 
   const clientOptions: LanguageClientOptions = {
@@ -135,7 +135,7 @@ function startLanguageClient(context: vscode.ExtensionContext) {
   client.start().catch((err) => {
     vscode.window.showWarningMessage(
       `Failed to start TWF language server: ${err.message}. ` +
-        `Install it with: go install github.com/jmbarzee/temporal-skills/lsp/cmd/twf-lsp@latest`
+      `Install it with: go install github.com/jmbarzee/temporal-skills/lsp/cmd/twf@latest`
     );
   });
 
@@ -176,17 +176,17 @@ class WorkflowVisualizerPanel {
    */
   public static async createOrShowForFile(extensionUri: vscode.Uri, filePath: string) {
     const folderPath = path.dirname(filePath);
-    
+
     // Find all .twf files in the folder for context
     const pattern = new vscode.RelativePattern(folderPath, "*.twf");
     const uris = await vscode.workspace.findFiles(pattern);
     const files = uris.map((u) => u.fsPath);
-    
+
     // Ensure the focused file is included
     if (!files.includes(filePath)) {
       files.push(filePath);
     }
-    
+
     await WorkflowVisualizerPanel.createOrShowForFolder(extensionUri, folderPath, files, filePath);
   }
 
@@ -257,11 +257,11 @@ class WorkflowVisualizerPanel {
       const pattern = new vscode.RelativePattern(newFolderPath, "*.twf");
       const uris = await vscode.workspace.findFiles(pattern);
       const files = uris.map((u) => u.fsPath);
-      
+
       if (!files.includes(filePath)) {
         files.push(filePath);
       }
-      
+
       panel._folderPath = newFolderPath;
       panel._files = files;
     }
@@ -341,7 +341,9 @@ class WorkflowVisualizerPanel {
   private async _parseFilesWithMetadata(): Promise<unknown> {
     const config = vscode.workspace.getConfiguration("twf.parser");
     const configPath = config.get<string>("path", "");
-    const parserCommand = configPath || "parse";
+    const parts = ((configPath || "twf") + " parse").split(/\s+/);
+    const parserCommand = parts[0];
+    const baseArgs = parts.slice(1);
 
     if (this._files.length === 0) {
       throw new Error("No .twf files to parse");
@@ -349,20 +351,23 @@ class WorkflowVisualizerPanel {
 
     // Parse each file individually to track source files
     const allDefinitions: unknown[] = [];
-    
+    const allErrors: { file: string; error: string; stderr?: string }[] = [];
+
     for (const file of this._files) {
       try {
         const { stdout, stderr } = await execFileAsync(parserCommand, [
+          ...baseArgs,
           "--json",
           file,
         ]);
 
         if (stderr) {
           console.warn("Parser stderr:", stderr);
+          allErrors.push({ file, error: `Parser warning`, stderr: stderr.trim() });
         }
 
         const parsed = JSON.parse(stdout) as { definitions?: unknown[] };
-        
+
         // Add sourceFile to each definition
         if (parsed.definitions) {
           for (const def of parsed.definitions) {
@@ -371,14 +376,22 @@ class WorkflowVisualizerPanel {
           }
         }
       } catch (err) {
-        // Log but continue with other files
+        // Collect per-file errors instead of silently swallowing them
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const stderr = (err as { stderr?: string }).stderr;
+        allErrors.push({
+          file,
+          error: errMsg,
+          stderr: stderr ? stderr.trim() : undefined,
+        });
         console.warn(`Failed to parse ${file}:`, err);
       }
     }
 
-    // Return combined AST with focusedFile metadata
+    // Return combined AST with focusedFile metadata and any errors
     return {
       definitions: allDefinitions,
+      errors: allErrors.length > 0 ? allErrors : undefined,
       focusedFile: this._focusedFile,
     };
   }

@@ -28,7 +28,7 @@ workflow ProcessOrder(order: Order) -> (Result):
 workflow OrderFulfillment(orderId: string) -> (OrderResult):
     signal PaymentReceived(transactionId: string, amount: decimal):
         paymentStatus = "received"
-        activity FulfillOrder(order)
+        lastTransactionId = transactionId
 
     query GetOrderStatus() -> (OrderStatus):
         return OrderStatus{status: status, payment: paymentStatus}
@@ -42,14 +42,13 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
     status = "awaiting_payment"
 
     # Durable timer
-    timer 1h
+    await timer(1h)
 
     # Wait for payment signal with timeout
     await one:
-        watch (paymentStatus):
-            hint signal PaymentReceived
+        signal PaymentReceived:
             status = "processing"
-        timer (24h):
+        timer(24h):
             activity CancelOrder(orderId)
             close failed OrderResult{status: "cancelled"}
 

@@ -5,20 +5,18 @@
 
 workflow DelayedNotification(userId: string, delay: duration):
     # Durable sleep - workflow pauses but state is preserved
-    timer delay
+    await timer(delay)
     activity SendNotification(userId)
 
 # --- Deadline pattern: race between operation and timer ---
 
 workflow ProcessWithDeadline(data: Data) -> (Result):
     await one:
-        await all:
-            activity LongOperation(data) -> result
-        timer (1h):
+        activity LongOperation(data) -> result:
+            close Result{success: true, data: result}
+        timer(1h):
             activity Cleanup(data)
             close failed Result{success: false, error: "deadline exceeded"}
-
-    close Result{success: true, data: result}
 
 # --- Periodic execution within workflow ---
 
@@ -27,7 +25,7 @@ workflow HealthMonitor(resourceId: string):
 
     for:
         activity CheckHealth(resourceId)
-        timer 5m
+        await timer(5m)
         count = count + 1
         if (count > 1000):
             continue_as_new(resourceId)
@@ -35,15 +33,19 @@ workflow HealthMonitor(resourceId: string):
 # --- Polling with backoff ---
 
 workflow WaitForResource(resourceId: string) -> (Resource):
-    backoff = 1
+    backoff = 1s
+    maxBackoff = 60s
 
     for:
         activity CheckResource(resourceId) -> resource
         if (resource.ready):
             close resource
 
-        timer backoff
-        backoff = backoff * 2
+        await one:
+            timer(backoff):
+                backoff = min(backoff * 2, maxBackoff)
+            timer(30m):
+                close failed Resource{error: "timeout"}
 
 # --- Deadline with periodic check ---
 
@@ -59,7 +61,7 @@ workflow WaitForCompletion(jobId: string) -> (JobResult):
         if (checks > 100):
             close JobResult{status: "timeout"}
 
-        timer 30s
+        await timer(30s)
 
 # --- Polling with continue-as-new for history management ---
 
@@ -72,7 +74,7 @@ workflow LongPoller(resourceId: string, iteration: int) -> (Resource):
             activity FetchResource(resourceId) -> resource
             close resource
 
-        timer 5s
+        await timer(5s)
         count = count + 1
         if (count >= 500):
             continue_as_new(resourceId, iteration + 1)

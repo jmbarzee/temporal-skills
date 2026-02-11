@@ -61,7 +61,7 @@ Network failures, worker crashes, or timeouts cause retries. Design activities t
 
 **Rule of thumb:** If you're tempted to put loops or conditionals inside an activity, it should probably be a workflow.
 
-For detailed patterns, see [child-workflows.md](./child-workflows.md).
+For detailed patterns, see [child-workflows.md](./topics/child-workflows.md).
 
 ---
 
@@ -74,39 +74,40 @@ Quick reference for all Temporal primitives. Each links to detailed sub-skill do
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
 | `activity` | Execute side-effecting operation | Core primitive |
-| `child` | Execute nested workflow | [child-workflows.md](./child-workflows.md) |
-| `nexus` | Cross-namespace workflow call | [nexus.md](./nexus.md) |
-| `continue_as_new` | Reset history, continue with new input | [long-running.md](./long-running.md) |
+| `workflow` | Execute child workflow | [child-workflows.md](./topics/child-workflows.md) |
+| `nexus` | Cross-namespace workflow call | [nexus.md](./topics/nexus.md) |
+| `spawn` | Start async child workflow or nexus call | [child-workflows.md](./topics/child-workflows.md), [nexus.md](./topics/nexus.md) |
+| `detach` | Fire-and-forget child workflow or nexus call | [child-workflows.md](./topics/child-workflows.md), [nexus.md](./topics/nexus.md) |
+| `continue_as_new` | Reset history, continue with new input | [long-running.md](./topics/long-running.md) |
 
 ### Timing
 
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
-| `timer` | Durable sleep (survives restarts) | [timers-scheduling.md](./timers-scheduling.md) |
-| `schedule` | Cron-like recurring execution | [timers-scheduling.md](./timers-scheduling.md) |
-| `timeout` | Deadline for operations | [timers-scheduling.md](./timers-scheduling.md) |
+| `timer` | Durable sleep (survives restarts) | [timers-scheduling.md](./topics/timers-scheduling.md) |
+| `schedule` | Cron-like recurring execution | [timers-scheduling.md](./topics/timers-scheduling.md) |
+| `timeout` | Deadline for operations | [timers-scheduling.md](./topics/timers-scheduling.md) |
 
 ### External Communication
 
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
-| `signal` | Async event sent to workflow | [signals-queries-updates.md](./signals-queries-updates.md) |
-| `query` | Synchronous read of workflow state | [signals-queries-updates.md](./signals-queries-updates.md) |
-| `update` | Synchronous mutation of workflow state | [signals-queries-updates.md](./signals-queries-updates.md) |
+| `signal` | Async event sent to workflow | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
+| `query` | Synchronous read of workflow state | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
+| `update` | Synchronous mutation of workflow state | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
 
 ### Activity Options
 
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
-| `heartbeat` | Report progress, detect worker death | [activities-advanced.md](./activities-advanced.md) |
-| `async_complete` | Complete activity from external system | [activities-advanced.md](./activities-advanced.md) |
-| `local_activity` | Fast, lightweight activity (no task queue) | [activities-advanced.md](./activities-advanced.md) |
+| `heartbeat` | Report progress, detect worker death | [activities-advanced.md](./topics/activities-advanced.md) |
+| `async_complete` | Complete activity from external system | [activities-advanced.md](./topics/activities-advanced.md) |
 
 ### Infrastructure
 
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
-| `task_queue` | Route work to specific workers | [task-queues.md](./task-queues.md) |
+| `task_queue` | Route work to specific workers | [task-queues.md](./topics/task-queues.md) |
 | `search_attribute` | Index workflow for queries | Core primitive |
 | `memo` | Attach metadata to workflow | Core primitive |
 
@@ -118,18 +119,18 @@ Use this pseudo-code notation to document workflow designs. It's language-agnost
 
 ### Basic Structure
 
-```
+```twf
 workflow WorkflowName(input: InputType) -> OutputType:
-    result = activity ActivityName(args)
-    child ChildWorkflowName(args)
-    return output
+    activity ActivityName(args) -> result
+    workflow ChildWorkflowName(args) -> childResult
+    close OutputType{result, childResult}
 ```
 
 ### Control Flow
 
-```
+```twf
 workflow ProcessOrder(order: Order) -> Result:
-    validated = activity ValidateOrder(order)
+    activity ValidateOrder(order) -> validated
     
     # Conditionals
     if validated.priority == "high":
@@ -142,42 +143,41 @@ workflow ProcessOrder(order: Order) -> Result:
         activity ProcessItem(item)
     
     # Parallel execution
-    parallel:
-        inventory = activity ReserveInventory(order)
-        payment = activity ProcessPayment(order)
+    await all:
+        activity ReserveInventory(order) -> inventory
+        activity ProcessPayment(order) -> payment
     
-    return Result{inventory, payment}
+    close Result{inventory, payment}
 ```
 
 ### Temporal Primitives in Notation
 
-```
+```twf
 workflow OrderFulfillment(orderId: string) -> OrderResult:
-    order = activity GetOrder(orderId)
-    
+    activity GetOrder(orderId) -> order
+
     # Durable timer
-    timer 1h
-    
+    await timer(1h)
+
     # Wait for signal with timeout
-    await signal PaymentReceived() 
-        timeout: 24h
-        on_timeout:
+    await one:
+        signal PaymentReceived:
+        timer(24h):
             activity CancelOrder(orderId)
-            return OrderResult{status: "cancelled"}
-    
+            close failed OrderResult{status: "cancelled"}
+
     # Child workflow
-    child ShipOrder(order)
-    
+    workflow ShipOrder(order)
+
     # Cross-namespace call
-    nexus notifications/SendNotification(order.customer, "shipped")
-    
-    return OrderResult{status: "completed"}
+    nexus "notifications" workflow SendNotification(order.customer, "shipped")
+
+    close OrderResult{status: "completed"}
 
 # Signal definitions
-signal PaymentReceived:
-    input: {transactionId: string, amount: decimal}
+signal PaymentReceived(transactionId: string, amount: decimal):
 
-# Query definitions  
+# Query definitions
 query GetOrderStatus() -> OrderStatus:
     return currentStatus
 
@@ -191,15 +191,24 @@ update UpdateShippingAddress(address: Address) -> Result:
 
 | Syntax | Meaning |
 |--------|---------|
-| `activity Name(args)` | Activity call |
-| `child Name(args)` | Child workflow |
-| `nexus namespace/Name(args)` | Nexus cross-namespace call |
-| `timer Duration` | Durable sleep |
+| `activity Name(args) -> result` | Activity call with result binding |
+| `workflow Name(args) -> result` | Child workflow call with result binding |
+| `nexus "namespace" workflow Name(args) -> result` | Nexus cross-namespace call |
+| `spawn workflow Name(args) -> handle` | Start async child workflow, get handle |
+| `spawn nexus "ns" workflow Name(args) -> handle` | Start async nexus call, get handle |
+| `detach workflow Name(args)` | Fire-and-forget child workflow |
+| `detach nexus "ns" workflow Name(args)` | Fire-and-forget nexus call |
+| `await timer(duration)` | Durable sleep |
 | `await signal Name` | Wait for signal |
-| `await condition expr` | Wait for condition |
-| `parallel:` block | Execute children concurrently |
+| `await one:` | Wait for first of multiple operations |
+| `await all:` | Wait for all operations |
+| `options(key: value)` | Set options on next statement |
+| `-> result` | Bind result of preceding operation |
+| `close [completed\|failed] Value` | End workflow with result or failure |
 | `if/else` | Conditional (deterministic) |
-| `for x in collection` | Loop (deterministic bounds) |
+| `for x in collection:` | Bounded loop |
+| `for:` | Infinite loop (use with `continue_as_new` or `close`) |
+| `switch/case` | Multi-branch conditional |
 | `continue_as_new(args)` | Reset and continue |
 | `signal Name:` | Signal handler definition |
 | `query Name():` | Query handler definition |
@@ -239,39 +248,43 @@ Before implementing, verify:
 
 ### Non-Determinism in Workflows
 
-```
+```twf
 # BAD: Time check in workflow
 if current_time() > deadline:
     cancel()
 
 # GOOD: Timer-based deadline
-select:
-    await activity DoWork(): return success
-    await timer deadline: return timeout
+await one:
+    activity DoWork() -> result:
+        close Result{status: "success"}
+    timer(deadline):
+        close failed Result{status: "timeout"}
 ```
 
 ### Non-Idempotent Activities
 
-```
+> Note: Activity bodies contain SDK-level implementation code, not TWF notation.
+
+```python
 # BAD: Assumes fresh state
-activity CreateUser(name):
-    db.insert(User{name})  # Fails on retry
+def CreateUser(name):
+    db.insert(User(name))  # Fails on retry
 
 # GOOD: Handles existing state
-activity CreateUser(name):
+def CreateUser(name):
     existing = db.get_by_name(name)
     if existing: return existing
-    return db.insert(User{name})
+    return db.insert(User(name))
 ```
 
 ### Orchestration in Activities
 
-```
-# BAD: Loop inside activity
-activity DeployAll(specs):
-    for spec in specs:
-        deploy(spec)
-        wait_healthy(spec)  # What if fails mid-loop?
+```twf
+# BAD: Loop inside activity (activity bodies are SDK code, not TWF)
+# activity DeployAll(specs):
+#     for spec in specs:
+#         deploy(spec)           # What if fails mid-loop?
+#         wait_healthy(spec)
 
 # GOOD: Workflow handles orchestration
 workflow DeployAll(specs):
@@ -288,13 +301,13 @@ For detailed coverage of specific topics:
 
 | Topic | File |
 |-------|------|
-| Signals, Queries, Updates | [signals-queries-updates.md](./signals-queries-updates.md) |
-| Child Workflows | [child-workflows.md](./child-workflows.md) |
-| Timers and Scheduling | [timers-scheduling.md](./timers-scheduling.md) |
-| Advanced Activities | [activities-advanced.md](./activities-advanced.md) |
-| Long-Running Workflows | [long-running.md](./long-running.md) |
-| Nexus (Cross-Namespace) | [nexus.md](./nexus.md) |
-| Task Queues and Scaling | [task-queues.md](./task-queues.md) |
-| Workflow Patterns | [patterns.md](./patterns.md) |
-| Testing Workflows | [testing.md](./testing.md) |
-| Versioning and Evolution | [versioning.md](./versioning.md) |
+| Signals, Queries, Updates | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
+| Child Workflows | [child-workflows.md](./topics/child-workflows.md) |
+| Timers and Scheduling | [timers-scheduling.md](./topics/timers-scheduling.md) |
+| Advanced Activities | [activities-advanced.md](./topics/activities-advanced.md) |
+| Long-Running Workflows | [long-running.md](./topics/long-running.md) |
+| Nexus (Cross-Namespace) | [nexus.md](./topics/nexus.md) |
+| Task Queues and Scaling | [task-queues.md](./topics/task-queues.md) |
+| Workflow Patterns | [patterns.md](./topics/patterns.md) |
+| Testing Workflows | [testing.md](./topics/testing.md) |
+| Versioning and Evolution | [versioning.md](./topics/versioning.md) |

@@ -1,6 +1,6 @@
 # Task Queues and Worker Scaling
 
-> **Example:** [`examples/task-queues.twf`](./examples/task-queues.twf)
+> **Example:** [`task-queues.twf`](./task-queues.twf)
 
 Task queues route work to workers. Understanding task queue design is essential for scaling, isolation, and performance.
 
@@ -8,7 +8,7 @@ Task queues route work to workers. Understanding task queue design is essential 
 
 ### How Task Queues Work
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      Temporal Server                        │
 │  ┌─────────────────┐  ┌─────────────────┐                  │
@@ -67,7 +67,9 @@ Task queues route work to workers. Understanding task queue design is essential 
 
 ### Basic Worker Setup
 
-```
+> Note: Worker configuration is SDK-level code, not TWF notation.
+
+```pseudo
 worker = Worker(
     client: temporal_client,
     task_queue: "main-queue",
@@ -80,7 +82,7 @@ worker.run()
 
 ### Poller Configuration
 
-```
+```pseudo
 worker = Worker(
     task_queue: "main-queue",
     
@@ -113,7 +115,7 @@ worker = Worker(
 
 Add more worker instances polling the same queue:
 
-```
+```text
 # Worker 1, 2, 3... all poll same queue
 ┌─────────────────┐
 │ Task Queue: A   │
@@ -135,7 +137,7 @@ Worker Worker Worker
 
 Increase resources per worker:
 
-```
+```pseudo
 worker = Worker(
     task_queue: "compute-heavy",
     max_concurrent_activities: 100,  # Increased from 50
@@ -152,7 +154,7 @@ worker = Worker(
 
 Different queues scale independently:
 
-```
+```text
 ┌─────────────────┐     ┌─────────────────┐
 │ Queue: fast     │     │ Queue: batch    │
 └───────┬─────────┘     └───────┬─────────┘
@@ -174,18 +176,18 @@ Batch: 2 workers (cost efficient)
 
 Separate queues for different priorities:
 
-```
+```twf
 workflow OrderWorkflow(order: Order) -> Result:
     if order.priority == "express":
-        activity ProcessOrder(order):
-            task_queue: "high-priority"
+        options(task_queue: "high-priority")
+        activity ProcessOrder(order)
     else:
-        activity ProcessOrder(order):
-            task_queue: "standard"
+        options(task_queue: "standard")
+        activity ProcessOrder(order)
 ```
 
 Worker deployment:
-```
+```pseudo
 # More workers on high-priority queue
 high_priority_workers: 10
 standard_workers: 5
@@ -195,15 +197,15 @@ standard_workers: 5
 
 Separate queues per tenant:
 
-```
+```twf
 workflow TenantWorkflow(tenantId: string, data: Data) -> Result:
     # Route to tenant-specific queue
-    activity ProcessData(data):
-        task_queue: "tenant-{tenantId}"
+    options(task_queue: "tenant-{tenantId}")
+    activity ProcessData(data)
 ```
 
-```
-# Deploy workers per tenant
+```pseudo
+# Deploy workers per tenant (SDK-level)
 for tenant in tenants:
     Worker(task_queue: "tenant-{tenant.id}").run()
 ```
@@ -212,26 +214,26 @@ for tenant in tenants:
 
 Route based on required capabilities:
 
-```
+```twf
 workflow MediaWorkflow(media: Media) -> Result:
     if media.type == "video":
         # Needs GPU workers
-        activity TranscodeVideo(media):
-            task_queue: "gpu-workers"
+        options(task_queue: "gpu-workers")
+        activity TranscodeVideo(media)
     else:
-        activity ProcessImage(media):
-            task_queue: "standard-workers"
+        options(task_queue: "standard-workers")
+        activity ProcessImage(media)
 ```
 
 ### Geographic Routing
 
 Route to region-specific workers:
 
-```
+```twf
 workflow GlobalWorkflow(request: Request) -> Result:
     # Route to nearest region
-    activity ProcessLocally(request):
-        task_queue: "workers-{request.region}"
+    options(task_queue: "workers-{request.region}")
+    activity ProcessLocally(request)
 ```
 
 ---
@@ -242,7 +244,7 @@ Workflows "stick" to workers for cache efficiency.
 
 ### How Sticky Execution Works
 
-```
+```text
 1. Workflow starts on Worker A
 2. Worker A caches workflow state
 3. Next workflow task routed to Worker A (sticky)
@@ -251,7 +253,7 @@ Workflows "stick" to workers for cache efficiency.
 
 ### Sticky Queue Configuration
 
-```
+```pseudo
 worker = Worker(
     task_queue: "main",
     
@@ -278,7 +280,7 @@ worker = Worker(
 
 Workers can poll multiple queues:
 
-```
+```pseudo
 worker = Worker(
     client: client,
     task_queue: "primary",
@@ -320,7 +322,7 @@ worker = Worker(
 
 ### Health Checks
 
-```
+```bash
 # Check if workers are polling
 temporal task-queue describe --task-queue main-queue
 
@@ -334,7 +336,9 @@ temporal task-queue get-build-ids --task-queue main-queue
 
 ### One Queue Per Workflow Type
 
-```
+> Note: Task queue assignment for workflows is done at the SDK/deployment level, not in TWF. Shown as pseudo-code.
+
+```pseudo
 # BAD: Unnecessary complexity
 workflow OrderWorkflow():
     task_queue: "order-queue"
@@ -354,7 +358,7 @@ workflow PaymentWorkflow():
 
 ### Too Many Pollers
 
-```
+```pseudo
 # BAD: Excessive connections
 worker = Worker(
     max_concurrent_workflow_task_pollers: 100,  # Way too many
@@ -370,7 +374,7 @@ worker = Worker(
 
 ### No Backpressure
 
-```
+```pseudo
 # BAD: Accept unlimited concurrent activities
 worker = Worker(
     max_concurrent_activities: 10000  # Will exhaust resources
@@ -384,17 +388,17 @@ worker = Worker(
 
 ### Dynamic Queue Names Without Cleanup
 
-```
+```twf
 # BAD: Creates queue per request (never cleaned up)
 workflow Process(requestId: string):
-    activity DoWork():
-        task_queue: "request-{requestId}"  # Unbounded queues!
+    options(task_queue: "request-{requestId}")  # Unbounded queues!
+    activity DoWork()
 
 # GOOD: Bounded set of queues
 workflow Process(request: Request):
     queue = selectQueue(request.priority)  # "high", "medium", "low"
-    activity DoWork():
-        task_queue: queue
+    options(task_queue: queue)
+    activity DoWork()
 ```
 
 ---
@@ -412,7 +416,7 @@ workflow Process(request: Request):
 
 ### Rolling Updates
 
-```
+```text
 # Workers can be updated independently
 # Temporal handles routing to available workers
 
@@ -425,7 +429,7 @@ workflow Process(request: Request):
 
 ### Graceful Shutdown
 
-```
+```pseudo
 worker = Worker(task_queue: "main")
 
 on_shutdown_signal:

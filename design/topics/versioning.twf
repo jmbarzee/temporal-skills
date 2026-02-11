@@ -12,7 +12,7 @@ workflow OrderWorkflowAddStep(order: Order, enableFraudCheck: bool) -> (OrderRes
         activity FraudCheck(order)
 
     activity ProcessPayment(order) -> payment
-    return OrderResult{status: "complete"}
+    close OrderResult{status: "complete"}
 
 # --- Removing a step with version flag ---
 
@@ -24,7 +24,7 @@ workflow OrderWorkflowRemoveStep(data: Data, useLegacyStep: bool) -> (Result):
         activity LegacyStep(data)
 
     activity Step2(data)
-    return Result{}
+    close Result{}
 
 # --- Changing a step with version flag ---
 
@@ -38,7 +38,7 @@ workflow OrderWorkflowChangeStep(data: Data, useImprovedProcessing: bool) -> (Re
         activity OldProcessing(data)
 
     activity Step3(data)
-    return Result{}
+    close Result{}
 
 # --- Reordering activities with version flag ---
 
@@ -53,7 +53,7 @@ workflow ReorderWorkflow(data: Data, useNewOrder: bool) -> (Result):
         activity StepB(data)
         activity StepC(data)
 
-    return Result{}
+    close Result{}
 
 # --- Changing activity parameters with version flag ---
 
@@ -64,7 +64,7 @@ workflow ParamChangeWorkflow(data: Data, useEnhancedParams: bool) -> (Result):
     else:
         activity EnhancedActivity(data) -> result
 
-    return Result{result}
+    close Result{result}
 
 # --- Multiple version flags in one workflow ---
 
@@ -86,7 +86,7 @@ workflow MultiVersionWorkflow(order: Order, config: VersionConfig) -> (OrderResu
         activity LegacyNotify(order)
 
     activity FinalizeOrder(order) -> result
-    return OrderResult{status: "complete"}
+    close OrderResult{status: "complete"}
 
 # --- Supporting activities ---
 

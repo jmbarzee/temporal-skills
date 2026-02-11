@@ -1,6 +1,6 @@
 # Signals, Queries, and Updates
 
-> **Example:** [`examples/signals-queries-updates.twf`](./examples/signals-queries-updates.twf)
+> **Example:** [`signals-queries-updates.twf`](./signals-queries-updates.twf)
 
 External communication with running workflows. These primitives let code outside the workflow interact with it during execution.
 
@@ -29,13 +29,44 @@ Asynchronous messages sent to a running workflow. The sender doesn't wait for pr
 
 Signals are declared with handler body blocks that execute when the signal arrives. Handler bodies have access to the full workflow statement set (activities, child workflows, timers, etc.).
 
-```
+```twf
 signal PaymentReceived(transactionId: string, amount: decimal):
     paymentStatus = "received"
-    activity FulfillOrder(order)
+    lastTransactionId = transactionId
 ```
 
-The handler body executes when the signal arrives, whether via `await signal` or `select` with `hint signal` annotations.
+The handler body executes when the signal arrives, whether via `await signal` or as a case in `await one`/`await all`. Handler bodies should primarily update workflow state. Heavy side effects (activity calls, child workflows) belong in the main workflow body after the signal is awaited, since handlers fire even when not being actively awaited and can execute between any two deterministic steps.
+
+### Handler Execution Semantics
+
+When a signal is awaited (via `await signal` or as an `await one` case), the execution order is:
+
+1. **Signal arrives** → handler body runs first (updates state)
+2. **Await resolves** → case body runs (reacts to updated state, calls activities, etc.)
+
+This two-phase execution means:
+
+```twf
+workflow OrderWorkflow(orderId: string):
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        # Phase 1: Handler runs immediately on signal arrival
+        paymentStatus = "received"
+        lastTransactionId = transactionId
+
+    # Phase 2: Case body runs after handler
+    await one:
+        signal PaymentReceived:
+            # paymentStatus is already "received" here
+            activity FulfillOrder(orderId, lastTransactionId)
+            close OrderResult{status: "completed"}
+        timer(24h):
+            close failed OrderResult{status: "timeout"}
+```
+
+**Key implications:**
+- Handler bodies run on every signal arrival, even if the workflow isn't actively awaiting that signal
+- Keep handler bodies lightweight (state updates only, no activities)
+- Place activity calls and side effects in the `await one` case body, not the handler body
 
 ### Signal Considerations
 
@@ -45,7 +76,7 @@ The handler body executes when the signal arrives, whether via `await signal` or
 | **Buffering** | Signals queue if workflow is busy; consider signal coalescing for high-volume |
 | **Idempotency** | Signal handlers should be idempotent (same signal twice = same result) |
 | **Validation** | Validate signal payload; invalid signals can corrupt workflow state |
-| **Ambient arrival** | Signals can arrive between any two deterministic steps; use `hint` to annotate points where signals may arrive |
+| **Ambient arrival** | Signals can arrive between any two deterministic steps and are buffered until handled by `await signal` or `await one`/`await all` |
 
 ---
 
@@ -64,7 +95,7 @@ Synchronous, read-only access to workflow state. The caller blocks until the que
 
 Queries are declared with handler body blocks that execute when queried. Query handlers are restricted to activity-style statements (no temporal primitives like timers, signals, or child workflows).
 
-```
+```twf
 query GetStatus() -> (string):
     return status
 
@@ -84,7 +115,7 @@ query GetProgress() -> (Progress):
 
 ### Anti-Patterns
 
-```
+```twf
 # BAD: Query modifies state
 query GetAndIncrementCounter() -> (int):
     counter = counter + 1  # NOT ALLOWED
@@ -112,7 +143,7 @@ Synchronous mutations with confirmation. Caller sends data, workflow processes i
 
 Updates are declared with handler body blocks that execute when the update is received. Handler bodies have access to the full workflow statement set (activities, child workflows, timers, etc.) and can return values to the caller.
 
-```
+```twf
 update ChangePlan(newPlan: string) -> (ChangeResult):
     plan = newPlan
     activity PersistChange(newPlan)
@@ -136,7 +167,7 @@ update ChangePlan(newPlan: string) -> (ChangeResult):
 | **Validation** | Validate before mutating; return errors, don't throw |
 | **Idempotency** | Consider idempotency keys for critical updates |
 | **Timeouts** | Caller should set appropriate timeout; update may wait for workflow |
-| **Ambient arrival** | Like signals, updates can arrive between any two deterministic steps; use `hint` to annotate points where updates may arrive |
+| **Ambient arrival** | Like signals, updates can arrive between any two deterministic steps and are buffered until handled by `await update` or `await one`/`await all` |
 
 ---
 

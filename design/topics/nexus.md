@@ -1,6 +1,6 @@
 # Nexus: Cross-Namespace Communication
 
-> **Example:** [`examples/nexus.twf`](./examples/nexus.twf)
+> **Example:** [`nexus.twf`](./nexus.twf)
 
 Nexus enables workflows in one Temporal namespace to call workflows in another namespace, with proper authorization and abstraction.
 
@@ -20,7 +20,7 @@ Nexus enables workflows in one Temporal namespace to call workflows in another n
 
 ### Architecture
 
-```
+```text
 ┌─────────────────────────────────────┐
 │           Caller Namespace          │
 │  ┌─────────────────────────────┐   │
@@ -57,24 +57,26 @@ Nexus enables workflows in one Temporal namespace to call workflows in another n
 
 ### Caller Side
 
-```
+```twf
 workflow OrderWorkflow(order: Order) -> OrderResult:
     # Validate locally
     activity ValidateOrder(order)
     
     # Call into payments namespace via Nexus
-    paymentResult = nexus payments/ProcessPayment(order.payment):
-        timeout: 5m
+    options(timeout: 5m)
+    nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
     
     # Call into notifications namespace
-    nexus notifications/SendConfirmation(order.customer, paymentResult)
+    nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
     
-    return OrderResult{paymentId: paymentResult.id}
+    close OrderResult{paymentId: paymentResult.id}
 ```
 
 ### Target Side (Handler)
 
-```
+> Note: Nexus handler definitions use conceptual pseudo-code, not TWF notation. The handler-side API is SDK-specific.
+
+```pseudo
 nexus_service PaymentsService:
     
     operation ProcessPayment(payment: Payment) -> PaymentResult:
@@ -95,7 +97,9 @@ workflow ProcessPaymentWorkflow(payment: Payment) -> PaymentResult:
 
 ### Configuring Allowed Callers
 
-```
+> Note: Endpoint configuration is SDK/platform-specific, not TWF notation.
+
+```yaml
 nexus_endpoint PaymentsEndpoint:
     target_namespace: payments
     target_task_queue: payments-worker
@@ -107,7 +111,7 @@ nexus_endpoint PaymentsEndpoint:
 
 ### Request Validation in Handler
 
-```
+```pseudo
 nexus_service PaymentsService:
     
     operation ProcessPayment(payment: Payment) -> PaymentResult:
@@ -126,47 +130,55 @@ nexus_service PaymentsService:
 
 ---
 
-## Synchronous vs Asynchronous Operations
+## Execution Modes: Synchronous, `spawn`, `detach`
+
+Nexus calls support the same three execution modes as child workflows:
+
+| Mode | Syntax | Behavior |
+|------|--------|----------|
+| **Synchronous** | `nexus "ns" workflow Name(args) -> result` | Caller blocks until operation completes |
+| **Async (spawn)** | `spawn nexus "ns" workflow Name(args) -> handle` | Caller continues, awaits handle later |
+| **Fire-and-forget (detach)** | `detach nexus "ns" workflow Name(args)` | Caller continues, never waits |
 
 ### Synchronous (Default)
 
 Caller waits for operation to complete:
 
-```
+```twf
 workflow Caller() -> Result:
     # Blocks until ProcessPayment completes
-    result = nexus payments/ProcessPayment(payment)
-    return Result{paymentId: result.id}
+    nexus "payments" workflow ProcessPayment(payment) -> result
+    close Result{paymentId: result.id}
 ```
 
 ### Asynchronous
 
-Start operation, continue without waiting:
+Start operation with `spawn`, continue without waiting, await the handle later:
 
-```
+```twf
 workflow Caller() -> Result:
     # Start operation, get handle
-    handle = nexus_async payments/ProcessPayment(payment)
+    spawn nexus "payments" workflow ProcessPayment(payment) -> handle
     
     # Do other work
     activity DoOtherWork()
     
     # Wait for result when needed
-    result = await handle
-    return Result{paymentId: result.id}
+    await one:
+        handle -> result:
+    close Result{paymentId: result.id}
 ```
 
 ### Fire-and-Forget
 
-Start operation, never wait:
+Start operation with `detach`, never wait:
 
-```
+```twf
 workflow Caller() -> Result:
     # Start and don't wait
-    nexus_async notifications/SendEmail(email):
-        wait: false
+    detach nexus "notifications" workflow SendEmail(email)
     
-    return Result{status: "initiated"}
+    close Result{status: "initiated"}
 ```
 
 ---
@@ -184,26 +196,17 @@ workflow Caller() -> Result:
 
 ### Error Handling Pattern
 
-```
+> Note: Error handling is SDK-specific. The nexus call will fail the workflow if the operation fails. Use retry policies and timeouts to control failure behavior. A timeout can be expressed with `await one:`.
+
+```twf
 workflow Caller(data: Data) -> Result:
-    try:
-        result = nexus target/Operation(data):
-            timeout: 5m
-        return Result{success: true, data: result}
-    
-    catch NexusOperationError as e:
-        # Application-level failure from target
-        if e.type == "ValidationError":
-            return Result{success: false, error: "invalid input"}
-        elif e.type == "ResourceNotFound":
-            return Result{success: false, error: "not found"}
-        else:
-            raise  # Unexpected error, let workflow fail
-    
-    catch NexusTimeoutError:
-        # Operation took too long
-        activity AlertTimeout(data)
-        return Result{success: false, error: "timeout"}
+    # Race nexus call against a deadline
+    await one:
+        nexus "target" workflow Operation(data) -> result:
+            close Result{success: true, data: result}
+        timer(5m):
+            activity AlertTimeout(data)
+            close failed Result{success: false, error: "timeout"}
 ```
 
 ---
@@ -212,38 +215,41 @@ workflow Caller(data: Data) -> Result:
 
 ### Nexus vs Direct Activity Call
 
-```
+```twf
 # Direct activity: tight coupling, same namespace
 workflow OrderWorkflow(order: Order):
     activity ProcessPayment(order.payment)  # Activity in same worker
 
 # Nexus: loose coupling, cross-namespace
 workflow OrderWorkflow(order: Order):
-    nexus payments/ProcessPayment(order.payment)  # Separate namespace/team
+    nexus "payments" workflow ProcessPayment(order.payment)  # Separate namespace/team
 ```
 
 ### Nexus vs Signal
 
-```
-# Signal: fire-and-forget to known workflow
-workflow A():
-    temporal.signal("workflow-b-id", DoSomething, data)
+> Note: `temporal.signal()` is an SDK-level API call, not TWF notation.
 
+```pseudo
+# Signal: fire-and-forget to known workflow (SDK call)
+temporal.signal("workflow-b-id", DoSomething, data)
+```
+
+```twf
 # Nexus: request-response to service endpoint
 workflow A():
-    result = nexus service/Operation(data)  # Get response back
+    nexus "service" workflow Operation(data) -> result  # Get response back
 ```
 
 ### Nexus vs HTTP
 
-```
+```twf
 # HTTP from activity: loses Temporal guarantees
 workflow A():
-    result = activity CallExternalAPI(data)  # You handle retries, failures
+    activity CallExternalAPI(data) -> result  # You handle retries, failures
 
 # Nexus: Temporal-native, durable, retryable
 workflow A():
-    result = nexus external/Operation(data)  # Temporal handles failures
+    nexus "external" workflow Operation(data) -> result  # Temporal handles failures
 ```
 
 ---
@@ -254,7 +260,7 @@ workflow A():
 
 Expose multiple operations through a single Nexus endpoint:
 
-```
+```pseudo
 nexus_service OrdersGateway:
     operation CreateOrder(order: Order) -> OrderResult
     operation GetOrder(orderId: string) -> Order
@@ -266,7 +272,7 @@ nexus_service OrdersGateway:
 
 Route to different workflows based on input:
 
-```
+```pseudo
 nexus_service ProcessingService:
     
     operation Process(request: Request) -> Result:
@@ -281,7 +287,7 @@ nexus_service ProcessingService:
 
 ### Multi-Tenant Routing
 
-```
+```pseudo
 nexus_service TenantService:
     
     operation ProcessForTenant(tenantId: string, data: Data) -> Result:
@@ -297,19 +303,19 @@ nexus_service TenantService:
 
 ### Nexus for Same-Namespace Calls
 
-```
+```twf
 # BAD: Nexus overhead for local calls
 workflow A():
-    nexus local/Operation(data)  # Same namespace!
+    nexus "local" workflow Operation(data)  # Same namespace!
 
 # GOOD: Child workflow for same namespace
 workflow A():
-    child OperationWorkflow(data)
+    workflow OperationWorkflow(data)
 ```
 
 ### Ignoring Authorization
 
-```
+```pseudo
 # BAD: No caller validation
 nexus_service OpenService:
     operation SensitiveOperation(data):
@@ -325,15 +331,17 @@ nexus_service SecureService:
 
 ### Missing Timeout Configuration
 
-```
-# BAD: Default/no timeout
+```twf
+# BAD: No deadline
 workflow A():
-    nexus target/SlowOperation(data)  # May hang indefinitely
+    nexus "target" workflow SlowOperation(data)  # May hang indefinitely
 
-# GOOD: Explicit timeout
+# GOOD: Explicit deadline via await one
 workflow A():
-    nexus target/SlowOperation(data):
-        timeout: 5m
+    await one:
+        nexus "target" workflow SlowOperation(data) -> result:
+        timer(5m):
+            close failed Result{error: "timeout"}
 ```
 
 ---
@@ -344,7 +352,7 @@ workflow A():
 
 Nexus preserves trace context across namespace boundaries:
 
-```
+```text
 Caller workflow (namespace A)
 └─ nexus call
    └─ Handler (namespace B)

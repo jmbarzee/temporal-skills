@@ -1,6 +1,6 @@
 # Workflow Versioning and Evolution
 
-> **Example:** [`examples/versioning.twf`](./examples/versioning.twf)
+> **Example:** [`versioning.twf`](./versioning.twf)
 
 Safe strategies for evolving workflows without breaking running executions.
 
@@ -8,7 +8,7 @@ Safe strategies for evolving workflows without breaking running executions.
 
 Running workflows may execute for hours, days, or months. When you deploy new code:
 
-```
+```text
 Problem:
 1. Workflow V1 starts, runs step A, B
 2. You deploy V2 (changes step B to B')
@@ -37,7 +37,7 @@ Add conditional logic to handle old vs new code paths during replay.
 
 ### Basic Pattern
 
-```
+```twf
 workflow OrderWorkflow(order: Order) -> OrderResult:
     activity ValidateOrder(order)
     
@@ -46,12 +46,12 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
         activity FraudCheck(order)  # New step, only for new workflows
     
     activity ProcessPayment(order)
-    return OrderResult{status: "complete"}
+    close OrderResult{status: "complete"}
 ```
 
 ### How Patching Works
 
-```
+```text
 New Execution:
 1. patched("add-fraud-check") → true (marks in history)
 2. FraudCheck runs
@@ -73,7 +73,7 @@ Replay of New Execution (started after patch):
 ### Patching Examples
 
 **Adding a Step:**
-```
+```twf
 workflow Process(data: Data) -> Result:
     activity Step1(data)
     
@@ -81,11 +81,11 @@ workflow Process(data: Data) -> Result:
         activity NewValidation(data)  # Added in V2
     
     activity Step2(data)
-    return Result{}
+    close Result{}
 ```
 
 **Removing a Step:**
-```
+```twf
 workflow Process(data: Data) -> Result:
     activity Step1(data)
     
@@ -93,11 +93,11 @@ workflow Process(data: Data) -> Result:
         activity LegacyStep(data)  # Removed in V3, but runs for old workflows
     
     activity Step2(data)
-    return Result{}
+    close Result{}
 ```
 
 **Changing a Step:**
-```
+```twf
 workflow Process(data: Data) -> Result:
     activity Step1(data)
     
@@ -107,14 +107,16 @@ workflow Process(data: Data) -> Result:
         activity OldProcessing(data)
     
     activity Step3(data)
-    return Result{}
+    close Result{}
 ```
 
 ### Deprecating Patches
 
 After all old workflows complete, remove patch:
 
-```
+> Note: Patch lifecycle management uses SDK-specific APIs. The concept is shown as pseudo-code.
+
+```pseudo
 # Phase 1: Add patch (both paths exist)
 if patched("add-feature"):
     activity NewFeature()
@@ -137,7 +139,7 @@ Route workflows to workers running compatible code versions.
 
 ### Concept
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                   Task Queue                         │
 ├─────────────────────────────────────────────────────┤
@@ -153,12 +155,16 @@ Route workflows to workers running compatible code versions.
 
 ### Configuration
 
-```
+```bash
 # Register build ID with task queue
 temporal task-queue update-build-ids add-new-default \
     --task-queue main-queue \
     --build-id "v2.0"
+```
 
+> Note: Worker configuration is SDK-level code.
+
+```pseudo
 # Worker identifies its build ID
 worker = Worker(
     task_queue: "main-queue",
@@ -170,7 +176,7 @@ worker = Worker(
 
 ### Version Sets
 
-```
+```bash
 # Create version set: v1.0 and v1.1 are compatible
 temporal task-queue update-build-ids add-new-compatible \
     --task-queue main-queue \
@@ -199,7 +205,7 @@ Create a new workflow type for breaking changes.
 
 ### Pattern
 
-```
+```twf
 # Version 1
 workflow OrderWorkflowV1(order: OrderV1) -> ResultV1:
     # Original implementation
@@ -213,7 +219,9 @@ workflow OrderWorkflowV2(order: OrderV2) -> ResultV2:
 
 ### Migration Strategy
 
-```
+> Note: API routing logic is application-level code, not TWF notation.
+
+```pseudo
 # API layer routes to appropriate version
 function startOrderWorkflow(order):
     if order.version == 1:
@@ -238,8 +246,8 @@ function startOrderWorkflow(order):
 
 ### 1. Plan for Evolution
 
-```
-# Good: Named constants for versions
+```pseudo
+# Good: Named constants for versions (SDK-level code)
 PATCH_ADD_FRAUD_CHECK = "2024-01-add-fraud-check"
 PATCH_IMPROVE_VALIDATION = "2024-02-improve-validation"
 
@@ -250,7 +258,7 @@ workflow Process(data: Data):
 
 ### 2. Test Both Paths
 
-```
+```pseudo
 test "workflow handles both old and new path":
     # Test new execution path
     env = TestEnvironment()
@@ -265,7 +273,7 @@ test "workflow handles both old and new path":
 
 ### 3. Document Versions
 
-```
+```text
 # Workflow: OrderWorkflow
 # 
 # Version History:
@@ -279,7 +287,7 @@ test "workflow handles both old and new path":
 
 ### 4. Monitor Old Workflows
 
-```
+```bash
 # Query for workflows started before patch
 temporal workflow list \
     --query "StartTime < '2024-01-15' AND ExecutionStatus = 'Running'"
@@ -291,7 +299,7 @@ temporal workflow list \
 
 ### Adding Activity
 
-```
+```twf
 workflow Process(data: Data):
     activity Existing1(data)
     
@@ -303,7 +311,7 @@ workflow Process(data: Data):
 
 ### Removing Activity
 
-```
+```twf
 workflow Process(data: Data):
     activity Existing1(data)
     
@@ -315,7 +323,7 @@ workflow Process(data: Data):
 
 ### Reordering Activities
 
-```
+```twf
 # Original order: A, B, C
 # New order: A, C, B
 
@@ -332,7 +340,7 @@ workflow Process(data: Data):
 
 ### Changing Activity Parameters
 
-```
+```twf
 workflow Process(data: Data):
     if patched("new-activity-params"):
         activity Enhanced(data, extraParam: true)
@@ -346,7 +354,7 @@ workflow Process(data: Data):
 
 ### Unguarded Changes
 
-```
+```twf
 # BAD: Breaking change without version guard
 workflow Process(data: Data):
     activity Step1(data)
@@ -363,7 +371,7 @@ workflow Process(data: Data):
 
 ### Too Many Active Patches
 
-```
+```twf
 # BAD: Accumulated complexity
 workflow Process(data: Data):
     if patched("v1"):
@@ -376,7 +384,7 @@ workflow Process(data: Data):
 
 ### Forgetting to Deprecate
 
-```
+```pseudo
 # BAD: Old patch code lives forever
 if patched("feature-from-2020"):  # All workflows with this are done!
     ...

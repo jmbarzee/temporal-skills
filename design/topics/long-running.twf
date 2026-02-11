@@ -5,17 +5,17 @@
 
 workflow LongRunningProcessor(state: State):
     signal NewEvent(data: EventData):
-        activity ProcessEvent(state) -> result
-        state.processed = state.processed + 1
-        eventCount = eventCount + 1
+        state.lastEvent = data
 
     eventCount = 0
 
     for:
         await one:
-            watch (eventCount):
-                hint signal NewEvent
-            timer (24h):
+            signal NewEvent:
+                activity ProcessEvent(state) -> result
+                state.processed = state.processed + 1
+                eventCount = eventCount + 1
+            timer(24h):
                 activity PeriodicCheck(state)
 
         # Reset history before it gets too large
@@ -27,16 +27,12 @@ workflow LongRunningProcessor(state: State):
 workflow UserEntity(userId: string, state: UserState):
     signal UpdateProfile(data: ProfileData):
         state.profile = data
-        activity PersistUser(userId, state)
 
     signal AddCredits(amount: decimal):
         state.credits = state.credits + amount
-        activity PersistUser(userId, state)
 
     signal Deactivate():
         state.active = false
-        activity PersistUser(userId, state)
-        shouldDeactivate = true
 
     query GetState() -> (UserState):
         return state
@@ -51,16 +47,17 @@ workflow UserEntity(userId: string, state: UserState):
         activity LoadUser(userId) -> state
 
     eventCount = 0
-    shouldDeactivate = false
 
     for:
         await one:
-            watch (shouldDeactivate):
-                hint signal UpdateProfile
-                hint signal AddCredits
-                hint signal Deactivate
+            signal UpdateProfile:
+                activity PersistUser(userId, state)
+            signal AddCredits:
+                activity PersistUser(userId, state)
+            signal Deactivate:
+                activity PersistUser(userId, state)
                 close
-            timer (24h):
+            timer(24h):
                 activity DailyMaintenance(userId, state)
 
         eventCount = eventCount + 1

@@ -1,6 +1,6 @@
 # Workflow Patterns
 
-> **Example:** [`examples/patterns.twf`](./examples/patterns.twf)
+> **Example:** [`patterns.twf`](./patterns.twf)
 
 Common patterns for structuring Temporal workflows. Choose based on your use case characteristics.
 
@@ -30,18 +30,18 @@ A discrete operation that drives toward completion.
 
 ### Pattern
 
-```
+```twf
 workflow OrderFulfillment(order: Order) -> OrderResult:
     # Step 1: Validate
-    validated = activity ValidateOrder(order)
+    activity ValidateOrder(order) -> validated
     if not validated.success:
-        return OrderResult{status: "invalid", error: validated.error}
+        close failed OrderResult{status: "invalid", error: validated.error}
     
     # Step 2: Reserve
-    reservation = activity ReserveInventory(order.items)
+    activity ReserveInventory(order.items) -> reservation
     
     # Step 3: Charge
-    payment = activity ProcessPayment(order.payment)
+    activity ProcessPayment(order.payment) -> payment
     
     # Step 4: Fulfill
     activity ShipOrder(order, reservation)
@@ -49,7 +49,7 @@ workflow OrderFulfillment(order: Order) -> OrderResult:
     # Step 5: Notify
     activity SendConfirmation(order.customer)
     
-    return OrderResult{status: "completed", trackingId: reservation.trackingId}
+    close OrderResult{status: "completed", trackingId: reservation.trackingId}
 ```
 
 ### When to Use
@@ -72,29 +72,29 @@ A long-running workflow representing a business entity.
 
 ### Pattern
 
-```
+```twf
 workflow AccountEntity(accountId: string, state: AccountState) -> void:
     if state == null:
-        state = activity LoadAccount(accountId)
-    
-    loop:
-        select:
+        activity LoadAccount(accountId) -> state
+
+    for:
+        await one:
             signal Deposit:
                 state.balance += signal.amount
                 activity RecordTransaction(accountId, "deposit", signal.amount)
-            
+
             signal Withdraw:
                 if state.balance >= signal.amount:
                     state.balance -= signal.amount
                     activity RecordTransaction(accountId, "withdraw", signal.amount)
-            
+
             signal Close:
                 activity CloseAccount(accountId)
-                return
-            
-            timer 24h:
+                close
+
+            timer(24h):
                 activity DailyReconciliation(accountId, state)
-        
+
         if history_size() > 1000:
             continue_as_new(accountId, state)
 
@@ -130,39 +130,30 @@ Distributed transaction with compensation for failures.
 
 ### Pattern
 
-```
+> Note: The saga pattern requires error-handling constructs (try/catch, compensation stacks) that are expressed here as conceptual pseudo-code. See [`patterns.twf`](./patterns.twf) for the TWF syntax version.
+
+```pseudo
 workflow BookingWorkflow(booking: Booking) -> BookingResult:
-    compensations = []
+    # Step 1: Reserve flight
+    activity ReserveFlight(booking.flight) -> flight
     
-    try:
-        # Step 1: Reserve flight
-        flight = activity ReserveFlight(booking.flight)
-        compensations.push(() => activity CancelFlight(flight.id))
-        
-        # Step 2: Reserve hotel
-        hotel = activity ReserveHotel(booking.hotel)
-        compensations.push(() => activity CancelHotel(hotel.id))
-        
-        # Step 3: Reserve car
-        car = activity ReserveCar(booking.car)
-        compensations.push(() => activity CancelCar(car.id))
-        
-        # Step 4: Charge payment
-        payment = activity ChargePayment(booking.payment)
-        compensations.push(() => activity RefundPayment(payment.id))
-        
-        # All succeeded
-        return BookingResult{status: "confirmed", flight, hotel, car, payment}
+    # Step 2: Reserve hotel (compensate flight on failure)
+    activity ReserveHotel(booking.hotel) -> hotel
+    # on failure: activity CancelFlight(flight.id)
     
-    catch as error:
-        # Run compensations in reverse
-        for compensation in reversed(compensations):
-            try:
-                compensation()
-            catch as compError:
-                activity AlertCompensationFailure(compError)
-        
-        return BookingResult{status: "failed", error: error.message}
+    # Step 3: Reserve car (compensate hotel + flight on failure)
+    activity ReserveCar(booking.car) -> car
+    # on failure: activity CancelHotel(hotel.id), activity CancelFlight(flight.id)
+    
+    # Step 4: Charge payment (compensate all on failure)
+    activity ChargePayment(booking.payment) -> payment
+    # on failure: activity CancelCar(car.id), CancelHotel(...), CancelFlight(...)
+    
+    # All succeeded
+    close BookingResult{status: "confirmed", flight, hotel, car, payment}
+    
+    # On any step failure, compensations run in reverse order
+    # SDK-level error handling drives the compensation logic
 ```
 
 ### Compensation Design
@@ -194,57 +185,45 @@ Process items in parallel, aggregate results.
 
 ### Pattern
 
-```
+> Note: The TWF DSL currently re-binds the result variable on each iteration of `await all: for`. The aggregation step below is expressed as conceptual pseudo-code. See [`patterns.twf`](./patterns.twf) for the TWF syntax version.
+
+```twf
 workflow BatchProcessor(items: []Item) -> BatchResult:
     # Fan-out: start all processing in parallel
-    parallel:
-        for item in items:
-            results[item.id] = activity ProcessItem(item)
+    await all:
+        for (item in items):
+            activity ProcessItem(item) -> result
     
-    # Fan-in: aggregate results
-    successful = filter(results, r => r.success)
-    failed = filter(results, r => not r.success)
+    # Fan-in: aggregate results (conceptual -- SDK collects results)
+    activity AggregateResults(items) -> aggregated
     
-    # Handle based on results
-    if len(failed) > 0:
-        activity AlertPartialFailure(failed)
-    
-    return BatchResult{
-        processed: len(successful),
-        failed: len(failed),
-        results: results
-    }
+    close BatchResult{results: aggregated}
 ```
 
 ### Variations
 
 **With Concurrency Limit:**
-```
+```twf
 workflow RateLimitedBatch(items: []Item) -> BatchResult:
-    results = []
-    
     # Process in batches of 10
-    for batch in chunk(items, 10):
-        parallel:
-            for item in batch:
-                results.append(activity ProcessItem(item))
+    for (batch in chunk(items, 10)):
+        await all:
+            for (item in batch):
+                activity ProcessItem(item) -> result
     
-    return BatchResult{results}
+    close BatchResult{}
 ```
 
 **With Early Exit:**
-```
+```twf
 workflow FirstSuccessful(sources: []Source) -> Data:
-    parallel:
-        for source in sources:
-            results[source.id] = activity TryFetch(source)
+    await all:
+        for (source in sources):
+            activity TryFetch(source) -> result
     
-    # Return first successful result
-    for result in results:
-        if result.success:
-            return result.data
-    
-    raise AllSourcesFailed()
+    # SDK-level: find first successful result
+    activity FindFirstSuccess(sources) -> data
+    close data
 ```
 
 ### When to Use
@@ -267,41 +246,42 @@ Sequential transformation stages.
 
 ### Pattern
 
-```
+```twf
 workflow DataPipeline(rawData: RawData) -> ProcessedData:
     # Stage 1: Ingest
-    ingested = activity Ingest(rawData)
+    activity Ingest(rawData) -> ingested
     
     # Stage 2: Validate
-    validated = activity Validate(ingested)
+    activity Validate(ingested) -> validated
     if not validated.valid:
-        return ProcessedData{status: "invalid", errors: validated.errors}
+        close failed ProcessedData{status: "invalid", errors: validated.errors}
     
     # Stage 3: Transform
-    transformed = activity Transform(validated.data)
+    activity Transform(validated.data) -> transformed
     
     # Stage 4: Enrich
-    enriched = activity Enrich(transformed)
+    activity Enrich(transformed) -> enriched
     
     # Stage 5: Load
     activity Load(enriched)
     
-    return ProcessedData{status: "complete", recordCount: enriched.count}
+    close ProcessedData{status: "complete", recordCount: enriched.count}
 ```
 
 ### With Conditional Stages
 
-```
+```twf
 workflow AdaptivePipeline(data: Data) -> Result:
-    processed = activity Parse(data)
+    activity Parse(data) -> processed
     
     if processed.needsEnrichment:
-        processed = activity Enrich(processed)
+        activity Enrich(processed) -> processed
     
     if processed.format == "legacy":
-        processed = activity ConvertLegacy(processed)
+        activity ConvertLegacy(processed) -> processed
     
-    return activity Finalize(processed)
+    activity Finalize(processed) -> result
+    close result
 ```
 
 ### When to Use
@@ -324,41 +304,42 @@ Explicit states and transitions.
 
 ### Pattern
 
-```
+```twf
 workflow DocumentApproval(doc: Document) -> ApprovalResult:
     state = "draft"
-    
-    loop:
-        select state:
-            case "draft":
-                await signal Submit:
-                    activity NotifyReviewers(doc)
-                    state = "pending_review"
-            
-            case "pending_review":
-                await signal Approve:
+
+    for:
+        if state == "draft":
+            await signal Submit
+            activity NotifyReviewers(doc)
+            state = "pending_review"
+
+        elif state == "pending_review":
+            await one:
+                signal Approve:
                     state = "approved"
-                await signal Reject:
+                signal Reject:
                     state = "rejected"
-                await signal RequestChanges:
+                signal RequestChanges:
                     state = "changes_requested"
-            
-            case "changes_requested":
-                await signal Submit:
+
+        elif state == "changes_requested":
+            await one:
+                signal Submit:
                     state = "pending_review"
-                await signal Withdraw:
+                signal Withdraw:
                     state = "withdrawn"
-            
-            case "approved":
-                activity PublishDocument(doc)
-                return ApprovalResult{status: "approved"}
-            
-            case "rejected":
-                activity ArchiveDocument(doc)
-                return ApprovalResult{status: "rejected"}
-            
-            case "withdrawn":
-                return ApprovalResult{status: "withdrawn"}
+
+        elif state == "approved":
+            activity PublishDocument(doc)
+            close ApprovalResult{status: "approved"}
+
+        elif state == "rejected":
+            activity ArchiveDocument(doc)
+            close ApprovalResult{status: "rejected"}
+
+        elif state == "withdrawn":
+            close ApprovalResult{status: "withdrawn"}
 
 query GetState() -> string:
     return state
@@ -395,48 +376,48 @@ Wait for external condition to be met.
 
 ### Pattern
 
-```
+```twf
 workflow WaitForResource(resourceId: string) -> Resource:
-    deadline = now() + 30m
     backoff = 5s
     maxBackoff = 60s
-    
-    loop:
-        status = activity CheckResourceStatus(resourceId)
-        
+
+    for:
+        activity CheckResourceStatus(resourceId) -> status
+
         if status.ready:
-            return activity GetResource(resourceId)
-        
+            activity GetResource(resourceId) -> resource
+            close resource
+
         if status.failed:
-            raise ResourceProvisioningFailed(status.error)
-        
-        # Check deadline
-        if now() > deadline:
             activity CancelProvisioning(resourceId)
-            raise ProvisioningTimeout()
-        
-        # Wait with backoff
-        timer backoff
-        backoff = min(backoff * 2, maxBackoff)
+            close failed ProvisioningError{error: status.error}
+
+        # Wait with backoff, deadline via await one + timer
+        await one:
+            timer(backoff):
+                backoff = min(backoff * 2, maxBackoff)
+            timer(30m):
+                activity CancelProvisioning(resourceId)
+                close failed ProvisioningTimeout{}
 ```
 
 ### With Progress Updates
 
-```
+> Note: `upsert_search_attributes` is an SDK-level call, not TWF notation.
+
+```twf
 workflow MonitorJob(jobId: string) -> JobResult:
-    loop:
-        status = activity GetJobStatus(jobId)
-        
-        # Update search attributes for visibility
-        upsert_search_attributes({
-            JobProgress: status.percentComplete,
-            JobStage: status.currentStage
-        })
-        
+    for:
+        activity GetJobStatus(jobId) -> status
+
+        # Update search attributes for visibility (SDK call)
+        # upsert_search_attributes({JobProgress: status.percentComplete, JobStage: status.currentStage})
+
         if status.complete:
-            return activity GetJobResult(jobId)
-        
-        timer 30s
+            activity GetJobResult(jobId) -> result
+            close result
+
+        await timer(30s)
 ```
 
 ### When to Use
@@ -449,7 +430,7 @@ workflow MonitorJob(jobId: string) -> JobResult:
 
 ## Pattern Selection Guide
 
-```
+```text
 Start
   │
   ├─ Is it a long-lived entity? ──────────────► Entity Pattern

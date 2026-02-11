@@ -1,6 +1,6 @@
 # Timers and Scheduling
 
-> **Example:** [`examples/timers-scheduling.twf`](./examples/timers-scheduling.twf)
+> **Example:** [`timers-scheduling.twf`](./timers-scheduling.twf)
 
 Durable timing primitives for delays, deadlines, and recurring execution.
 
@@ -10,11 +10,11 @@ Durable sleep that survives worker restarts, deployments, and failures.
 
 ### Basic Timer
 
-```
+```twf
 workflow DelayedNotification(userId: string, delay: duration) -> void:
     # Durable sleep - workflow pauses but state is preserved
-    timer delay
-    
+    await timer(delay)
+
     activity SendNotification(userId)
 ```
 
@@ -33,46 +33,44 @@ workflow DelayedNotification(userId: string, delay: duration) -> void:
 
 ### Workflow-Level Deadline
 
-```
+```twf
 workflow OrderFulfillment(order: Order) -> OrderResult:
-    # Entire workflow must complete within deadline
-    workflow_timeout: 7d
-    
+    # Entire workflow must complete within deadline (SDK-level config)
+    # workflow_timeout: 7d
+
     activity ValidateOrder(order)
     await signal PaymentReceived
     activity ShipOrder(order)
-    return OrderResult{status: "completed"}
+    close OrderResult{status: "completed"}
 ```
 
 ### Operation Deadline Pattern
 
-```
+```twf
 workflow ProcessWithDeadline(data: Data) -> Result:
     # Race between operation and deadline
-    select:
-        result = activity LongOperation(data):
-            return Result{success: true, data: result}
-        timer 1h:
+    await one:
+        activity LongOperation(data) -> result:
+            close Result{success: true, data: result}
+        timer(1h):
             activity Cleanup(data)
-            return Result{success: false, error: "deadline exceeded"}
+            close failed Result{success: false, error: "deadline exceeded"}
 ```
 
 ### Timeout on Signal Wait
 
-```
+```twf
 workflow ApprovalWorkflow(request: Request) -> Decision:
     activity NotifyApprovers(request)
-    
-    await signal Approved or signal Rejected:
-        timeout: 7d
-        on_timeout:
+
+    await one:
+        signal Approved:
+            close Decision{status: "approved"}
+        signal Rejected:
+            close Decision{status: "rejected"}
+        timer(7d):
             activity NotifyExpired(request)
-            return Decision{status: "expired"}
-    
-    if received Approved:
-        return Decision{status: "approved"}
-    else:
-        return Decision{status: "rejected"}
+            close Decision{status: "expired"}
 ```
 
 ---
@@ -81,45 +79,43 @@ workflow ApprovalWorkflow(request: Request) -> Decision:
 
 ### Periodic Execution Within Workflow
 
-```
+```twf
 workflow Heartbeat(resourceId: string) -> void:
-    loop:
+    for:
         activity CheckHealth(resourceId)
-        timer 5m
+        await timer(5m)
 ```
 
 ### Polling with Backoff
 
-```
+```twf
 workflow WaitForResource(resourceId: string) -> Resource:
     backoff = 1s
     max_backoff = 5m
-    
-    loop:
-        resource = activity CheckResource(resourceId)
+
+    for:
+        activity CheckResource(resourceId) -> resource
         if resource.ready:
-            return resource
-        
-        timer backoff
+            close resource
+
+        await timer(backoff)
         backoff = min(backoff * 2, max_backoff)
 ```
 
 ### Deadline with Periodic Check
 
-```
+```twf
 workflow WaitForCompletion(jobId: string) -> JobResult:
-    deadline = now() + 2h
-    
-    loop:
-        status = activity GetJobStatus(jobId)
+    for:
+        activity GetJobStatus(jobId) -> status
         if status.complete:
-            return JobResult{status: "complete", data: status.data}
-        
-        select:
-            timer 30s:
-                continue  # Check again
-            timer until deadline:
-                return JobResult{status: "timeout"}
+            close JobResult{status: "complete", data: status.data}
+
+        await one:
+            timer(30s):
+                # Continue polling
+            timer(2h):
+                close failed JobResult{status: "timeout"}
 ```
 
 ---
@@ -139,7 +135,9 @@ Temporal Schedules execute workflows on a recurring basis, like cron.
 
 ### Schedule Specification
 
-```
+> Note: Schedule definitions are Temporal platform configuration, not TWF notation.
+
+```yaml
 schedule DailyReport:
     action: workflow GenerateReport(type: "daily")
     spec:
@@ -152,7 +150,7 @@ schedule DailyReport:
 ### Schedule Patterns
 
 **Simple Interval:**
-```
+```yaml
 schedule HealthCheck:
     action: workflow CheckSystemHealth()
     spec:
@@ -160,7 +158,7 @@ schedule HealthCheck:
 ```
 
 **Cron Expression:**
-```
+```yaml
 schedule WeeklyBackup:
     action: workflow BackupDatabase(type: "full")
     spec:
@@ -168,7 +166,7 @@ schedule WeeklyBackup:
 ```
 
 **Business Hours:**
-```
+```yaml
 schedule BusinessHoursCheck:
     action: workflow CheckQueues()
     spec:
@@ -193,7 +191,7 @@ schedule BusinessHoursCheck:
 
 When schedule is paused or system is down:
 
-```
+```yaml
 schedule DailyReport:
     action: workflow GenerateReport(type: "daily")
     spec:
@@ -209,19 +207,19 @@ schedule DailyReport:
 
 ### Very Short Timers in Loops
 
-```
+```twf
 # BAD: Adds massive workflow history
 workflow PollForever(resourceId: string):
-    loop:
+    for:
         activity Check(resourceId)
-        timer 100ms  # 10 timers/second = huge history
+        await timer(100ms)  # 10 timers/second = huge history
 
 # GOOD: Reasonable interval or use continue-as-new
 workflow PollForever(resourceId: string):
     count = 0
-    loop:
+    for:
         activity Check(resourceId)
-        timer 5s
+        await timer(5s)
         count += 1
         if count > 1000:
             continue_as_new(resourceId)  # Reset history
@@ -229,7 +227,7 @@ workflow PollForever(resourceId: string):
 
 ### Non-Deterministic Time Checks
 
-```
+```twf
 # BAD: Non-deterministic
 workflow Process(data: Data):
     if current_time() > some_deadline:  # Different on replay!
@@ -237,17 +235,19 @@ workflow Process(data: Data):
 
 # GOOD: Use timer
 workflow Process(data: Data):
-    select:
-        activity DoWork(data): return success
-        timer some_deadline: return timeout
+    await one:
+        activity DoWork(data) -> result:
+            close Result{status: "success"}
+        timer(some_deadline):
+            close failed Result{status: "timeout"}
 ```
 
 ### Timer for Immediate Execution
 
-```
+```twf
 # BAD: Unnecessary timer
 workflow Process(data: Data):
-    timer 0s  # Why?
+    await timer(0s)  # Why?
     activity DoWork(data)
 
 # GOOD: Just execute
@@ -272,7 +272,7 @@ workflow Process(data: Data):
 
 Schedules can be timezone-aware:
 
-```
+```yaml
 schedule DailyReport:
     action: workflow GenerateReport()
     spec:
@@ -282,7 +282,7 @@ schedule DailyReport:
 
 ### Jitter for Load Distribution
 
-```
+```yaml
 schedule DistributedHealthCheck:
     action: workflow CheckHealth()
     spec:

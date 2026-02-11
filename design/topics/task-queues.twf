@@ -11,16 +11,16 @@ workflow PriorityOrderWorkflow(order: Order) -> (Result):
         activity ProcessOrder(order) -> result
             options(taskQueue: "standard")
 
-    return Result{result}
+    close Result{result}
 
 # --- Tenant isolation ---
 
 workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
     # Route to tenant-specific queue
     activity ProcessTenantData(data) -> result
-        options(taskQueue: "tenant-queue")
+        options(taskQueue: "tenant-{tenantId}")
 
-    return Result{result}
+    close Result{result}
 
 # --- Capability-based routing ---
 
@@ -33,16 +33,16 @@ workflow MediaWorkflow(media: Media) -> (Result):
         activity ProcessImage(media) -> result
             options(taskQueue: "standard-workers")
 
-    return Result{result}
+    close Result{result}
 
 # --- Geographic routing ---
 
 workflow GlobalWorkflow(request: Request) -> (Result):
     # Route to nearest region
     activity ProcessLocally(request) -> result
-        options(taskQueue: "workers-regional")
+        options(taskQueue: "workers-{request.region}")
 
-    return Result{result}
+    close Result{result}
 
 # --- Multi-queue workflow combining patterns ---
 
@@ -52,7 +52,7 @@ workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
         options(taskQueue: "fast-queue", startToCloseTimeout: 5s)
 
     if (validated.valid == false):
-        return JobResult{status: "invalid"}
+        close failed JobResult{status: "invalid"}
 
     # Process based on job type
     switch (job.type):
@@ -65,7 +65,7 @@ workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
         else:
             activity DefaultProcess(job) -> result
 
-    return JobResult{status: "done"}
+    close JobResult{status: "done"}
 
 # --- Supporting activities ---
 

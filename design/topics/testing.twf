@@ -18,11 +18,11 @@ workflow OrderWorkflow(order: Order) -> (OrderResult):
 workflow ReminderWorkflow(userId: string):
     activity SendFirstReminder(userId)
 
-    timer 24h
+    await timer(24h)
 
     activity SendSecondReminder(userId)
 
-    timer 48h
+    await timer(48h)
 
     activity SendFinalReminder(userId)
     close
@@ -46,13 +46,11 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
     activity NotifyApprovers(request)
 
     await one:
-        watch (approved):
-            hint signal Approved
+        signal Approved:
             close Decision{status: "approved", approver: approverName}
-        watch (rejected):
-            hint signal Rejected
+        signal Rejected:
             close failed Decision{status: "rejected", reason: rejectReason}
-        timer (1h):
+        timer(1h):
             close Decision{status: "timeout"}
 
 # --- Workflow with query for testing ---

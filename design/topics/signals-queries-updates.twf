@@ -5,8 +5,8 @@
 
 workflow OrderWorkflow(orderId: string) -> (OrderResult):
     signal PaymentReceived(transactionId: string, amount: decimal):
-        status = "processing"
-        activity FulfillOrder(order)
+        status = "payment_received"
+        lastTransactionId = transactionId
 
     query GetStatus() -> (string):
         return status
@@ -23,12 +23,10 @@ workflow OrderWorkflow(orderId: string) -> (OrderResult):
 
     # Wait for payment signal with timeout
     await one:
-        watch (status):
-            hint signal PaymentReceived
-            if (status == "processing"):
-                status = "completed"
-                close OrderResult{status: "completed"}
-        timer (24h):
+        signal PaymentReceived:
+            status = "completed"
+            close OrderResult{status: "completed"}
+        timer(24h):
             status = "payment_timeout"
             close failed OrderResult{status: "payment_timeout"}
 
@@ -52,39 +50,35 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
 
     # Wait for either Approved or Rejected signal, or timeout
     await one:
-        watch (approved):
-            hint signal Approved
+        signal Approved:
             close Decision{status: "approved", approver: approver_name}
-        watch (rejected):
-            hint signal Rejected
+        signal Rejected:
             close failed Decision{status: "rejected", reason: reject_reason}
-        timer (7d):
+        timer(7d):
             activity NotifyExpired(request)
             close failed Decision{status: "expired"}
 
 # --- Batch collector with signal accumulation ---
 
-workflow BatchCollector(batchId: string) -> (Batch):
+workflow BatchCollector(batchId: string) -> (BatchResult):
     signal AddItem(item: Item):
-        items = items + 1
+        itemCount = itemCount + 1
 
     signal CompleteBatch():
         completed = true
 
-    items = 0
+    itemCount = 0
     completed = false
 
     for:
         await one:
-            watch (completed):
-                hint signal AddItem
-                hint signal CompleteBatch
+            signal CompleteBatch:
                 break
-            timer (1h):
+            timer(1h):
                 break
 
-    activity ProcessBatch(batchId, items) -> result
-    close Batch{items: items}
+    activity ProcessBatch(batchId, itemCount) -> result
+    close BatchResult{itemCount: itemCount, result: result}
 
 # --- Update-driven subscription workflow ---
 
@@ -109,10 +103,9 @@ workflow SubscriptionWorkflow(userId: string):
 
     for:
         await one:
-            watch (cancelled):
-                hint signal Cancel
+            signal Cancel:
                 break
-            timer (30d):
+            timer(30d):
                 activity BillUser(userId, plan)
 
     close
@@ -124,9 +117,6 @@ activity GetOrder(orderId: string) -> (Order):
 
 activity ValidateOrder(order: Order):
     validate(order)
-
-activity FulfillOrder(order: Order):
-    fulfill(order)
 
 activity NotifyApprovers(request: Request):
     notify_approvers(request)

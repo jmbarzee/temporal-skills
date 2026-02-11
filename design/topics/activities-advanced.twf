@@ -55,7 +55,7 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
     if (result.approved):
         activity ExecuteApprovedAction(request)
 
-    return Decision{approved: result.approved}
+    close Decision{approved: result.approved}
 
 # --- Workflow with various timeout configurations ---
 
@@ -71,7 +71,7 @@ workflow TimeoutConfigDemo(data: Data) -> (Result):
     activity UnreliableService(data) -> result3
         options(startToCloseTimeout: 2m, retryPolicy: {maxAttempts: 5, initialInterval: 1s, backoffCoefficient: 2.0, maxInterval: 60s})
 
-    return Result{result1, result2, result3}
+    close Result{result1, result2, result3}
 
 # --- Supporting activities ---
 

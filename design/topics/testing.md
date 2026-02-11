@@ -1,12 +1,12 @@
 # Testing Temporal Workflows
 
-> **Example:** [`examples/testing.twf`](./examples/testing.twf)
+> **Example:** [`testing.twf`](./testing.twf)
 
 Strategies for testing workflows, activities, and ensuring determinism.
 
 ## Testing Pyramid for Temporal
 
-```
+```text
          ┌─────────────────┐
          │   End-to-End    │  Few, slow, high confidence
          │    Tests        │
@@ -30,7 +30,9 @@ Test activities in isolation by mocking external dependencies.
 
 ### Pattern
 
-```
+> Note: Activity body implementations and test assertions are SDK-level code, not TWF notation.
+
+```pseudo
 # Activity implementation
 activity ProcessPayment(payment: Payment) -> PaymentResult:
     # Validate
@@ -75,17 +77,19 @@ Test workflow logic by mocking activities. Use Temporal's test framework.
 
 ### Pattern
 
-```
+```twf
 workflow OrderWorkflow(order: Order) -> OrderResult:
-    validated = activity ValidateOrder(order)
+    activity ValidateOrder(order) -> validated
     if not validated.success:
-        return OrderResult{status: "invalid"}
+        close failed OrderResult{status: "invalid"}
     
-    payment = activity ProcessPayment(order.payment)
+    activity ProcessPayment(order.payment) -> payment
     activity ShipOrder(order)
     
-    return OrderResult{status: "completed", paymentId: payment.id}
+    close OrderResult{status: "completed", paymentId: payment.id}
+```
 
+```pseudo
 # Test
 test "OrderWorkflow completes successfully":
     env = TestWorkflowEnvironment()
@@ -134,7 +138,7 @@ Verify workflows are deterministic by replaying against recorded history.
 
 ### Why Replay Testing
 
-```
+```text
 Version 1: Workflow runs, generates history
 Version 2: Workflow code changes
 Replay Test: Run version 2 against version 1 history
@@ -143,7 +147,7 @@ Result: PASS (deterministic) or FAIL (non-determinism detected)
 
 ### Pattern
 
-```
+```pseudo
 # Record workflow history
 test "record OrderWorkflow history":
     env = TestWorkflowEnvironment()
@@ -173,16 +177,18 @@ test "OrderWorkflow replays deterministically":
 
 ### Signal Testing
 
-```
+```twf
 workflow ApprovalWorkflow(request: Request) -> Decision:
-    await signal Approved or signal Rejected:
-        timeout: 1h
+    await one:
+        signal Approved:
+            close Decision{status: "approved"}
+        signal Rejected:
+            close Decision{status: "rejected"}
+        timer(1h):
+            close Decision{status: "timeout"}
+```
 
-    if received Approved:
-        return Decision{status: "approved"}
-    else:
-        return Decision{status: "rejected"}
-
+```pseudo
 # Test
 test "ApprovalWorkflow handles Approved signal":
     env = TestWorkflowEnvironment()
@@ -211,7 +217,7 @@ test "ApprovalWorkflow handles timeout":
 
 ### Query Testing
 
-```
+```twf
 workflow OrderWorkflow(order: Order) -> OrderResult:
     status = "pending"
     
@@ -219,11 +225,13 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
     activity ProcessOrder(order)
     
     status = "completed"
-    return OrderResult{status: status}
+    close OrderResult{status: status}
 
 query GetStatus() -> string:
     return status
+```
 
+```pseudo
 # Test
 test "GetStatus query returns current status":
     env = TestWorkflowEnvironment()
@@ -252,18 +260,20 @@ test "GetStatus query returns current status":
 
 Use time-skipping to test timer behavior without waiting.
 
-```
+```twf
 workflow ReminderWorkflow(userId: string) -> void:
     activity SendFirstReminder(userId)
-    
-    timer 24h
-    
-    activity SendSecondReminder(userId)
-    
-    timer 48h
-    
-    activity SendFinalReminder(userId)
 
+    await timer(24h)
+
+    activity SendSecondReminder(userId)
+
+    await timer(48h)
+
+    activity SendFinalReminder(userId)
+```
+
+```pseudo
 # Test
 test "ReminderWorkflow sends reminders at correct intervals":
     env = TestWorkflowEnvironment()
@@ -294,15 +304,17 @@ test "ReminderWorkflow sends reminders at correct intervals":
 
 ## Testing Child Workflows
 
-```
+```twf
 workflow ParentWorkflow(data: Data) -> Result:
-    childResult = child ChildWorkflow(data.item)
-    return Result{childData: childResult}
+    workflow ChildWorkflow(data.item) -> childResult
+    close Result{childData: childResult}
 
 workflow ChildWorkflow(item: Item) -> ChildResult:
     activity ProcessItem(item)
-    return ChildResult{processed: true}
+    close ChildResult{processed: true}
+```
 
+```pseudo
 # Test parent in isolation
 test "ParentWorkflow calls child correctly":
     env = TestWorkflowEnvironment()
@@ -334,7 +346,7 @@ Test with real Temporal server (local or test cluster).
 
 ### Setup
 
-```
+```bash
 # Start local Temporal for testing
 temporal server start-dev
 
@@ -345,7 +357,7 @@ test_environment.start()
 
 ### Pattern
 
-```
+```pseudo
 test "OrderWorkflow end-to-end":
     # Use real Temporal client
     client = TemporalClient(address: "localhost:7233")

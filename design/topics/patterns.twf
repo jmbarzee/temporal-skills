@@ -28,15 +28,13 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
 workflow AccountEntity(accountId: string, state: AccountState):
     signal Deposit(amount: decimal):
         state.balance = state.balance + amount
-        activity RecordTransaction(accountId, "deposit")
 
     signal Withdraw(amount: decimal):
-        state.balance = state.balance - amount
-        activity RecordTransaction(accountId, "withdraw")
+        if (state.balance >= amount):
+            state.balance = state.balance - amount
 
     signal Close():
-        activity CloseAccount(accountId)
-        shouldClose = true
+        closePending = true
 
     query GetBalance() -> (decimal):
         return state.balance
@@ -52,16 +50,18 @@ workflow AccountEntity(accountId: string, state: AccountState):
         activity LoadAccount(accountId) -> state
 
     eventCount = 0
-    shouldClose = false
+    closePending = false
 
     for:
         await one:
-            watch (shouldClose):
-                hint signal Deposit
-                hint signal Withdraw
-                hint signal Close
+            signal Deposit:
+                activity RecordTransaction(accountId, "deposit")
+            signal Withdraw:
+                activity RecordTransaction(accountId, "withdraw")
+            signal Close:
+                activity CloseAccount(accountId)
                 close
-            timer (24h):
+            timer(24h):
                 activity DailyReconciliation(accountId)
 
         eventCount = eventCount + 1
@@ -101,10 +101,10 @@ workflow BatchProcessor(items: []Item) -> (BatchResult):
     # Fan-out: start all processing in parallel
     await all:
         for (item in items):
-            activity ProcessBatchItem(item) -> result
+            activity ProcessBatchItem(item)
 
-    # Fan-in: aggregate results
-    activity AggregateResults(result) -> aggregated
+    # Fan-in: aggregate results (SDK collects results from await all)
+    activity AggregateResults(items) -> aggregated
     close BatchResult{processed: aggregated.count}
 
 # --- Pipeline ---
@@ -154,24 +154,21 @@ workflow DocumentApproval(doc: Document) -> (ApprovalResult):
         switch (state):
             case "draft":
                 await one:
-                    watch (state):
-                        hint signal Submit
-                    timer (90d):
+                    signal Submit:
+                    timer(90d):
                         state = "expired"
             case "pending_review":
                 await one:
-                    watch (state):
-                        hint signal Approve
-                        hint signal Reject
-                        hint signal RequestChanges
-                    timer (30d):
+                    signal Approve:
+                    signal Reject:
+                    signal RequestChanges:
+                    timer(30d):
                         state = "expired"
             case "changes_requested":
                 await one:
-                    watch (state):
-                        hint signal Submit
-                        hint signal Withdraw
-                    timer (30d):
+                    signal Submit:
+                    signal Withdraw:
+                    timer(30d):
                         state = "expired"
             case "approved":
                 activity PublishDocument(doc)
@@ -187,7 +184,8 @@ workflow DocumentApproval(doc: Document) -> (ApprovalResult):
 # --- Polling ---
 
 workflow WaitForResource(resourceId: string) -> (Resource):
-    backoff = 5
+    backoff = 5s
+    maxBackoff = 60s
 
     for:
         activity CheckResourceStatus(resourceId) -> status
@@ -199,9 +197,12 @@ workflow WaitForResource(resourceId: string) -> (Resource):
         if (status.failed):
             close failed Resource{error: status.error}
 
-        # Wait with backoff
-        timer backoff
-        backoff = backoff * 2
+        # Wait with backoff, timeout via await one + timer
+        await one:
+            timer(backoff):
+                backoff = min(backoff * 2, maxBackoff)
+            timer(30m):
+                close failed Resource{error: "timeout"}
 
 # --- Supporting activities ---
 

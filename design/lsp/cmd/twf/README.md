@@ -37,7 +37,7 @@ twf check --lenient workflow.twf  # Continue even with resolve errors
 
 **Example:**
 ```bash
-$ twf check examples/skill-basics.twf
+$ twf check topics/skill-basics.twf
 ✓ OK: 4 workflow(s), 10 activity(s)
 ```
 

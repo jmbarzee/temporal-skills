@@ -11,12 +11,12 @@ workflow ParentWorkflow(input: Input) -> (Result):
     workflow ChildWorkflow(input.data) -> childResult2
         options(workflowExecutionTimeout: 1h, retryPolicy: {maxAttempts: 3})
 
-    return Result{childResult, childResult2}
+    close Result{childResult, childResult2}
 
 workflow ChildWorkflow(data: Data) -> (ChildResult):
     activity Step1(data)
     activity Step2(data)
-    return ChildResult{success: true}
+    close ChildResult{success: true}
 
 # --- Sequential decomposition ---
 
@@ -27,39 +27,39 @@ workflow DeployApplication(app: App) -> (DeployResult):
     workflow DeployFrontend(app.frontend) -> feResult
     workflow ConfigureRouting(app) -> routeResult
 
-    return DeployResult{status: "deployed"}
+    close DeployResult{status: "deployed"}
 
 workflow DeployDatabase(database: Database) -> (DeployResult):
     activity ProvisionDB(database)
     activity MigrateSchema(database)
-    return DeployResult{status: "done"}
+    close DeployResult{status: "done"}
 
 workflow DeployBackend(backend: Backend) -> (DeployResult):
     activity BuildBackend(backend)
     activity DeployContainer(backend)
-    return DeployResult{status: "done"}
+    close DeployResult{status: "done"}
 
 workflow DeployFrontend(frontend: Frontend) -> (DeployResult):
     activity BuildFrontend(frontend)
     activity DeployStatic(frontend)
-    return DeployResult{status: "done"}
+    close DeployResult{status: "done"}
 
 workflow ConfigureRouting(app: App) -> (DeployResult):
     activity SetupRoutes(app)
-    return DeployResult{status: "done"}
+    close DeployResult{status: "done"}
 
 # --- Parallel children ---
 
 workflow ProcessBatch(items: []Item) -> (BatchResult):
     await all:
         for (item in items):
-            workflow ProcessItem(item) -> result
+            workflow ProcessItem(item)
 
-    return BatchResult{results: result}
+    close BatchResult{}
 
 workflow ProcessItem(item: Item) -> (ItemResult):
     activity ProcessSingleItem(item) -> result
-    return ItemResult{result}
+    close ItemResult{result}
 
 # --- Conditional children ---
 
@@ -72,23 +72,23 @@ workflow Onboarding(user: User) -> (OnboardingResult):
         workflow StandardSetup(user) -> setupResult
 
     workflow SendWelcomeEmail(user) -> emailResult
-    return OnboardingResult{success: true}
+    close OnboardingResult{success: true}
 
 workflow CreateAccount(user: User) -> (AccountResult):
     activity CreateUserRecord(user)
-    return AccountResult{success: true}
+    close AccountResult{success: true}
 
 workflow EnterpriseSetup(user: User) -> (SetupResult):
     activity ConfigureEnterprise(user)
-    return SetupResult{done: true}
+    close SetupResult{done: true}
 
 workflow StandardSetup(user: User) -> (SetupResult):
     activity ConfigureStandard(user)
-    return SetupResult{done: true}
+    close SetupResult{done: true}
 
 workflow SendWelcomeEmail(user: User) -> (EmailResult):
     activity SendEmail(user.email, "Welcome!")
-    return EmailResult{sent: true}
+    close EmailResult{sent: true}
 
 # --- Detached child (fire-and-forget) ---
 
@@ -96,7 +96,7 @@ workflow ParentWithDetach(order: Order) -> (OrderResult):
     activity ProcessOrder(order) -> result
     # Fire-and-forget notification
     detach workflow NotifyCustomer(order.customer)
-    return OrderResult{status: "done"}
+    close OrderResult{status: "done"}
 
 workflow NotifyCustomer(customer: Customer):
     activity SendNotification(customer)

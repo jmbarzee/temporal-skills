@@ -1,6 +1,6 @@
 # Advanced Activity Patterns
 
-> **Example:** [`examples/activities-advanced.twf`](./examples/activities-advanced.twf)
+> **Example:** [`activities-advanced.twf`](./activities-advanced.twf)
 
 Heartbeats, async completion, local activities, and timeout configuration for sophisticated activity designs.
 
@@ -18,7 +18,9 @@ Long-running activities should periodically heartbeat to report progress and all
 
 ### Basic Heartbeat Pattern
 
-```
+> Note: Activity body implementations are SDK-level code, not TWF notation.
+
+```pseudo
 activity ProcessLargeFile(fileId: string) -> ProcessResult:
     file = download(fileId)
     total = len(file.chunks)
@@ -38,7 +40,7 @@ activity ProcessLargeFile(fileId: string) -> ProcessResult:
 
 ### Heartbeat with Cancellation Check
 
-```
+```pseudo
 activity LongRunningTask(taskId: string) -> TaskResult:
     for step in steps:
         # Check if workflow requested cancellation
@@ -53,18 +55,17 @@ activity LongRunningTask(taskId: string) -> TaskResult:
 
 ### Heartbeat Timeout Configuration
 
-```
+```twf
 workflow Parent(data: Data) -> Result:
-    result = activity LongProcess(data):
-        start_to_close_timeout: 1h    # Max total execution time
-        heartbeat_timeout: 30s         # Must heartbeat within 30s
+    options(start_to_close_timeout: 1h, heartbeat_timeout: 30s)
+    activity LongProcess(data) -> result
     
-    return result
+    close result
 ```
 
 ### Resume from Heartbeat Details
 
-```
+```pseudo
 activity ResumableProcess(batchId: string) -> BatchResult:
     # Get last heartbeat details (if resuming after failure)
     lastProgress = get_heartbeat_details()
@@ -96,7 +97,7 @@ Complete an activity from outside the activity execution context. Useful for hum
 
 ### Async Completion Pattern
 
-```
+```pseudo
 activity RequestHumanApproval(request: ApprovalRequest) -> ApprovalResult:
     # Get task token for external completion
     taskToken = get_activity_task_token()
@@ -122,24 +123,25 @@ activity RequestHumanApproval(request: ApprovalRequest) -> ApprovalResult:
 
 ### Workflow Using Async Activity
 
-```
+```twf
 workflow ApprovalWorkflow(request: Request) -> Decision:
     activity NotifyRequestCreated(request)
     
     # This activity blocks until external completion
-    result = activity RequestHumanApproval(request):
-        start_to_close_timeout: 7d  # Long timeout for human task
-        heartbeat_timeout: 0         # No heartbeat needed
+    options(start_to_close_timeout: 7d, heartbeat_timeout: 0)
+    activity RequestHumanApproval(request) -> result
     
     if result.approved:
         activity ExecuteApprovedAction(request)
     
-    return Decision{approved: result.approved}
+    close Decision{approved: result.approved}
 ```
 
 ### External Completion API
 
-```
+> Note: Temporal API calls are SDK-level, not TWF notation.
+
+```pseudo
 # Complete activity successfully
 temporal.complete_activity(
     task_token: "...",
@@ -176,16 +178,18 @@ Lightweight activities that execute in the workflow worker process without task 
 
 ### Local Activity Pattern
 
-```
+> Note: Local activities are an SDK-level concept. In TWF notation, use `activity` with an `options()` block specifying local execution. The syntax below is conceptual.
+
+```twf
 workflow ProcessOrder(order: Order) -> Result:
-    # Local activity: fast, in-process
-    validated = local_activity ValidateInput(order):
-        start_to_close_timeout: 5s
+    # Local activity: fast, in-process (SDK: use local activity API)
+    options(local: true, start_to_close_timeout: 5s)
+    activity ValidateInput(order) -> validated
     
     # Regular activity: goes through task queue
-    result = activity ProcessPayment(order)
+    activity ProcessPayment(order) -> result
     
-    return result
+    close result
 ```
 
 ### Local Activity Limitations
@@ -199,14 +203,12 @@ workflow ProcessOrder(order: Order) -> Result:
 
 ### Local Activity Configuration
 
-```
+> Note: Local activity configuration is SDK-specific.
+
+```twf
 workflow Parent(data: Data) -> Result:
-    result = local_activity QuickValidation(data):
-        start_to_close_timeout: 10s
-        local_retry_threshold: 5s      # Retry locally for 5s
-        retry_policy:
-            max_attempts: 3
-            initial_interval: 100ms
+    options(local: true, start_to_close_timeout: 10s, local_retry_threshold: 5s, retry_policy: {max_attempts: 3, initial_interval: 100ms})
+    activity QuickValidation(data) -> result
 ```
 
 ---
@@ -224,7 +226,7 @@ workflow Parent(data: Data) -> Result:
 
 ### Timeout Relationships
 
-```
+```text
 |-------- schedule_to_close --------|
 |-- schedule_to_start --|-- start_to_close --|
 
@@ -233,23 +235,21 @@ schedule_to_close >= schedule_to_start + start_to_close
 
 ### Configuration Examples
 
-```
+```twf
 workflow Parent(data: Data) -> Result:
     # Short operation, tight timeout
-    result = activity QuickLookup(data.id):
-        start_to_close_timeout: 30s
+    options(start_to_close_timeout: 30s)
+    activity QuickLookup(data.id) -> result
     
     # Long operation with heartbeat
-    result = activity ProcessBatch(data):
-        start_to_close_timeout: 2h
-        heartbeat_timeout: 60s
+    options(start_to_close_timeout: 2h, heartbeat_timeout: 60s)
+    activity ProcessBatch(data) -> result
     
     # Operation with queue wait tolerance
-    result = activity LowPriorityTask(data):
-        schedule_to_start_timeout: 5m    # Wait up to 5m in queue
-        start_to_close_timeout: 10m
+    options(schedule_to_start_timeout: 5m, start_to_close_timeout: 10m)
+    activity LowPriorityTask(data) -> result
     
-    return result
+    close result
 ```
 
 ### Timeout Selection Guidelines
@@ -268,23 +268,21 @@ workflow Parent(data: Data) -> Result:
 
 ### Retry Configuration
 
-```
+```twf
 workflow Parent(data: Data) -> Result:
-    result = activity UnreliableService(data):
-        retry_policy:
-            initial_interval: 1s          # First retry after 1s
-            backoff_coefficient: 2.0       # Double each retry
-            max_interval: 60s              # Cap at 60s between retries
-            max_attempts: 5                # Give up after 5 attempts
-            non_retryable_errors: [        # Don't retry these
-                "InvalidInput",
-                "NotFound"
-            ]
+    options(retry_policy: {
+        initial_interval: 1s,
+        backoff_coefficient: 2.0,
+        max_interval: 60s,
+        max_attempts: 5,
+        non_retryable_errors: ["InvalidInput", "NotFound"]
+    })
+    activity UnreliableService(data) -> result
 ```
 
 ### Error Classification
 
-```
+```pseudo
 activity CallExternalAPI(request: Request) -> Response:
     try:
         return api.call(request)
@@ -305,7 +303,7 @@ activity CallExternalAPI(request: Request) -> Response:
 
 ### Missing Heartbeat on Long Operations
 
-```
+```pseudo
 # BAD: 2-hour activity with no heartbeat
 activity ProcessHugeFile(fileId: string):
     for chunk in file.chunks:  # Takes 2 hours
@@ -322,7 +320,7 @@ activity ProcessHugeFile(fileId: string):
 
 ### Wrong Timeout for Operation Type
 
-```
+```pseudo
 # BAD: 1-minute timeout for human task
 activity GetHumanApproval():
     start_to_close_timeout: 1m  # Humans are slower than this!
@@ -335,10 +333,9 @@ activity GetHumanApproval():
 
 ### Local Activity for External Calls
 
-```
-# BAD: Network call in local activity
-local_activity CallExternalAPI(data):
-    return http.post(external_url, data)  # Network latency + failures
+```pseudo
+# BAD: Network call in local activity (SDK-level concept)
+# Local activities should not make network calls
 
 # GOOD: Regular activity for external calls
 activity CallExternalAPI(data):

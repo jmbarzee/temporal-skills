@@ -530,7 +530,7 @@ Common error types:
 
 ## Examples
 
-See the `examples/` directory for complete working examples of all language features.
+See the `topics/` directory for complete working examples of all language features.
 
 ## Grammar Summary
 

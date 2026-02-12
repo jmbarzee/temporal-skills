@@ -36,8 +36,7 @@ done
 echo "Building Go binaries..."
 cd "$DESIGN_DIR/lsp"
 go build ./...
-go install ./cmd/twf-lsp
-go install ./cmd/parse
+go install ./cmd/twf
 
 echo "Building visualizer..."
 cd "$DESIGN_DIR/visualizer"

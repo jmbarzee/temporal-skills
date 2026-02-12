@@ -2,7 +2,7 @@
   "name": "twf-syntax",
   "displayName": "Temporal Workflow (.twf)",
   "description": "Syntax highlighting, language support, and visualization for Temporal Workflow Definition (.twf) files",
-  "version": "0.2.4",
+  "version": "0.2.6",
   "publisher": "jmbarzee",
   "license": "MIT",
   "repository": {

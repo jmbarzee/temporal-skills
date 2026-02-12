@@ -67,36 +67,37 @@ function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
   const context = React.useContext(DefinitionContextProvider)
   const activityDef = context.activities.get(stmt.name)
   const refocus = useRefocus()
+  const isDefined = !!activityDef
 
   const signature = formatActivityCallSignature(stmt)
 
   const handleToggle = () => {
-    setExpanded(!expanded)
+    if (isDefined) { setExpanded(!expanded) }
     refocus()
   }
 
   return (
-    <div className={`block block-activity ${expanded ? 'expanded' : 'collapsed'} ${!activityDef ? 'block-undefined' : ''}`}>
+    <div className={`block block-activity ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
       <div className="block-header" onClick={handleToggle}>
-        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        {isDefined ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
         <span className="block-icon"><SingleGearIcon /></span>
         <span className="block-keyword">activity</span>
         <span className="block-signature">{signature}</span>
-        {!activityDef && <span className="block-undefined-badge">?</span>}
+        {!isDefined && <span className="block-unresolved-badge">?</span>}
       </div>
       
-      {expanded && (
+      {expanded && isDefined && (
         <div className="block-body">
-          {activityDef ? (
-            (activityDef.body || []).length > 0 ? (
-              (activityDef.body || []).map((s, i) => (
-                <StatementBlock key={i} statement={s} />
-              ))
-            ) : (
-              <div className="block-empty-body">No implementation defined</div>
-            )
+          {(activityDef.body || []).length > 0 ? (
+            (activityDef.body || []).map((s, i) => (
+              <StatementBlock key={i} statement={s} />
+            ))
           ) : (
-            <MissingDefinition kind="activity" name={stmt.name} />
+            <div className="block-empty-body">No implementation defined</div>
           )}
         </div>
       )}
@@ -113,6 +114,7 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const context = React.useContext(DefinitionContextProvider)
   const workflowDef = context.workflows.get(stmt.name)
   const refocus = useRefocus()
+  const isDefined = !!workflowDef
 
   const modePrefix = stmt.mode === 'spawn' ? 'spawn ' : stmt.mode === 'detach' ? 'detach ' : ''
   const signature = formatWorkflowCallSignature(stmt)
@@ -121,107 +123,108 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const hasQueries = workflowDef?.queries && workflowDef.queries.length > 0
   const hasUpdates = workflowDef?.updates && workflowDef.updates.length > 0
 
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
+  const handleToggle = () => {
+    if (isDefined) { setExpanded(!expanded) }
+    refocus()
+  }
   const toggleSignals = () => { setSignalsExpanded(!signalsExpanded); refocus() }
   const toggleQueries = () => { setQueriesExpanded(!queriesExpanded); refocus() }
   const toggleUpdates = () => { setUpdatesExpanded(!updatesExpanded); refocus() }
 
   return (
-    <div className={`block block-workflow-call block-mode-${stmt.mode} ${expanded ? 'expanded' : 'collapsed'} ${!workflowDef ? 'block-undefined' : ''}`}>
+    <div className={`block block-workflow-call block-mode-${stmt.mode} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
       <div className="block-header" onClick={handleToggle}>
-        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        {isDefined ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
         <span className="block-icon"><InterlockingGearsIcon /></span>
         <span className="block-keyword">{modePrefix}workflow</span>
         <span className="block-signature">{signature}</span>
-        {!workflowDef && <span className="block-undefined-badge">?</span>}
+        {!isDefined && <span className="block-unresolved-badge">?</span>}
       </div>
       
-      {expanded && (
+      {expanded && isDefined && (
         <div className="block-body">
-          {workflowDef ? (
-            <>
-              {/* Signals - data flowing IN to workflow */}
-              {hasSignals && (
-                <div className="block-declarations-group">
-                  <div className="declarations-header" onClick={toggleSignals}>
-                    <span className="block-toggle">{signalsExpanded ? '▼' : '▶'}</span>
-                    <span className="declarations-icon declaration-signal">↪</span>
-                    <span className="declarations-label">signals</span>
-                    <span className="declarations-count">({workflowDef.signals!.length})</span>
-                  </div>
-                  {signalsExpanded && (
-                    <div className="block-declarations">
-                      {workflowDef.signals!.map((s, i) => (
-                        <div key={i} className="declaration declaration-signal">
-                          <span className="declaration-icon">↪</span>
-                          <span className="declaration-keyword">signal</span>
-                          <span className="declaration-name">{s.name}</span>
-                          <span className="declaration-params">({s.params})</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {/* Queries - data flowing OUT of workflow */}
-              {hasQueries && (
-                <div className="block-declarations-group">
-                  <div className="declarations-header" onClick={toggleQueries}>
-                    <span className="block-toggle">{queriesExpanded ? '▼' : '▶'}</span>
-                    <span className="declarations-icon declaration-query">↩</span>
-                    <span className="declarations-label">queries</span>
-                    <span className="declarations-count">({workflowDef.queries!.length})</span>
-                  </div>
-                  {queriesExpanded && (
-                    <div className="block-declarations">
-                      {workflowDef.queries!.map((q, i) => (
-                        <div key={i} className="declaration declaration-query">
-                          <span className="declaration-icon">↩</span>
-                          <span className="declaration-keyword">query</span>
-                          <span className="declaration-name">{q.name}</span>
-                          <span className="declaration-params">({q.params})</span>
-                          {q.returnType && <span className="declaration-return">→ {q.returnType}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {/* Updates - data flowing BOTH ways */}
-              {hasUpdates && (
-                <div className="block-declarations-group">
-                  <div className="declarations-header" onClick={toggleUpdates}>
-                    <span className="block-toggle">{updatesExpanded ? '▼' : '▶'}</span>
-                    <span className="declarations-icon declaration-update">⇄</span>
-                    <span className="declarations-label">updates</span>
-                    <span className="declarations-count">({workflowDef.updates!.length})</span>
-                  </div>
-                  {updatesExpanded && (
-                    <div className="block-declarations">
-                      {workflowDef.updates!.map((u, i) => (
-                        <div key={i} className="declaration declaration-update">
-                          <span className="declaration-icon">⇄</span>
-                          <span className="declaration-keyword">update</span>
-                          <span className="declaration-name">{u.name}</span>
-                          <span className="declaration-params">({u.params})</span>
-                          {u.returnType && <span className="declaration-return">→ {u.returnType}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Body statements */}
-              <div className="block-statements">
-                {(workflowDef.body || []).map((s, i) => (
-                  <StatementBlock key={i} statement={s} />
-                ))}
+          {/* Signals - data flowing IN to workflow */}
+          {hasSignals && (
+            <div className="block-declarations-group">
+              <div className="declarations-header" onClick={toggleSignals}>
+                <span className="block-toggle">{signalsExpanded ? '▼' : '▶'}</span>
+                <span className="declarations-icon declaration-signal">↪</span>
+                <span className="declarations-label">signals</span>
+                <span className="declarations-count">({workflowDef.signals!.length})</span>
               </div>
-            </>
-          ) : (
-            <MissingDefinition kind="workflow" name={stmt.name} />
+              {signalsExpanded && (
+                <div className="block-declarations">
+                  {workflowDef.signals!.map((s, i) => (
+                    <div key={i} className="declaration declaration-signal">
+                      <span className="declaration-icon">↪</span>
+                      <span className="declaration-keyword">signal</span>
+                      <span className="declaration-name">{s.name}</span>
+                      <span className="declaration-params">({s.params})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
+          {/* Queries - data flowing OUT of workflow */}
+          {hasQueries && (
+            <div className="block-declarations-group">
+              <div className="declarations-header" onClick={toggleQueries}>
+                <span className="block-toggle">{queriesExpanded ? '▼' : '▶'}</span>
+                <span className="declarations-icon declaration-query">↩</span>
+                <span className="declarations-label">queries</span>
+                <span className="declarations-count">({workflowDef.queries!.length})</span>
+              </div>
+              {queriesExpanded && (
+                <div className="block-declarations">
+                  {workflowDef.queries!.map((q, i) => (
+                    <div key={i} className="declaration declaration-query">
+                      <span className="declaration-icon">↩</span>
+                      <span className="declaration-keyword">query</span>
+                      <span className="declaration-name">{q.name}</span>
+                      <span className="declaration-params">({q.params})</span>
+                      {q.returnType && <span className="declaration-return">→ {q.returnType}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Updates - data flowing BOTH ways */}
+          {hasUpdates && (
+            <div className="block-declarations-group">
+              <div className="declarations-header" onClick={toggleUpdates}>
+                <span className="block-toggle">{updatesExpanded ? '▼' : '▶'}</span>
+                <span className="declarations-icon declaration-update">⇄</span>
+                <span className="declarations-label">updates</span>
+                <span className="declarations-count">({workflowDef.updates!.length})</span>
+              </div>
+              {updatesExpanded && (
+                <div className="block-declarations">
+                  {workflowDef.updates!.map((u, i) => (
+                    <div key={i} className="declaration declaration-update">
+                      <span className="declaration-icon">⇄</span>
+                      <span className="declaration-keyword">update</span>
+                      <span className="declaration-name">{u.name}</span>
+                      <span className="declaration-params">({u.params})</span>
+                      {u.returnType && <span className="declaration-return">→ {u.returnType}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Body statements */}
+          <div className="block-statements">
+            {(workflowDef.body || []).map((s, i) => (
+              <StatementBlock key={i} statement={s} />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -235,7 +238,7 @@ function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   const handlers = React.useContext(HandlerContextProvider)
   const refocus = useRefocus()
 
-  const { icon, keyword, signature, blockClass, expandableDef } = getAwaitStmtDisplay(stmt, context, handlers)
+  const { icon, keyword, signature, blockClass, expandableDef, isUnresolved } = getAwaitStmtDisplay(stmt, context, handlers)
 
   const handleToggle = () => {
     if (expandableDef) { setExpanded(!expanded) }
@@ -243,7 +246,7 @@ function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   }
 
   return (
-    <div className={`block ${blockClass} ${expanded ? 'expanded' : 'collapsed'}`}>
+    <div className={`block ${blockClass} ${expanded ? 'expanded' : 'collapsed'} ${isUnresolved ? 'block-unresolved' : ''}`}>
       <div className="block-header" onClick={handleToggle}>
         {expandableDef ? (
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
@@ -253,6 +256,7 @@ function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
         <span className="block-icon">{icon}</span>
         <span className="block-keyword">{keyword}</span>
         <span className="block-signature">{signature}</span>
+        {isUnresolved && <span className="block-unresolved-badge">?</span>}
       </div>
 
       {expanded && expandableDef && (
@@ -275,37 +279,37 @@ function getAwaitStmtDisplay(
   stmt: AwaitStmt,
   context: { activities: Map<string, any>; workflows: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
-): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] } } {
+): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
   switch (stmt.kind) {
     case 'timer':
-      return { icon: '⏱', keyword: 'await timer', signature: `(${stmt.timer || ''})`, blockClass: 'block-await-stmt block-await-stmt-timer' }
+      return { icon: '⏱', keyword: 'await timer', signature: `(${stmt.timer || ''})`, blockClass: 'block-await-stmt block-await-stmt-timer', isUnresolved: false }
     case 'signal': {
       const sig = stmt.signal || ''
       const params = stmt.signalParams ? ` → ${stmt.signalParams}` : ''
       const handler = handlers.signals.get(sig)
-      return { icon: '↪', keyword: 'await signal', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-signal', expandableDef: handler }
+      return { icon: '↪', keyword: 'await signal', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-signal', expandableDef: handler, isUnresolved: !handler }
     }
     case 'update': {
       const sig = stmt.update || ''
       const params = stmt.updateParams ? ` → ${stmt.updateParams}` : ''
       const handler = handlers.updates.get(sig)
-      return { icon: '⇄', keyword: 'await update', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-update', expandableDef: handler }
+      return { icon: '⇄', keyword: 'await update', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-update', expandableDef: handler, isUnresolved: !handler }
     }
     case 'activity': {
       const sig = `${stmt.activity || ''}(${stmt.activityArgs || ''})`
       const result = stmt.activityResult ? ` → ${stmt.activityResult}` : ''
       const def = context.activities.get(stmt.activity || '')
-      return { icon: '', keyword: 'await activity', signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-activity', expandableDef: def }
+      return { icon: '', keyword: 'await activity', signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-activity', expandableDef: def, isUnresolved: !def }
     }
     case 'workflow': {
       const modePrefix = stmt.workflowMode === 'spawn' ? 'spawn ' : stmt.workflowMode === 'detach' ? 'detach ' : ''
       const sig = `${stmt.workflow || ''}(${stmt.workflowArgs || ''})`
       const result = stmt.workflowResult ? ` → ${stmt.workflowResult}` : ''
       const def = context.workflows.get(stmt.workflow || '')
-      return { icon: '', keyword: `await ${modePrefix}workflow`, signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-workflow', expandableDef: def }
+      return { icon: '', keyword: `await ${modePrefix}workflow`, signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-workflow', expandableDef: def, isUnresolved: !def }
     }
     default:
-      return { icon: '?', keyword: 'await', signature: '', blockClass: 'block-await-stmt' }
+      return { icon: '?', keyword: 'await', signature: '', blockClass: 'block-await-stmt', isUnresolved: false }
   }
 }
 
@@ -367,12 +371,14 @@ function AwaitOneBlockComponent({ stmt }: { stmt: AwaitOneBlock }) {
 // Render await one cases with unified tag design
 function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
   const [expanded, setExpanded] = React.useState(false)
+  const context = React.useContext(DefinitionContextProvider)
+  const handlers = React.useContext(HandlerContextProvider)
   const refocus = useRefocus()
   const hasBody = awaitCase.body && awaitCase.body.length > 0
   const isExpandable = hasBody || awaitCase.awaitAll
 
   // Determine display based on case kind
-  const { contentClass, icon, keyword, signature } = getAwaitOneCaseDisplay(awaitCase)
+  const { contentClass, icon, keyword, signature, isUnresolved } = getAwaitOneCaseDisplay(awaitCase, context, handlers)
 
   const handleToggle = () => { 
     if (isExpandable) { setExpanded(!expanded) }
@@ -380,7 +386,7 @@ function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
   }
 
   return (
-    <div className={`tagged-composite ${expanded ? 'expanded' : ''}`}>
+    <div className={`tagged-composite ${expanded ? 'expanded' : ''} ${isUnresolved ? 'tagged-unresolved' : ''}`}>
       <div className="tagged-tag">
         <span className="tagged-tag-label">option</span>
       </div>
@@ -390,6 +396,7 @@ function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
         <span className="tagged-icon">{icon}</span>
         <span className="tagged-kind">{keyword}</span>
         <span className="tagged-name">{signature}</span>
+        {isUnresolved && <span className="block-unresolved-badge">?</span>}
       </div>
       {expanded && (
         <div className="tagged-body">
@@ -408,33 +415,41 @@ function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
 }
 
 // Get display info for await one cases
-function getAwaitOneCaseDisplay(c: AwaitOneCase): { contentClass: string; icon: string; keyword: string; signature: string } {
+function getAwaitOneCaseDisplay(
+  c: AwaitOneCase,
+  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  handlers: { signals: Map<string, any>; updates: Map<string, any> },
+): { contentClass: string; icon: string; keyword: string; signature: string; isUnresolved: boolean } {
   switch (c.kind) {
     case 'signal': {
       const params = c.signalParams ? ` → ${c.signalParams}` : ''
-      return { contentClass: 'tagged-signal', icon: '↪', keyword: 'signal', signature: `${c.signal || ''}${params}` }
+      const handler = handlers.signals.get(c.signal || '')
+      return { contentClass: 'tagged-signal', icon: '↪', keyword: 'signal', signature: `${c.signal || ''}${params}`, isUnresolved: !handler }
     }
     case 'update': {
       const params = c.updateParams ? ` → ${c.updateParams}` : ''
-      return { contentClass: 'tagged-update', icon: '⇄', keyword: 'update', signature: `${c.update || ''}${params}` }
+      const handler = handlers.updates.get(c.update || '')
+      return { contentClass: 'tagged-update', icon: '⇄', keyword: 'update', signature: `${c.update || ''}${params}`, isUnresolved: !handler }
     }
     case 'timer':
-      return { contentClass: 'tagged-timer', icon: '⏱', keyword: 'timer', signature: `(${c.timer || ''})` }
+      return { contentClass: 'tagged-timer', icon: '⏱', keyword: 'timer', signature: `(${c.timer || ''})`, isUnresolved: false }
     case 'activity': {
       const sig = `${c.activity || ''}(${c.activityArgs || ''})`
       const result = c.activityResult ? ` → ${c.activityResult}` : ''
-      return { contentClass: 'tagged-activity', icon: '⚙', keyword: 'activity', signature: `${sig}${result}` }
+      const def = context.activities.get(c.activity || '')
+      return { contentClass: 'tagged-activity', icon: '⚙', keyword: 'activity', signature: `${sig}${result}`, isUnresolved: !def }
     }
     case 'workflow': {
       const modePrefix = c.workflowMode === 'spawn' ? 'spawn ' : c.workflowMode === 'detach' ? 'detach ' : ''
       const sig = `${c.workflow || ''}(${c.workflowArgs || ''})`
       const result = c.workflowResult ? ` → ${c.workflowResult}` : ''
-      return { contentClass: 'tagged-workflow', icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}` }
+      const def = context.workflows.get(c.workflow || '')
+      return { contentClass: 'tagged-workflow', icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, isUnresolved: !def }
     }
     case 'await_all':
-      return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)` }
+      return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
     default:
-      return { contentClass: 'tagged-raw', icon: '?', keyword: 'unknown', signature: '' }
+      return { contentClass: 'tagged-raw', icon: '?', keyword: 'unknown', signature: '', isUnresolved: false }
   }
 }
 
@@ -662,21 +677,6 @@ function SimpleBlock({ keyword, className }: { keyword: string; className: strin
         <span className="block-icon">•</span>
         <span className="block-keyword">{keyword}</span>
       </div>
-    </div>
-  )
-}
-
-// Missing definition indicator
-function MissingDefinition({ kind, name }: { kind: string; name: string }) {
-  return (
-    <div className="missing-definition">
-      <span className="missing-definition-icon">⚠</span>
-      <span className="missing-definition-text">
-        No definition found for {kind} <strong>{name}</strong>
-      </span>
-      <span className="missing-definition-hint">
-        Define it in a .twf file in this folder to see its contents
-      </span>
     </div>
   )
 }

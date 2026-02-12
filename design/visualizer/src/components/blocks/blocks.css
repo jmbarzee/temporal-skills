@@ -762,53 +762,34 @@
   color: var(--decl-update-text);
 }
 
-/* Undefined/Missing definition styles */
-.block-undefined-badge {
+/* Unresolved/Missing definition styles
+   The block keeps its type color but uses a dashed border and faded background
+   to signal "this call is fine, but the definition isn't in scope" */
+.block.block-unresolved {
+  border-style: dashed !important;
+  opacity: 0.82;
+}
+
+.block-unresolved-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
   margin-left: 8px;
-  background: var(--color-warning, #f59e0b);
-  color: #fff;
+  border: 1.5px solid currentColor;
+  color: inherit;
   font-size: 11px;
   font-weight: 700;
   border-radius: 50%;
   flex-shrink: 0;
+  opacity: 0.6;
 }
 
-.missing-definition {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px dashed rgba(245, 158, 11, 0.3);
-  border-radius: 6px;
-  text-align: center;
-}
-
-.missing-definition-icon {
-  font-size: 20px;
-  color: var(--color-warning, #f59e0b);
-}
-
-.missing-definition-text {
-  font-size: 13px;
-  color: var(--color-text);
-}
-
-.missing-definition-text strong {
-  color: var(--color-workflow);
-  font-family: var(--font-mono);
-}
-
-.missing-definition-hint {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  opacity: 0.8;
+/* Tagged composites (await one cases) — unresolved variant */
+.tagged-composite.tagged-unresolved .tagged-content {
+  border-style: dashed !important;
+  opacity: 0.82;
 }
 
 /* Empty body indicator */

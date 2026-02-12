@@ -5,6 +5,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/iancoleman/strcase v0.3.0 h1:nTXanmYxhfFAMjZL34Ov6gkzEsSJZ5DbhxWjvSASxEI=
 github.com/iancoleman/strcase v0.3.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
+github.com/jmbarzee/glsp v0.0.0-20260211184817-15faee801506 h1:11KWTio5Ke17wqbG0Cv5xxn2ptUHxaVyq5MjreKDJ4I=
+github.com/jmbarzee/glsp v0.0.0-20260211184817-15faee801506/go.mod h1:0mr4+bYwGddJfGuaxnUZBSxkshSzFOIyTmBRvfJDBo4=
 github.com/lucasb-eyer/go-colorful v1.2.0 h1:1nnpGOrhyZZuNyfu1QjKiUICQ74+3FNCN69Aj6K7nkY=
 github.com/lucasb-eyer/go-colorful v1.2.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
@@ -27,8 +29,6 @@ github.com/sourcegraph/jsonrpc2 v0.2.0 h1:KjN/dC4fP6aN9030MZCJs9WQbTOjWHhrtKVpzz
 github.com/sourcegraph/jsonrpc2 v0.2.0/go.mod h1:ZafdZgk/axhT1cvZAPOhw+95nz2I/Ra5qMlU4gTRwIo=
 github.com/tliron/commonlog v0.2.18 h1:F0zY09VDGTasPCpP9KvE8xqqVNMUfwMJQ0Xvo5Y6BRs=
 github.com/tliron/commonlog v0.2.18/go.mod h1:7f3OMSgVyGAFbRKwlvfUErnB6U75LgW8wa6NlWuswGg=
-github.com/tliron/glsp v0.2.3-0.20250617204849-59d6e3155c81 h1:gQPs3aNGs4z0AWq4v1iyaA6eyoE0RvGihgDPw6REIhY=
-github.com/tliron/glsp v0.2.3-0.20250617204849-59d6e3155c81/go.mod h1:0mr4+bYwGddJfGuaxnUZBSxkshSzFOIyTmBRvfJDBo4=
 github.com/tliron/kutil v0.3.25 h1:oaPN6K0zsH3KcVnsocA3kAlfR0XYDzADob6xdjqe56k=
 github.com/tliron/kutil v0.3.25/go.mod h1:ZvOJuF6PTGvjfHmn2dFcgz+EDEzRQqQUztK+7djlXIw=
 golang.org/x/crypto v0.48.0 h1:/VRzVqiRSggnhY7gNRxPauEQ5Drw9haKdM0jqfcCFts=

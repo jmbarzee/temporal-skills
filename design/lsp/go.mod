@@ -28,3 +28,5 @@ require (
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 )
+
+replace github.com/tliron/glsp => github.com/jmbarzee/glsp v0.0.0-20260211184817-15faee801506

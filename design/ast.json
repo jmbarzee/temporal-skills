@@ -1,0 +1,755 @@
+{
+  "definitions": [
+    {
+      "type": "workflowDef",
+      "line": 6,
+      "column": 1,
+      "name": "ParentWorkflow",
+      "params": "input: Input",
+      "returnType": "Result",
+      "body": [
+        {
+          "type": "workflowCall",
+          "line": 8,
+          "column": 5,
+          "mode": "child",
+          "name": "ChildWorkflow",
+          "args": "input.data",
+          "result": "childResult"
+        },
+        {
+          "type": "comment",
+          "line": 10,
+          "column": 5,
+          "text": " Child with options"
+        },
+        {
+          "type": "workflowCall",
+          "line": 11,
+          "column": 5,
+          "mode": "child",
+          "name": "ChildWorkflow",
+          "args": "input.data",
+          "result": "childResult2",
+          "options": "workflowExecutionTimeout: 1h, retryPolicy: {maxAttempts: 3}"
+        },
+        {
+          "type": "close",
+          "line": 14,
+          "column": 5,
+          "value": "Result{childResult, childResult2}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 16,
+      "column": 1,
+      "name": "ChildWorkflow",
+      "params": "data: Data",
+      "returnType": "ChildResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 17,
+          "column": 5,
+          "name": "Step1",
+          "args": "data"
+        },
+        {
+          "type": "activityCall",
+          "line": 18,
+          "column": 5,
+          "name": "Step2",
+          "args": "data"
+        },
+        {
+          "type": "close",
+          "line": 19,
+          "column": 5,
+          "value": "ChildResult{success: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 23,
+      "column": 1,
+      "name": "DeployApplication",
+      "params": "app: App",
+      "returnType": "DeployResult",
+      "body": [
+        {
+          "type": "workflowCall",
+          "line": 25,
+          "column": 5,
+          "mode": "child",
+          "name": "DeployDatabase",
+          "args": "app.database",
+          "result": "dbResult"
+        },
+        {
+          "type": "workflowCall",
+          "line": 26,
+          "column": 5,
+          "mode": "child",
+          "name": "DeployBackend",
+          "args": "app.backend",
+          "result": "beResult"
+        },
+        {
+          "type": "workflowCall",
+          "line": 27,
+          "column": 5,
+          "mode": "child",
+          "name": "DeployFrontend",
+          "args": "app.frontend",
+          "result": "feResult"
+        },
+        {
+          "type": "workflowCall",
+          "line": 28,
+          "column": 5,
+          "mode": "child",
+          "name": "ConfigureRouting",
+          "args": "app",
+          "result": "routeResult"
+        },
+        {
+          "type": "close",
+          "line": 30,
+          "column": 5,
+          "value": "DeployResult{status: deployed  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 32,
+      "column": 1,
+      "name": "DeployDatabase",
+      "params": "database: Database",
+      "returnType": "DeployResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 33,
+          "column": 5,
+          "name": "ProvisionDB",
+          "args": "database"
+        },
+        {
+          "type": "activityCall",
+          "line": 34,
+          "column": 5,
+          "name": "MigrateSchema",
+          "args": "database"
+        },
+        {
+          "type": "close",
+          "line": 35,
+          "column": 5,
+          "value": "DeployResult{status: done  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 37,
+      "column": 1,
+      "name": "DeployBackend",
+      "params": "backend: Backend",
+      "returnType": "DeployResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 38,
+          "column": 5,
+          "name": "BuildBackend",
+          "args": "backend"
+        },
+        {
+          "type": "activityCall",
+          "line": 39,
+          "column": 5,
+          "name": "DeployContainer",
+          "args": "backend"
+        },
+        {
+          "type": "close",
+          "line": 40,
+          "column": 5,
+          "value": "DeployResult{status: done  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 42,
+      "column": 1,
+      "name": "DeployFrontend",
+      "params": "frontend: Frontend",
+      "returnType": "DeployResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 43,
+          "column": 5,
+          "name": "BuildFrontend",
+          "args": "frontend"
+        },
+        {
+          "type": "activityCall",
+          "line": 44,
+          "column": 5,
+          "name": "DeployStatic",
+          "args": "frontend"
+        },
+        {
+          "type": "close",
+          "line": 45,
+          "column": 5,
+          "value": "DeployResult{status: done  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 47,
+      "column": 1,
+      "name": "ConfigureRouting",
+      "params": "app: App",
+      "returnType": "DeployResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 48,
+          "column": 5,
+          "name": "SetupRoutes",
+          "args": "app"
+        },
+        {
+          "type": "close",
+          "line": 49,
+          "column": 5,
+          "value": "DeployResult{status: done  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 53,
+      "column": 1,
+      "name": "ProcessBatch",
+      "params": "items: []Item",
+      "returnType": "BatchResult",
+      "body": [
+        {
+          "type": "awaitAll",
+          "line": 54,
+          "column": 11,
+          "body": [
+            {
+              "type": "for",
+              "line": 55,
+              "column": 9,
+              "variant": "iteration",
+              "variable": "item",
+              "iterable": "items",
+              "body": [
+                {
+                  "type": "workflowCall",
+                  "line": 56,
+                  "column": 13,
+                  "mode": "child",
+                  "name": "ProcessItem",
+                  "args": "item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "close",
+          "line": 58,
+          "column": 5,
+          "value": "BatchResult{}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 60,
+      "column": 1,
+      "name": "ProcessItem",
+      "params": "item: Item",
+      "returnType": "ItemResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 61,
+          "column": 5,
+          "name": "ProcessSingleItem",
+          "args": "item",
+          "result": "result"
+        },
+        {
+          "type": "close",
+          "line": 62,
+          "column": 5,
+          "value": "ItemResult{result}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 66,
+      "column": 1,
+      "name": "Onboarding",
+      "params": "user: User",
+      "returnType": "OnboardingResult",
+      "body": [
+        {
+          "type": "workflowCall",
+          "line": 67,
+          "column": 5,
+          "mode": "child",
+          "name": "CreateAccount",
+          "args": "user",
+          "result": "accountResult"
+        },
+        {
+          "type": "if",
+          "line": 69,
+          "column": 5,
+          "condition": "user.type == \"enterprise\"",
+          "body": [
+            {
+              "type": "workflowCall",
+              "line": 70,
+              "column": 9,
+              "mode": "child",
+              "name": "EnterpriseSetup",
+              "args": "user",
+              "result": "setupResult"
+            }
+          ],
+          "elseBody": [
+            {
+              "type": "workflowCall",
+              "line": 72,
+              "column": 9,
+              "mode": "child",
+              "name": "StandardSetup",
+              "args": "user",
+              "result": "setupResult"
+            }
+          ]
+        },
+        {
+          "type": "workflowCall",
+          "line": 74,
+          "column": 5,
+          "mode": "child",
+          "name": "SendWelcomeEmail",
+          "args": "user",
+          "result": "emailResult"
+        },
+        {
+          "type": "close",
+          "line": 75,
+          "column": 5,
+          "value": "OnboardingResult{success: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 77,
+      "column": 1,
+      "name": "CreateAccount",
+      "params": "user: User",
+      "returnType": "AccountResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 78,
+          "column": 5,
+          "name": "CreateUserRecord",
+          "args": "user"
+        },
+        {
+          "type": "close",
+          "line": 79,
+          "column": 5,
+          "value": "AccountResult{success: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 81,
+      "column": 1,
+      "name": "EnterpriseSetup",
+      "params": "user: User",
+      "returnType": "SetupResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 82,
+          "column": 5,
+          "name": "ConfigureEnterprise",
+          "args": "user"
+        },
+        {
+          "type": "close",
+          "line": 83,
+          "column": 5,
+          "value": "SetupResult{done: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 85,
+      "column": 1,
+      "name": "StandardSetup",
+      "params": "user: User",
+      "returnType": "SetupResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 86,
+          "column": 5,
+          "name": "ConfigureStandard",
+          "args": "user"
+        },
+        {
+          "type": "close",
+          "line": 87,
+          "column": 5,
+          "value": "SetupResult{done: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 89,
+      "column": 1,
+      "name": "SendWelcomeEmail",
+      "params": "user: User",
+      "returnType": "EmailResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 90,
+          "column": 5,
+          "name": "SendEmail",
+          "args": "user.email, \"Welcome!\""
+        },
+        {
+          "type": "close",
+          "line": 91,
+          "column": 5,
+          "value": "EmailResult{sent: true}"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 95,
+      "column": 1,
+      "name": "ParentWithDetach",
+      "params": "order: Order",
+      "returnType": "OrderResult",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 96,
+          "column": 5,
+          "name": "ProcessOrder",
+          "args": "order",
+          "result": "result"
+        },
+        {
+          "type": "comment",
+          "line": 97,
+          "column": 5,
+          "text": " Fire-and-forget notification"
+        },
+        {
+          "type": "workflowCall",
+          "line": 98,
+          "column": 5,
+          "mode": "detach",
+          "name": "NotifyCustomer",
+          "args": "order.customer"
+        },
+        {
+          "type": "close",
+          "line": 99,
+          "column": 5,
+          "value": "OrderResult{status: done  }"
+        }
+      ]
+    },
+    {
+      "type": "workflowDef",
+      "line": 101,
+      "column": 1,
+      "name": "NotifyCustomer",
+      "params": "customer: Customer",
+      "body": [
+        {
+          "type": "activityCall",
+          "line": 102,
+          "column": 5,
+          "name": "SendNotification",
+          "args": "customer"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 106,
+      "column": 1,
+      "name": "Step1",
+      "params": "data: Data",
+      "body": [
+        {
+          "type": "raw",
+          "line": 107,
+          "column": 5,
+          "text": "do_step1data"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 109,
+      "column": 1,
+      "name": "Step2",
+      "params": "data: Data",
+      "body": [
+        {
+          "type": "raw",
+          "line": 110,
+          "column": 5,
+          "text": "do_step2data"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 112,
+      "column": 1,
+      "name": "ProvisionDB",
+      "params": "database: Database",
+      "body": [
+        {
+          "type": "raw",
+          "line": 113,
+          "column": 5,
+          "text": "provisiondatabase"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 115,
+      "column": 1,
+      "name": "MigrateSchema",
+      "params": "database: Database",
+      "body": [
+        {
+          "type": "raw",
+          "line": 116,
+          "column": 5,
+          "text": "migratedatabase"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 118,
+      "column": 1,
+      "name": "BuildBackend",
+      "params": "backend: Backend",
+      "body": [
+        {
+          "type": "raw",
+          "line": 119,
+          "column": 5,
+          "text": "buildbackend"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 121,
+      "column": 1,
+      "name": "DeployContainer",
+      "params": "backend: Backend",
+      "body": [
+        {
+          "type": "raw",
+          "line": 122,
+          "column": 5,
+          "text": "deploybackend"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 124,
+      "column": 1,
+      "name": "BuildFrontend",
+      "params": "frontend: Frontend",
+      "body": [
+        {
+          "type": "raw",
+          "line": 125,
+          "column": 5,
+          "text": "buildfrontend"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 127,
+      "column": 1,
+      "name": "DeployStatic",
+      "params": "frontend: Frontend",
+      "body": [
+        {
+          "type": "raw",
+          "line": 128,
+          "column": 5,
+          "text": "deployfrontend"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 130,
+      "column": 1,
+      "name": "SetupRoutes",
+      "params": "app: App",
+      "body": [
+        {
+          "type": "raw",
+          "line": 131,
+          "column": 5,
+          "text": "setupapp"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 133,
+      "column": 1,
+      "name": "ProcessSingleItem",
+      "params": "item: Item",
+      "returnType": "Result",
+      "body": [
+        {
+          "type": "return",
+          "line": 134,
+          "column": 5,
+          "value": "processitem"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 136,
+      "column": 1,
+      "name": "CreateUserRecord",
+      "params": "user: User",
+      "body": [
+        {
+          "type": "raw",
+          "line": 137,
+          "column": 5,
+          "text": "db.insertuser"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 139,
+      "column": 1,
+      "name": "ConfigureEnterprise",
+      "params": "user: User",
+      "body": [
+        {
+          "type": "raw",
+          "line": 140,
+          "column": 5,
+          "text": "setup_enterpriseuser"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 142,
+      "column": 1,
+      "name": "ConfigureStandard",
+      "params": "user: User",
+      "body": [
+        {
+          "type": "raw",
+          "line": 143,
+          "column": 5,
+          "text": "setup_standarduser"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 145,
+      "column": 1,
+      "name": "SendEmail",
+      "params": "email: string, message: string",
+      "body": [
+        {
+          "type": "raw",
+          "line": 146,
+          "column": 5,
+          "text": "sendemail, message"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 148,
+      "column": 1,
+      "name": "ProcessOrder",
+      "params": "order: Order",
+      "returnType": "OrderResult",
+      "body": [
+        {
+          "type": "return",
+          "line": 149,
+          "column": 5,
+          "value": "processorder"
+        }
+      ]
+    },
+    {
+      "type": "activityDef",
+      "line": 151,
+      "column": 1,
+      "name": "SendNotification",
+      "params": "customer: Customer",
+      "body": [
+        {
+          "type": "raw",
+          "line": 152,
+          "column": 5,
+          "text": "notifycustomer"
+        }
+      ]
+    }
+  ]
+}

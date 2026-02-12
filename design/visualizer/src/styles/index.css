@@ -111,29 +111,221 @@ body {
   background: var(--color-bg-gradient);
 }
 
-/* Focused file indicator */
-.focused-file-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  margin-bottom: 20px;
+/* === Canvas Header === */
+.canvas-header {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+/* --- Files Section --- */
+.header-files-section {
+  padding: 10px 14px;
+}
+
+.header-files-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.header-file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--color-text-muted);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
 }
 
-.focused-file-indicator .file-icon {
-  font-size: 14px;
-}
-
-.focused-file-indicator .file-name {
-  font-family: var(--font-mono);
-  font-weight: 500;
+.header-file-tag:hover {
+  border-color: var(--color-workflow);
   color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.06);
+}
+
+.header-file-tag.selected {
+  border-color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.12);
+  color: var(--color-workflow);
+  font-weight: 500;
+}
+
+/* Third state: no files selected → all files implicitly included */
+.header-file-tag.all-included {
+  border-color: rgba(139, 126, 200, 0.3);
+  background: rgba(139, 126, 200, 0.05);
+  color: var(--color-text-muted);
+}
+
+.header-file-tag.all-included:hover {
+  border-color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.1);
+  color: var(--color-workflow);
+}
+
+.vscode-dark .header-file-tag:hover,
+.vscode-dark .header-file-tag.selected {
+  background: rgba(168, 155, 216, 0.15);
+}
+
+.vscode-dark .header-file-tag.all-included {
+  border-color: rgba(168, 155, 216, 0.25);
+  background: rgba(168, 155, 216, 0.06);
+}
+
+.vscode-dark .header-file-tag.all-included:hover {
+  background: rgba(168, 155, 216, 0.12);
+}
+
+.header-file-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.header-file-name {
+  line-height: 1;
+}
+
+/* --- Header Divider --- */
+.header-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0;
+}
+
+/* --- Controls Section --- */
+.header-controls-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  gap: 12px;
+}
+
+/* --- Search --- */
+.header-search {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+.header-search.active {
+  border-color: var(--color-border);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.vscode-dark .header-search.active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.header-search-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.header-search:not(.active) .header-search-toggle {
+  border: 1px solid var(--color-border);
+}
+
+.header-search-toggle:hover {
+  color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.08);
+}
+
+.header-search-input {
+  width: 200px;
+  height: 32px;
+  padding: 0 10px 0 2px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text);
+  outline: none;
+  animation: searchExpand 0.2s ease;
+}
+
+.header-search-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+@keyframes searchExpand {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    width: 200px;
+    opacity: 1;
+  }
+}
+
+/* --- Activities Toggle --- */
+.header-activities-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.header-activities-toggle:hover {
+  border-color: var(--color-activity, #7CB9E8);
+  color: var(--color-activity, #7CB9E8);
+  background: rgba(124, 185, 232, 0.06);
+}
+
+.header-activities-toggle.active {
+  border-color: var(--color-activity, #7CB9E8);
+  background: rgba(124, 185, 232, 0.12);
+  color: var(--color-activity, #7CB9E8);
+  font-weight: 500;
+}
+
+.vscode-dark .header-activities-toggle:hover,
+.vscode-dark .header-activities-toggle.active {
+  background: rgba(124, 185, 232, 0.15);
+}
+
+.header-activities-label {
+  line-height: 1;
 }
 
 /* No workflows message */
@@ -243,48 +435,94 @@ body {
   display: none;
 }
 
-/* Parse errors displayed in the canvas */
-.parse-errors {
-  margin-bottom: 20px;
-  background: var(--color-error-bg);
+/* === Errors Header === */
+.errors-header {
+  background: var(--color-surface);
   border: 1px solid var(--color-error-border);
   border-radius: 10px;
+  margin-bottom: 20px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.06);
 }
 
-.parse-errors-header {
+.errors-header-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 16px;
-  font-weight: 600;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s ease;
+}
+
+.errors-header-bar:hover {
+  background: rgba(220, 38, 38, 0.03);
+}
+
+.vscode-dark .errors-header-bar:hover {
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.errors-header-icon {
   font-size: 14px;
   color: var(--color-error);
+}
+
+.errors-header-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-error);
+}
+
+.errors-header-body {
+  border-top: 1px solid var(--color-error-border);
+}
+
+/* Error groups (shown/hidden files) */
+.error-group {
+  padding: 0;
+}
+
+.error-group + .error-group {
+  border-top: 1px solid var(--color-border);
+}
+
+.error-group-label {
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.error-group-hidden .error-group-label {
+  opacity: 0.5;
+}
+
+.error-group-item {
+  padding: 8px 14px 8px 28px;
   border-bottom: 1px solid var(--color-error-border);
 }
 
-.parse-errors-icon {
-  font-size: 16px;
-}
-
-.parse-error-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-error-border);
-}
-
-.parse-error-item:last-child {
+.error-group-item:last-child {
   border-bottom: none;
 }
 
-.parse-error-file {
+.error-group-file {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   color: var(--color-error-text);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
-.parse-error-message {
+.error-group-hidden .error-group-file {
+  color: var(--color-warning);
+}
+
+.error-group-message {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-error-text);
@@ -294,54 +532,6 @@ body {
   margin: 0;
 }
 
-/* Other file errors (collapsed) */
-.other-file-errors {
-  margin-top: 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.other-file-errors-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--color-warning);
-  user-select: none;
-}
-
-.other-file-errors-header:hover {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.vscode-dark .other-file-errors-header:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.other-file-errors-icon {
-  font-size: 14px;
-}
-
-.other-file-errors-title {
-  font-weight: 500;
-}
-
-.other-file-errors-body {
-  border-top: 1px solid var(--color-border);
-}
-
-.other-file-errors-body .parse-error-item {
-  border-bottom-color: var(--color-border);
-}
-
-.other-file-errors-body .parse-error-file {
-  color: var(--color-warning);
-}
-
-.other-file-errors-body .parse-error-message {
+.error-group-hidden .error-group-message {
   color: var(--color-text-muted);
 }

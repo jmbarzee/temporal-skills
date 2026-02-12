@@ -71,6 +71,7 @@ func main() {
 }
 
 // parseFiles reads and parses the given files, returning the AST and any errors
+// Uses error-tolerant parsing (ParseFileAll) to return partial AST even with parse errors
 func parseFiles(args []string) (*ast.File, []string, int) {
 	var lenient bool
 	var files []string
@@ -99,30 +100,32 @@ func parseFiles(args []string) (*ast.File, []string, int) {
 	}
 	input := strings.Join(parts, "\n")
 
-	// Parse
-	file, parseErr := parser.ParseFile(input)
-	if parseErr != nil {
-		fmt.Fprintf(os.Stderr, "parse error: %v\n", parseErr)
-		return nil, nil, 1
+	// Parse with error tolerance - returns partial AST even with errors
+	file, parseErrs := parser.ParseFileAll(input)
+
+	// Collect all error messages
+	var allErrs []string
+
+	// Add parse errors
+	for _, e := range parseErrs {
+		msg := fmt.Sprintf("parse error at %d:%d: %s", e.Line, e.Column, e.Msg)
+		allErrs = append(allErrs, msg)
 	}
 
-	// Resolve
-	var resolveErrs []string
-	errs := resolver.Resolve(file)
-	if len(errs) > 0 {
-		for _, e := range errs {
-			msg := fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
-			resolveErrs = append(resolveErrs, msg)
-		}
-		if !lenient {
-			for _, msg := range resolveErrs {
-				fmt.Fprintln(os.Stderr, msg)
-			}
-			return file, resolveErrs, 1
-		}
+	// Resolve (even if there were parse errors, resolve what we got)
+	resolveErrs := resolver.Resolve(file)
+	for _, e := range resolveErrs {
+		msg := fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
+		allErrs = append(allErrs, msg)
 	}
 
-	return file, resolveErrs, 0
+	// Determine exit code
+	exitCode := 0
+	if len(allErrs) > 0 && !lenient {
+		exitCode = 1
+	}
+
+	return file, allErrs, exitCode
 }
 
 // checkCommand validates TWF files and reports errors
@@ -133,26 +136,33 @@ func checkCommand(args []string) int {
 	}
 
 	file, errs, exitCode := parseFiles(args)
-	if exitCode != 0 {
-		return exitCode
-	}
 
+	// Always report errors to stderr
 	if len(errs) > 0 {
 		for _, msg := range errs {
 			fmt.Fprintln(os.Stderr, msg)
 		}
-		return 1
 	}
 
-	// Count definitions
+	// Count definitions from partial AST
 	var workflows, activities int
-	for _, def := range file.Definitions {
-		switch def.(type) {
-		case *ast.WorkflowDef:
-			workflows++
-		case *ast.ActivityDef:
-			activities++
+	if file != nil {
+		for _, def := range file.Definitions {
+			switch def.(type) {
+			case *ast.WorkflowDef:
+				workflows++
+			case *ast.ActivityDef:
+				activities++
+			}
 		}
+	}
+
+	if exitCode != 0 {
+		// Still show what we parsed
+		if workflows > 0 || activities > 0 {
+			fmt.Fprintf(os.Stderr, "Partial parse: %d workflow(s), %d activity(s)\n", workflows, activities)
+		}
+		return exitCode
 	}
 
 	fmt.Printf("✓ OK: %d workflow(s), %d activity(s)\n", workflows, activities)
@@ -160,27 +170,37 @@ func checkCommand(args []string) int {
 }
 
 // parseCommand outputs the AST as JSON
+// Always outputs partial AST even with errors (lenient by default)
+// Errors go to stderr, AST goes to stdout
 func parseCommand(args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: twf parse [--json] [--lenient] <file...>")
 		return 1
 	}
 
-	file, _, exitCode := parseFiles(args)
-	if exitCode != 0 {
-		return exitCode
+	// Force lenient mode for parse command - always emit partial AST
+	argsWithLenient := append(args, "--lenient")
+	file, errs, _ := parseFiles(argsWithLenient)
+
+	// Output errors to stderr (but don't fail - we still emit JSON)
+	for _, msg := range errs {
+		fmt.Fprintln(os.Stderr, msg)
 	}
 
+	// Output AST to stdout even if there were errors
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "json marshal error: %v\n", err)
 		return 1
 	}
 	fmt.Println(string(data))
+
+	// Exit 0 even with parse/resolve errors - the visualizer needs the partial AST
 	return 0
 }
 
 // symbolsCommand lists all workflows and activities
+// Works with partial AST - lists what was successfully parsed
 func symbolsCommand(args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: twf symbols [--json] [--lenient] <file...>")
@@ -195,15 +215,24 @@ func symbolsCommand(args []string) int {
 		}
 	}
 
-	file, _, exitCode := parseFiles(args)
-	if exitCode != 0 {
-		return exitCode
+	file, errs, exitCode := parseFiles(args)
+
+	// Report errors to stderr but continue to show symbols
+	if len(errs) > 0 {
+		for _, msg := range errs {
+			fmt.Fprintln(os.Stderr, msg)
+		}
 	}
 
-	if jsonOutput {
-		return printSymbolsJSON(file)
+	// Show symbols from partial AST
+	if file != nil {
+		if jsonOutput {
+			return printSymbolsJSON(file)
+		}
+		return printSymbolsText(file)
 	}
-	return printSymbolsText(file)
+
+	return exitCode
 }
 
 func printSymbolsText(file *ast.File) int {

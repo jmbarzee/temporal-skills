@@ -1,6 +1,7 @@
 import React from 'react'
 import type { TWFFile, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
+import { SearchIcon, SingleGearIcon } from './icons/GearIcons'
 
 interface WorkflowCanvasProps {
   ast: TWFFile
@@ -30,6 +31,13 @@ export const HandlerContextProvider = React.createContext<HandlerContext>({
 })
 
 export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
+  // --- Header state ---
+  const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(new Set())
+  const [searchActive, setSearchActive] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [showActivities, setShowActivities] = React.useState(false)
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
+
   // Build lookup maps for definitions (all files for expansion support)
   const context = React.useMemo<DefinitionContext>(() => {
     const workflows = new Map<string, WorkflowDef>()
@@ -46,100 +54,268 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
     return { workflows, activities }
   }, [ast])
 
-  // Filter to show only workflows from the focused file at top level
-  // If no focused file is set, show all workflows (backward compatible)
-  const workflows = ast.definitions.filter(
-    (def): def is WorkflowDef => {
-      if (def.type !== 'workflowDef') return false
-      // If no focused file specified, show all
-      if (!ast.focusedFile) return true
-      // Otherwise only show workflows from the focused file
-      return def.sourceFile === ast.focusedFile
+  // Extract all unique source files from definitions
+  const allFiles = React.useMemo(() => {
+    const files = new Set<string>()
+    for (const def of ast.definitions) {
+      if (def.sourceFile) {
+        files.add(def.sourceFile)
+      }
     }
-  )
+    return Array.from(files).sort()
+  }, [ast])
 
-  // Extract just the filename for display
-  const focusedFileName = ast.focusedFile?.split('/').pop() || 'All Workflows'
+  // Initialize selected files: focused file selected by default
+  React.useEffect(() => {
+    if (ast.focusedFile) {
+      setSelectedFiles(new Set([ast.focusedFile]))
+    } else {
+      setSelectedFiles(new Set())
+    }
+  }, [ast.focusedFile])
 
-  // Filter errors relevant to the focused file (or show all if no focused file)
+  // Toggle a file in the selection
+  const toggleFile = (file: string) => {
+    setSelectedFiles(prev => {
+      const next = new Set(prev)
+      if (next.has(file)) {
+        next.delete(file)
+      } else {
+        next.add(file)
+      }
+      return next
+    })
+  }
+
+  // Toggle search bar
+  const toggleSearch = () => {
+    if (searchActive) {
+      setSearchActive(false)
+      setSearchQuery('')
+    } else {
+      setSearchActive(true)
+      // Focus the input after it renders
+      setTimeout(() => searchInputRef.current?.focus(), 50)
+    }
+  }
+
+  // Filter definitions for display
+  const visibleDefinitions = React.useMemo(() => {
+    const lowerQuery = searchQuery.toLowerCase()
+
+    return ast.definitions.filter((def): def is WorkflowDef | ActivityDef => {
+      // Type filter: workflows always, activities only when toggled
+      if (def.type === 'activityDef' && !showActivities) return false
+      if (def.type !== 'workflowDef' && def.type !== 'activityDef') return false
+
+      // File filter: if any files are selected, only show from those files
+      // If none selected (all toggled off), show all
+      if (selectedFiles.size > 0 && def.sourceFile) {
+        if (!selectedFiles.has(def.sourceFile)) return false
+      }
+
+      // Search filter
+      if (lowerQuery) {
+        if (!def.name.toLowerCase().includes(lowerQuery)) return false
+      }
+
+      return true
+    })
+  }, [ast.definitions, selectedFiles, showActivities, searchQuery])
+
+  // Partition errors into "shown files" vs "hidden files" based on file filter
   const errors = ast.errors || []
-  const relevantErrors = ast.focusedFile
-    ? errors.filter(e => e.file === ast.focusedFile)
-    : errors
+  const { shownFileErrors, hiddenFileErrors } = React.useMemo(() => {
+    if (selectedFiles.size === 0) {
+      // No file filter active — all errors are "shown"
+      return { shownFileErrors: errors, hiddenFileErrors: [] as FileError[] }
+    }
+    const shown: FileError[] = []
+    const hidden: FileError[] = []
+    for (const e of errors) {
+      if (selectedFiles.has(e.file)) {
+        shown.push(e)
+      } else {
+        hidden.push(e)
+      }
+    }
+    return { shownFileErrors: shown, hiddenFileErrors: hidden }
+  }, [errors, selectedFiles])
+
+  const hasFiles = allFiles.length > 0
+  const hasErrors = errors.length > 0
+  const noFilesSelected = selectedFiles.size === 0
 
   return (
     <DefinitionContextProvider.Provider value={context}>
       <div className="workflow-canvas">
-        {ast.focusedFile && (
-          <div className="focused-file-indicator">
-            <span className="file-icon">📄</span>
-            <span className="file-name">{focusedFileName}</span>
+        {/* === Filter Header === */}
+        <div className="canvas-header">
+          {/* Files Section — only show if there are files */}
+          {hasFiles && (
+            <>
+              <div className="header-files-section">
+                <div className="header-files-row">
+                  {allFiles.map(file => {
+                    const fileName = file.split('/').pop() || file
+                    const isSelected = selectedFiles.has(file)
+                    const chipClass = noFilesSelected
+                      ? 'header-file-tag all-included'
+                      : `header-file-tag ${isSelected ? 'selected' : ''}`
+                    return (
+                      <button
+                        key={file}
+                        className={chipClass}
+                        onClick={() => toggleFile(file)}
+                        title={file}
+                      >
+                        <span className="header-file-icon">📄</span>
+                        <span className="header-file-name">{fileName}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="header-divider" />
+            </>
+          )}
+
+          {/* Controls Section — always show */}
+          <div className="header-controls-section">
+            {/* Search (left side) */}
+            <div className={`header-search ${searchActive ? 'active' : ''}`}>
+              <button
+                className="header-search-toggle"
+                onClick={toggleSearch}
+                title="Search workflows"
+              >
+                <SearchIcon size={14} />
+              </button>
+              {searchActive && (
+                <input
+                  ref={searchInputRef}
+                  className="header-search-input"
+                  type="text"
+                  placeholder="Filter by name..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') toggleSearch()
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Activities toggle (right side) */}
+            <button
+              className={`header-activities-toggle ${showActivities ? 'active' : ''}`}
+              onClick={() => setShowActivities(!showActivities)}
+              title={showActivities ? 'Hide activities' : 'Show activities'}
+            >
+              <SingleGearIcon size={13} />
+              <span className="header-activities-label">Activities</span>
+            </button>
           </div>
+        </div>
+
+        {/* === Errors Header === */}
+        {hasErrors && (
+          <ErrorsHeader
+            shownFileErrors={shownFileErrors}
+            hiddenFileErrors={hiddenFileErrors}
+          />
         )}
-        {relevantErrors.length > 0 && (
-          <ParseErrors errors={relevantErrors} />
-        )}
-        {workflows.length === 0 && relevantErrors.length === 0 ? (
+
+        {/* Definitions */}
+        {visibleDefinitions.length === 0 ? (
           <div className="no-workflows">
-            <p>No workflows defined in this file</p>
+            <p>
+              {searchQuery
+                ? 'No matching definitions found'
+                : showActivities
+                  ? 'No workflows or activities defined'
+                  : 'No workflows defined in the selected files'}
+            </p>
           </div>
         ) : (
-          workflows.map((workflow) => (
-            <DefinitionBlock key={workflow.name} definition={workflow} />
+          visibleDefinitions.map((def) => (
+            <DefinitionBlock key={`${def.sourceFile || ''}-${def.type}-${def.name}`} definition={def} />
           ))
-        )}
-        {/* Show other file errors collapsed if viewing a specific file */}
-        {ast.focusedFile && errors.length > relevantErrors.length && (
-          <OtherFileErrors errors={errors.filter(e => e.file !== ast.focusedFile)} />
         )}
       </div>
     </DefinitionContextProvider.Provider>
   )
 }
 
-/** Display parse errors prominently */
-function ParseErrors({ errors }: { errors: FileError[] }) {
+/** Collapsible errors header — shows compilation errors grouped by shown/hidden files */
+function ErrorsHeader({ shownFileErrors, hiddenFileErrors }: {
+  shownFileErrors: FileError[]
+  hiddenFileErrors: FileError[]
+}) {
+  const [expanded, setExpanded] = React.useState(false)
+  const totalErrors = shownFileErrors.length + hiddenFileErrors.length
+
+  // Build summary text
+  const summaryParts: string[] = []
+  if (shownFileErrors.length > 0) {
+    summaryParts.push(`${shownFileErrors.length} in shown files`)
+  }
+  if (hiddenFileErrors.length > 0) {
+    summaryParts.push(`${hiddenFileErrors.length} in hidden files`)
+  }
+  const summary = summaryParts.length > 1
+    ? ` (${summaryParts.join(', ')})`
+    : ''
+
   return (
-    <div className="parse-errors">
-      <div className="parse-errors-header">
-        <span className="parse-errors-icon">⚠</span>
-        <span className="parse-errors-title">
-          {errors.length === 1 ? 'Parse error' : `${errors.length} parse errors`}
+    <div className="errors-header">
+      <div className="errors-header-bar" onClick={() => setExpanded(!expanded)}>
+        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="errors-header-icon">⚠</span>
+        <span className="errors-header-title">
+          {totalErrors} {totalErrors === 1 ? 'error' : 'errors'}{summary}
         </span>
       </div>
-      {errors.map((err, i) => (
-        <div key={i} className="parse-error-item">
-          <div className="parse-error-file">{err.file.split('/').pop()}</div>
-          <pre className="parse-error-message">{err.stderr || err.error}</pre>
+
+      {expanded && (
+        <div className="errors-header-body">
+          {shownFileErrors.length > 0 && (
+            <ErrorGroup
+              label="Shown files"
+              errors={shownFileErrors}
+              variant="shown"
+            />
+          )}
+          {hiddenFileErrors.length > 0 && (
+            <ErrorGroup
+              label="Hidden files"
+              errors={hiddenFileErrors}
+              variant="hidden"
+            />
+          )}
         </div>
-      ))}
+      )}
     </div>
   )
 }
 
-/** Collapsed section for errors in other files */
-function OtherFileErrors({ errors }: { errors: FileError[] }) {
-  const [expanded, setExpanded] = React.useState(false)
-
+/** A group of errors under a sub-label */
+function ErrorGroup({ label, errors, variant }: {
+  label: string
+  errors: FileError[]
+  variant: 'shown' | 'hidden'
+}) {
   return (
-    <div className="other-file-errors">
-      <div className="other-file-errors-header" onClick={() => setExpanded(!expanded)}>
-        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="other-file-errors-icon">⚠</span>
-        <span className="other-file-errors-title">
-          {errors.length} error{errors.length !== 1 ? 's' : ''} in other files
-        </span>
+    <div className={`error-group error-group-${variant}`}>
+      <div className="error-group-label">
+        {label} ({errors.length})
       </div>
-      {expanded && (
-        <div className="other-file-errors-body">
-          {errors.map((err, i) => (
-            <div key={i} className="parse-error-item">
-              <div className="parse-error-file">{err.file.split('/').pop()}</div>
-              <pre className="parse-error-message">{err.stderr || err.error}</pre>
-            </div>
-          ))}
+      {errors.map((err, i) => (
+        <div key={i} className="error-group-item">
+          <div className="error-group-file">{err.file.split('/').pop()}</div>
+          <pre className="error-group-message">{err.stderr || err.error}</pre>
         </div>
-      )}
+      ))}
     </div>
   )
 }

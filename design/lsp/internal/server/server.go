@@ -2,8 +2,8 @@ package server
 
 import (
 	"github.com/tliron/glsp"
-	protocol "github.com/tliron/glsp/protocol_3_16"
-	glspServer "github.com/tliron/glsp/server"
+	protocol316 "github.com/tliron/glsp/protocol_3_16"
+	protocol "github.com/tliron/glsp/protocol_3_17"
 )
 
 // NewHandler creates a protocol.Handler with all LSP methods registered.
@@ -11,73 +11,70 @@ func NewHandler(name, version string) (*protocol.Handler, *DocumentStore) {
 	store := NewDocumentStore()
 
 	handler := &protocol.Handler{
-		Initialize:  initializeHandler(name, version),
-		Initialized: initializedHandler(),
-		Shutdown:    shutdownHandler(),
-		SetTrace:    setTraceHandler(),
+		Handler: protocol316.Handler{
+			Initialized: initializedHandler(),
+			Shutdown:    shutdownHandler(),
+			SetTrace:    setTraceHandler(),
 
-		TextDocumentDidOpen:  didOpenHandler(store),
-		TextDocumentDidChange: didChangeHandler(store),
-		TextDocumentDidClose: didCloseHandler(store),
+			TextDocumentDidOpen:  didOpenHandler(store),
+			TextDocumentDidChange: didChangeHandler(store),
+			TextDocumentDidClose:  didCloseHandler(store),
 
-		TextDocumentHover:               hoverHandler(store),
-		TextDocumentDefinition:          definitionHandler(store),
-		TextDocumentDocumentSymbol:      documentSymbolHandler(store),
-		TextDocumentCompletion:          completionHandler(store),
-		TextDocumentReferences:          referencesHandler(store),
-		TextDocumentRename:              renameHandler(store),
-		TextDocumentPrepareRename:       prepareRenameHandler(store),
-		TextDocumentSemanticTokensFull:  semanticTokensHandler(store),
-		TextDocumentFoldingRange:        foldingRangeHandler(store),
-		TextDocumentSignatureHelp:       signatureHelpHandler(store),
-		TextDocumentCodeAction:          codeActionHandler(store),
+			TextDocumentHover:              hoverHandler(store),
+			TextDocumentDefinition:         definitionHandler(store),
+			TextDocumentDocumentSymbol:     documentSymbolHandler(store),
+			TextDocumentCompletion:         completionHandler(store),
+			TextDocumentReferences:         referencesHandler(store),
+			TextDocumentRename:             renameHandler(store),
+			TextDocumentPrepareRename:      prepareRenameHandler(store),
+			TextDocumentSemanticTokensFull: semanticTokensHandler(store),
+			TextDocumentFoldingRange:       foldingRangeHandler(store),
+			TextDocumentSignatureHelp:      signatureHelpHandler(store),
+			TextDocumentCodeAction:         codeActionHandler(store),
+		},
+		Initialize:            initializeHandler(name, version),
+		TextDocumentInlayHint: inlayHintHandler(store),
 	}
 
 	return handler, store
-}
-
-// RegisterCustomHandlers registers handlers for LSP features not in protocol_3_16
-func RegisterCustomHandlers(s *glspServer.Server, store *DocumentStore) {
-	// Register InlayHint handler (LSP 3.17)
-	// Note: glsp doesn't expose Handle() publicly, so we'll need to wait for
-	// library support or use a different approach
-	// TODO: Once glsp supports 3.17, register here:
-	// s.Handle("textDocument/inlayHint", inlayHintHandler(store))
 }
 
 func initializeHandler(name, version string) protocol.InitializeFunc {
 	return func(context *glsp.Context, params *protocol.InitializeParams) (any, error) {
 		capabilities := protocol.InitializeResult{
 			Capabilities: protocol.ServerCapabilities{
-				TextDocumentSync: protocol.TextDocumentSyncOptions{
-					OpenClose: boolPtr(true),
-					Change:    ptrTo(protocol.TextDocumentSyncKindFull),
-				},
-				HoverProvider:          &protocol.HoverOptions{},
-				DefinitionProvider:     &protocol.DefinitionOptions{},
-				DocumentSymbolProvider: &protocol.DocumentSymbolOptions{},
-				CompletionProvider:     &protocol.CompletionOptions{},
-				ReferencesProvider:     &protocol.ReferenceOptions{},
-				RenameProvider:         &protocol.RenameOptions{PrepareProvider: boolPtr(true)},
-				FoldingRangeProvider:   &protocol.FoldingRangeOptions{},
-				CodeActionProvider: &protocol.CodeActionOptions{
-					CodeActionKinds: []protocol.CodeActionKind{
-						protocol.CodeActionKindQuickFix,
-						protocol.CodeActionKindRefactor,
+				ServerCapabilities: protocol316.ServerCapabilities{
+					TextDocumentSync: protocol316.TextDocumentSyncOptions{
+						OpenClose: boolPtr(true),
+						Change:    ptrTo(protocol316.TextDocumentSyncKindFull),
+					},
+					HoverProvider:          &protocol316.HoverOptions{},
+					DefinitionProvider:     &protocol316.DefinitionOptions{},
+					DocumentSymbolProvider: &protocol316.DocumentSymbolOptions{},
+					CompletionProvider:     &protocol316.CompletionOptions{},
+					ReferencesProvider:     &protocol316.ReferenceOptions{},
+					RenameProvider:         &protocol316.RenameOptions{PrepareProvider: boolPtr(true)},
+					FoldingRangeProvider:   &protocol316.FoldingRangeOptions{},
+					CodeActionProvider: &protocol316.CodeActionOptions{
+						CodeActionKinds: []protocol316.CodeActionKind{
+							protocol316.CodeActionKindQuickFix,
+							protocol316.CodeActionKindRefactor,
+						},
+					},
+					SignatureHelpProvider: &protocol316.SignatureHelpOptions{
+						TriggerCharacters: []string{"("},
+					},
+					SemanticTokensProvider: &protocol316.SemanticTokensOptions{
+						Legend: protocol316.SemanticTokensLegend{
+							TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter"},
+							TokenModifiers: []string{"declaration"},
+						},
+						Full: true,
 					},
 				},
-				SignatureHelpProvider: &protocol.SignatureHelpOptions{
-					TriggerCharacters: []string{"("},
-				},
-				SemanticTokensProvider: &protocol.SemanticTokensOptions{
-					Legend: protocol.SemanticTokensLegend{
-						TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter"},
-						TokenModifiers: []string{"declaration"},
-					},
-					Full: true,
-				},
+				InlayHintProvider: &protocol.InlayHintOptions{},
 			},
-			ServerInfo: &protocol.InitializeResultServerInfo{
+			ServerInfo: &protocol316.InitializeResultServerInfo{
 				Name:    name,
 				Version: &version,
 			},
@@ -86,20 +83,20 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 	}
 }
 
-func initializedHandler() protocol.InitializedFunc {
-	return func(context *glsp.Context, params *protocol.InitializedParams) error {
+func initializedHandler() protocol316.InitializedFunc {
+	return func(context *glsp.Context, params *protocol316.InitializedParams) error {
 		return nil
 	}
 }
 
-func shutdownHandler() protocol.ShutdownFunc {
+func shutdownHandler() protocol316.ShutdownFunc {
 	return func(context *glsp.Context) error {
 		return nil
 	}
 }
 
-func setTraceHandler() protocol.SetTraceFunc {
-	return func(context *glsp.Context, params *protocol.SetTraceParams) error {
+func setTraceHandler() protocol316.SetTraceFunc {
+	return func(context *glsp.Context, params *protocol316.SetTraceParams) error {
 		return nil
 	}
 }

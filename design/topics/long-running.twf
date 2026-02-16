@@ -3,82 +3,82 @@
 
 # --- Basic continue-as-new pattern ---
 
-workflow LongRunningProcessor(state: State):
+workflow LongRunningProcessor(processor: Processor):
     signal NewEvent(data: EventData):
-        state.lastEvent = data
+        processor.lastEvent = data
 
     eventCount = 0
 
     for:
         await one:
             signal NewEvent:
-                activity ProcessEvent(state) -> result
-                state.processed = state.processed + 1
+                activity ProcessEvent(processor) -> result
+                processor.processed = processor.processed + 1
                 eventCount = eventCount + 1
             timer(24h):
-                activity PeriodicCheck(state)
+                activity PeriodicCheck(processor)
 
         # Reset history before it gets too large
         if (eventCount >= 1000):
-            continue_as_new(state)
+            close continue_as_new(processor)
 
 # --- Entity workflow pattern ---
 
-workflow UserEntity(userId: string, state: UserState):
+workflow UserEntity(userId: string, user: User):
     signal UpdateProfile(data: ProfileData):
-        state.profile = data
+        user.profile = data
 
     signal AddCredits(amount: decimal):
-        state.credits = state.credits + amount
+        user.credits = user.credits + amount
 
     signal Deactivate():
-        state.active = false
+        user.active = false
 
-    query GetState() -> (UserState):
-        return state
+    query GetUser() -> (User):
+        return user
 
     update UpdateSettings(settings: Settings) -> (Result):
-        state.settings = settings
-        activity PersistUser(userId, state)
+        user.settings = settings
+        activity PersistUser(user)
         return Result{success: true}
 
-    # Initialize state if new
-    if (state == null):
-        activity LoadUser(userId) -> state
+    # Initialize user if new
+    if (user == null):
+        activity LoadUser(userId) -> user
 
     eventCount = 0
 
     for:
         await one:
             signal UpdateProfile:
-                activity PersistUser(userId, state)
+                activity PersistUser(user)
             signal AddCredits:
-                activity PersistUser(userId, state)
+                activity PersistUser(user)
             signal Deactivate:
-                activity PersistUser(userId, state)
-                close
+                activity PersistUser(user)
+                close complete
             timer(24h):
-                activity DailyMaintenance(userId, state)
+                activity DailyMaintenance(user)
 
         eventCount = eventCount + 1
 
         # Continue-as-new periodically
         if (eventCount > 500):
-            continue_as_new(userId, state)
+            close continue_as_new(userId, user)
 
 # --- Supporting activities ---
 
-activity ProcessEvent(state: State) -> (EventResult):
-    return process(state)
+activity ProcessEvent(processor: Processor) -> (EventResult):
+    return process(processor)
 
-activity LoadUser(userId: string) -> (UserState):
+activity LoadUser(userId: string) -> (User):
     return db.load(userId)
 
-activity PersistUser(userId: string, state: UserState):
-    db.save(userId, state)
+activity PersistUser(user: User):
+    db.save(user.id, user)
 
-activity DailyMaintenance(userId: string, state: UserState):
-    run_maintenance(userId, state)
+activity DailyMaintenance(user: User):
+    run_maintenance(user.id, user)
 
-activity PeriodicCheck(state: State):
-    check(state)
+activity PeriodicCheck(processor: Processor):
+    check(processor)

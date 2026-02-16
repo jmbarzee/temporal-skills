@@ -1,0 +1,165 @@
+# Source: promises-conditions.md
+# Patterns: promise declarations, conditions, state blocks, set/unset
+
+# --- Start-now, wait-later (promises with activities) ---
+
+workflow ParallelProcessing(items: Items) -> (Result):
+    # Start two activities without blocking
+    promise handleA <- activity ProcessA(items.a)
+    promise handleB <- activity ProcessB(items.b)
+
+    # Do other work while they run
+    activity QuickSetup(items)
+
+    # Collect results
+    await handleA -> resultA
+    await handleB -> resultB
+
+    close complete(Result{a: resultA, b: resultB})
+
+# --- Promise with child workflow ---
+
+workflow WorkflowWithAsyncChild(input: Input) -> (Result):
+    # Start child workflow without blocking
+    promise childHandle <- workflow SlowChild(input.data)
+
+    # Do other work
+    activity QuickTask(input)
+
+    # Wait for child result
+    await childHandle -> childResult
+
+    close complete(Result{childResult})
+
+# --- Promise with timer ---
+
+workflow TimedOperation(data: Data) -> (Result):
+    promise timeout <- timer(5m)
+
+    promise work <- activity LongProcess(data)
+
+    # Race: process finishes or timeout fires
+    await one:
+        work -> result:
+            close complete(Result{data: result})
+        timeout:
+            close fail(Result{error: "timed out"})
+
+# --- Update handler waits on condition ---
+
+workflow ClusterManager(config: Config):
+    state:
+        condition clusterStarted
+
+    signal Shutdown():
+        shutdownRequested = true
+
+    update WaitUntilStarted() -> (ClusterState):
+        await clusterStarted
+        return ClusterState{started: true}
+
+    query GetStatus() -> (string):
+        return status
+
+    status = "provisioning"
+    activity ProvisionCluster(config)
+    activity StartCluster(config)
+    set clusterStarted
+    status = "running"
+
+    await signal Shutdown
+    close complete
+
+# --- Condition racing against timer ---
+
+workflow DepositCollector(accountId: string) -> (CollectionResult):
+    state:
+        condition thresholdReached
+
+    signal Deposit(amount: decimal):
+        balance = balance + amount
+        if (balance >= 1000):
+            set thresholdReached
+
+    balance = 0
+
+    await one:
+        thresholdReached:
+            close complete(CollectionResult{status: "threshold_reached", balance: balance})
+        timer(30d):
+            close complete(CollectionResult{status: "timeout", balance: balance})
+
+# --- Promise racing in await one ---
+
+workflow ResilientProcess(data: Data) -> (Result):
+    signal Cancel():
+        cancelRequested = true
+
+    promise handle <- activity LongProcess(data)
+
+    activity PrepareOutput(data)
+
+    await one:
+        handle -> result:
+            close complete(Result{data: result})
+        signal Cancel:
+            close fail(Result{error: "cancelled"})
+
+# --- Promise with nexus workflow ---
+
+workflow CrossNamespaceAsync(payment: Payment) -> (Result):
+    # Start nexus call without blocking
+    promise payHandle <- nexus "payments" workflow ProcessPayment(payment)
+
+    # Do local work
+    activity PrepareReceipt(payment)
+
+    # Wait for nexus result
+    await payHandle -> paymentResult
+
+    close complete(Result{paymentId: paymentResult.id})
+
+# --- Supporting activity definitions ---
+
+activity ProcessA(data: Data) -> (ResultA):
+    return processA(data)
+
+activity ProcessB(data: Data) -> (ResultB):
+    return processB(data)
+
+activity QuickSetup(items: Items):
+    setup(items)
+
+activity QuickTask(input: Input):
+    quick(input)
+
+activity LongProcess(data: Data) -> (ProcessResult):
+    return longProcess(data)
+
+activity PrepareOutput(data: Data):
+    prepare(data)
+
+activity ProvisionCluster(config: Config):
+    provision(config)
+
+activity StartCluster(config: Config):
+    start(config)
+
+activity PrepareReceipt(payment: Payment):
+    prepare(payment)
+
+# --- Supporting workflow definitions ---
+
+workflow SlowChild(data: Data) -> (ChildResult):
+    activity DoSlowWork(data) -> result
+    close complete(ChildResult{result})
+
+activity DoSlowWork(data: Data) -> (WorkResult):
+    return slowWork(data)
+
+workflow ProcessPayment(payment: Payment) -> (PaymentResult):
+    activity ChargeCard(payment) -> result
+    close complete(PaymentResult{id: result.id})
+
+activity ChargeCard(payment: Payment) -> (ChargeResult):
+    return charge(payment)

@@ -12,8 +12,11 @@ import type {
   ForStmt,
   ReturnStmt,
   CloseStmt,
-  ContinueAsNewStmt,
+
   RawStmt,
+  PromiseStmt,
+  SetStmt,
+  UnsetStmt,
 } from '../../types/ast'
 import { DefinitionContextProvider, HandlerContextProvider } from '../WorkflowCanvas'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
@@ -46,14 +49,18 @@ export function StatementBlock({ statement }: StatementBlockProps) {
       return <ReturnBlock stmt={statement} />
     case 'close':
       return <CloseBlock stmt={statement} />
-    case 'continueAsNew':
-      return <ContinueAsNewBlock stmt={statement} />
     case 'raw':
       return <RawBlock stmt={statement} />
     case 'break':
       return <SimpleBlock keyword="break" className="block-break" />
     case 'continue':
       return <SimpleBlock keyword="continue" className="block-continue" />
+    case 'promise':
+      return <PromiseBlock stmt={statement} />
+    case 'set':
+      return <SetBlock stmt={statement} />
+    case 'unset':
+      return <UnsetBlock stmt={statement} />
     case 'comment':
       return null // Skip comments in visualization
     default:
@@ -116,7 +123,7 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const refocus = useRefocus()
   const isDefined = !!workflowDef
 
-  const modePrefix = stmt.mode === 'spawn' ? 'spawn ' : stmt.mode === 'detach' ? 'detach ' : ''
+  const modePrefix = stmt.mode === 'detach' ? 'detach ' : ''
   const signature = formatWorkflowCallSignature(stmt)
 
   const hasSignals = workflowDef?.signals && workflowDef.signals.length > 0
@@ -302,11 +309,16 @@ function getAwaitStmtDisplay(
       return { icon: '', keyword: 'await activity', signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-activity', expandableDef: def, isUnresolved: !def }
     }
     case 'workflow': {
-      const modePrefix = stmt.workflowMode === 'spawn' ? 'spawn ' : stmt.workflowMode === 'detach' ? 'detach ' : ''
+      const modePrefix = stmt.workflowMode === 'detach' ? 'detach ' : ''
       const sig = `${stmt.workflow || ''}(${stmt.workflowArgs || ''})`
       const result = stmt.workflowResult ? ` → ${stmt.workflowResult}` : ''
       const def = context.workflows.get(stmt.workflow || '')
       return { icon: '', keyword: `await ${modePrefix}workflow`, signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-workflow', expandableDef: def, isUnresolved: !def }
+    }
+    case 'ident': {
+      const name = stmt.ident || ''
+      const result = stmt.identResult ? ` → ${stmt.identResult}` : ''
+      return { icon: '◉', keyword: 'await', signature: `${name}${result}`, blockClass: 'block-await-stmt block-await-stmt-ident', isUnresolved: false }
     }
     default:
       return { icon: '?', keyword: 'await', signature: '', blockClass: 'block-await-stmt', isUnresolved: false }
@@ -440,7 +452,7 @@ function getAwaitOneCaseDisplay(
       return { contentClass: 'tagged-activity', icon: '⚙', keyword: 'activity', signature: `${sig}${result}`, isUnresolved: !def }
     }
     case 'workflow': {
-      const modePrefix = c.workflowMode === 'spawn' ? 'spawn ' : c.workflowMode === 'detach' ? 'detach ' : ''
+      const modePrefix = c.workflowMode === 'detach' ? 'detach ' : ''
       const sig = `${c.workflow || ''}(${c.workflowArgs || ''})`
       const result = c.workflowResult ? ` → ${c.workflowResult}` : ''
       const def = context.workflows.get(c.workflow || '')
@@ -448,6 +460,11 @@ function getAwaitOneCaseDisplay(
     }
     case 'await_all':
       return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
+    case 'ident': {
+      const name = c.ident || ''
+      const result = c.identResult ? ` → ${c.identResult}` : ''
+      return { contentClass: 'tagged-ident', icon: '◉', keyword: '', signature: `${name}${result}`, isUnresolved: false }
+    }
     default:
       return { contentClass: 'tagged-raw', icon: '?', keyword: 'unknown', signature: '', isUnresolved: false }
   }
@@ -611,45 +628,21 @@ function ReturnBlock({ stmt }: { stmt: ReturnStmt }) {
 // Close - workflow termination
 function CloseBlock({ stmt }: { stmt: CloseStmt }) {
   // Determine the icon and class based on reason
-  const isFailed = stmt.reason === 'failed'
-  const icon = isFailed ? '✕' : '✓'
-  const statusClass = isFailed ? 'close-failed' : 'close-completed'
-  
-  // Build the label
-  let label = 'close'
-  if (stmt.reason) {
-    label += ` ${stmt.reason}`
-  }
-  if (stmt.value) {
-    label += ` "${stmt.value}"`
-  }
-  
+  const isContinueAsNew = stmt.reason === 'continue_as_new'
+  const isFailed = stmt.reason === 'fail'
+  const icon = isContinueAsNew ? '⟳' : isFailed ? '✕' : '✓'
+  const statusClass = isContinueAsNew ? 'close-continue-as-new' : isFailed ? 'close-failed' : 'close-completed'
+
   return (
     <div className={`block block-close ${statusClass} collapsed`}>
       <div className="block-header">
         <span className="block-toggle-placeholder" />
         <span className="block-icon">{icon}</span>
         <span className="block-keyword">close</span>
-        {(stmt.reason || stmt.value) && (
-          <span className="block-signature">
-            {stmt.reason && <span className="close-reason">{stmt.reason}</span>}
-            {stmt.value && <span className="close-value">"{stmt.value}"</span>}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Continue as new
-function ContinueAsNewBlock({ stmt }: { stmt: ContinueAsNewStmt }) {
-  return (
-    <div className="block block-continue-as-new collapsed">
-      <div className="block-header">
-        <span className="block-toggle-placeholder" />
-        <span className="block-icon">⟳</span>
-        <span className="block-keyword">continue_as_new</span>
-        <span className="block-signature">{stmt.args}</span>
+        <span className="block-signature">
+          <span className="close-reason">{stmt.reason}</span>
+          {stmt.args && <span className="close-args">({stmt.args})</span>}
+        </span>
       </div>
     </div>
   )
@@ -676,6 +669,65 @@ function SimpleBlock({ keyword, className }: { keyword: string; className: strin
         <span className="block-toggle-placeholder" />
         <span className="block-icon">•</span>
         <span className="block-keyword">{keyword}</span>
+      </div>
+    </div>
+  )
+}
+
+// Promise statement - non-blocking async declaration
+function PromiseBlock({ stmt }: { stmt: PromiseStmt }) {
+  // Determine the async target description
+  let target = ''
+  if (stmt.activity) {
+    target = `activity ${stmt.activity}(${stmt.activityArgs || ''})`
+  } else if (stmt.workflow) {
+    const ns = stmt.workflowNamespace ? `nexus "${stmt.workflowNamespace}" ` : ''
+    target = `${ns}workflow ${stmt.workflow}(${stmt.workflowArgs || ''})`
+  } else if (stmt.timer) {
+    target = `timer(${stmt.timer})`
+  } else if (stmt.signal) {
+    const params = stmt.signalParams ? `(${stmt.signalParams})` : ''
+    target = `signal ${stmt.signal}${params}`
+  } else if (stmt.update) {
+    const params = stmt.updateParams ? `(${stmt.updateParams})` : ''
+    target = `update ${stmt.update}${params}`
+  }
+
+  return (
+    <div className="block block-promise collapsed">
+      <div className="block-header">
+        <span className="block-toggle-placeholder" />
+        <span className="block-icon">◇</span>
+        <span className="block-keyword">promise</span>
+        <span className="block-signature">{stmt.name} ← {target}</span>
+      </div>
+    </div>
+  )
+}
+
+// Set condition to true
+function SetBlock({ stmt }: { stmt: SetStmt }) {
+  return (
+    <div className="block block-set collapsed">
+      <div className="block-header">
+        <span className="block-toggle-placeholder" />
+        <span className="block-icon">◉</span>
+        <span className="block-keyword">set</span>
+        <span className="block-signature">{stmt.name}</span>
+      </div>
+    </div>
+  )
+}
+
+// Unset condition (set to false)
+function UnsetBlock({ stmt }: { stmt: UnsetStmt }) {
+  return (
+    <div className="block block-unset collapsed">
+      <div className="block-header">
+        <span className="block-toggle-placeholder" />
+        <span className="block-icon">○</span>
+        <span className="block-keyword">unset</span>
+        <span className="block-signature">{stmt.name}</span>
       </div>
     </div>
   )

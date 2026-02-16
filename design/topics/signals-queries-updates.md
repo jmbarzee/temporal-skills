@@ -2,15 +2,15 @@
 
 > **Example:** [`signals-queries-updates.twf`](./signals-queries-updates.twf)
 
-External communication with running workflows. These primitives let code outside the workflow interact with it during execution.
+External communication with running workflows. These three primitives let code outside the workflow interact with it during execution — as a **read**, a **write**, or a **read-write**.
 
 ## Overview
 
-| Primitive | Direction | Execution | Use Case |
-|-----------|-----------|-----------|----------|
-| **Signal** | External → Workflow | Async (fire-and-forget) | Events, notifications, data injection |
-| **Query** | External → Workflow → External | Sync (request-response) | Read current state |
-| **Update** | External → Workflow → External | Sync (request-response) | Mutate state with confirmation |
+| Primitive | I/O | Direction | Execution | Use Case |
+|-----------|-----|-----------|-----------|----------|
+| **Query** | Read | External → Workflow → External | Sync (request-response) | Read current state |
+| **Signal** | Write | External → Workflow | Async (fire-and-forget) | Events, notifications, data injection |
+| **Update** | Read-write | External → Workflow → External | Sync (request-response) | Mutate state with confirmation |
 
 ---
 
@@ -58,9 +58,9 @@ workflow OrderWorkflow(orderId: string):
         signal PaymentReceived:
             # paymentStatus is already "received" here
             activity FulfillOrder(orderId, lastTransactionId)
-            close OrderResult{status: "completed"}
+            close complete(OrderResult{status: "completed"})
         timer(24h):
-            close failed OrderResult{status: "timeout"}
+            close fail(OrderResult{status: "timeout"})
 ```
 
 **Key implications:**
@@ -130,7 +130,7 @@ query GetStatus() -> (string):
 
 ## Updates
 
-Synchronous mutations with confirmation. Caller sends data, workflow processes it, caller receives result.
+Synchronous read-write operations. The caller sends data, the workflow processes it, and the caller blocks until it receives a result (or error) back.
 
 ### When to Use
 
@@ -141,22 +141,104 @@ Synchronous mutations with confirmation. Caller sends data, workflow processes i
 
 ### Update Handler Bodies
 
-Updates are declared with handler body blocks that execute when the update is received. Handler bodies have access to the full workflow statement set (activities, child workflows, timers, etc.) and can return values to the caller.
+Updates are declared with handler body blocks that execute when the update is received. Handler bodies have access to the full workflow statement set (activities, child workflows, timers, etc.) and **must return a value** to the caller.
+
+Simple state mutation with immediate return:
 
 ```twf
 update ChangePlan(newPlan: string) -> (ChangeResult):
     plan = newPlan
-    activity PersistChange(newPlan)
     return ChangeResult{success: true, plan: plan}
 ```
 
+Validation via activity before accepting mutation:
+
+```twf
+update ChangePlan(newPlan: string) -> (ChangeResult):
+    activity ValidatePlan(newPlan) -> validation
+    if (validation.valid):
+        plan = newPlan
+        return ChangeResult{success: true, plan: plan}
+    else:
+        return ChangeResult{success: false, error: validation.reason}
+```
+
+The caller blocks until the handler returns — including any time spent waiting on activities, child workflows, or timers within the handler.
+
+### Handler Execution Semantics
+
+Signal and update handlers run as coroutines alongside the main workflow body, but **only one piece of workflow code runs at a time** (cooperative scheduling). When a workflow wakes up, it processes pending messages (signals/updates) in order, then makes progress in the main workflow body.
+
+This means:
+1. The update handler runs as part of the workflow execution loop
+2. If the handler blocks (on an activity, timer, etc.), the main workflow body can make progress while it waits
+3. The handler reads from and writes to the same shared workflow state as the main body and signal handlers
+4. The caller only receives a response after the handler has completed and returned
+
+**Update handlers cannot call `close`** — they can mutate state and return values, but only the main workflow body can terminate the workflow.
+
+### Awaiting Updates
+
+Updates can be awaited in the workflow body, similar to signals. This is useful when the main workflow body needs to wait for an external mutation before continuing:
+
+```twf
+await update ChangeAddress
+```
+
+Updates can also race against other operations in `await one`:
+
+```twf
+await one:
+    update ChangeAddress -> (newAddress):
+        activity NotifyShipping(orderId, newAddress)
+    timer(1h):
+        activity FinalizeShipping(orderId)
+```
+
+When the update wins the race, its handler body runs and returns a value to the caller, then the case body executes.
+
+### Update Handlers with Conditions
+
+A common pattern has an update handler wait on workflow state using `condition`. The caller blocks until the condition becomes true, then receives a result reflecting the current state:
+
+```twf
+workflow ClusterManager(config: Config):
+    state:
+        condition clusterStarted
+
+    signal Shutdown():
+        shutdownRequested = true
+
+    update WaitUntilStarted() -> (ClusterState):
+        await clusterStarted
+        return ClusterState{started: true}
+
+    # Main body provisions and starts the cluster
+    activity ProvisionCluster(config)
+    activity StartCluster(config)
+    set clusterStarted
+
+    await signal Shutdown
+    close complete
+```
+
+In this pattern:
+1. The client calls the update and blocks waiting for a result
+2. The update handler starts running but yields on `await clusterStarted`
+3. The main workflow body mutates the condition via `set clusterStarted`
+4. The update handler resumes and returns a value
+5. The client receives the result
+
+See [promises-conditions.md](./promises-conditions.md) for more on conditions and the `state:` block.
+
 ### Updates vs Signals
 
-| Aspect | Signal | Update |
+| Aspect | Signal (write) | Update (read-write) |
 |--------|--------|--------|
 | **Response** | None (fire-and-forget) | Returns result to caller |
 | **Validation** | In handler, but caller doesn't know | Caller receives validation errors |
 | **Confirmation** | No guarantee processing happened | Caller knows when complete |
+| **Handler can block** | Yes, but caller doesn't wait | Yes, and caller blocks until done |
 | **Use when** | "Notify workflow of X" | "Change X and tell me if it worked" |
 
 ### Update Considerations
@@ -166,27 +248,28 @@ update ChangePlan(newPlan: string) -> (ChangeResult):
 | **Atomicity** | Update handlers should be atomic; don't leave partial state |
 | **Validation** | Validate before mutating; return errors, don't throw |
 | **Idempotency** | Consider idempotency keys for critical updates |
-| **Timeouts** | Caller should set appropriate timeout; update may wait for workflow |
+| **Timeouts** | Caller should set appropriate timeout; handler may block on activities or state |
+| **Shared state** | Handler reads/writes the same state as the main workflow body and signal handlers |
 | **Ambient arrival** | Like signals, updates can arrive between any two deterministic steps and are buffered until handled by `await update` or `await one`/`await all` |
 
 ---
 
 ## Choosing Between Primitives
 
-**Use SIGNAL when:**
-- Fire-and-forget is acceptable
-- External event notification
-- No response needed
-
-**Use QUERY when:**
+**Use QUERY (read) when:**
 - Need to read current state
 - Building UI/dashboard
 - Debugging/monitoring
 
-**Use UPDATE when:**
-- Need confirmation of change
+**Use SIGNAL (write) when:**
+- Fire-and-forget is acceptable
+- External event notification
+- No response needed
+
+**Use UPDATE (read-write) when:**
+- Need confirmation that a change was applied
 - Validating input before accepting
-- Request-response mutation
+- Returning a computed result from a mutation
 
 ---
 

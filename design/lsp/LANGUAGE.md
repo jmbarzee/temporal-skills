@@ -16,6 +16,7 @@ definition ::= workflow_def | activity_def
 ```
 workflow_def ::= 'workflow' IDENT params ['->' return_type] ':' NEWLINE
                  INDENT
+                 [state_block]
                  [signal_decl*]
                  [query_decl*]
                  [update_decl*]
@@ -30,7 +31,24 @@ type_list ::= type (',' type)*
 type ::= IDENT | type '[' type ']' | type '{' ... '}'
 ```
 
-**Important:** Signal, query, and update declarations are optional but if present, must appear before workflow body statements. Each signal/query/update can only be declared once per workflow.
+**Important:** The state block (if present) must appear first, followed by signal/query/update declarations, then body statements. Each signal/query/update can only be declared once per workflow.
+
+### State Block
+
+The state block declares workflow state including named conditions and variable initializations. It must appear before signal/query/update declarations:
+
+```
+state_block ::= 'state' ':' NEWLINE
+                INDENT
+                state_stmt*
+                DEDENT
+
+state_stmt ::= condition_decl | raw_stmt
+
+condition_decl ::= 'condition' IDENT NEWLINE
+```
+
+**Restrictions:** No temporal primitives inside `state:` block. It is purely declarative.
 
 ### Signal Declarations
 
@@ -98,6 +116,9 @@ Available in workflow context (workflow definitions and signal/update handlers):
 ```
 statement ::= activity_call
             | workflow_call
+            | promise_stmt
+            | set_stmt
+            | unset_stmt
             | await_stmt
             | await_all_block
             | await_one_block
@@ -106,7 +127,6 @@ statement ::= activity_call
             | for_stmt
             | close_stmt
             | return_stmt
-            | continue_as_new_stmt
             | break_stmt
             | continue_stmt
             | assignment
@@ -148,13 +168,50 @@ option ::= IDENT ':' expr
 ### Workflow Call
 
 ```
-workflow_call ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] [NEWLINE options_block]
+workflow_call ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] [NEWLINE options_block]
 ```
 
 Modifiers:
-- `spawn`: Asynchronous child workflow (returns handle)
 - `detach`: Fire-and-forget child workflow (no result)
 - `nexus STRING`: Cross-namespace workflow call
+
+### Promise Statement
+
+```
+promise_stmt ::= 'promise' IDENT '<-' async_target NEWLINE
+
+async_target ::= timer_target
+               | signal_target
+               | update_target
+               | activity_target
+               | workflow_target
+```
+
+Declares a non-blocking async operation. The `<-` operator visually distinguishes async declaration from sync result binding (`->`). Use `await` to wait for the promise later.
+
+**Examples:**
+```
+promise p <- activity ProcessItem(input)
+promise report <- workflow BuildReport(data)
+promise timeout <- timer(5m)
+promise approved <- signal Approved
+promise addr <- update ChangeAddress
+```
+
+### Set / Unset Statements
+
+```
+set_stmt ::= 'set' IDENT NEWLINE
+unset_stmt ::= 'unset' IDENT NEWLINE
+```
+
+Set or unset a named condition declared in the workflow's `state:` block. Conditions can be awaited or used in `await one` cases.
+
+**Examples:**
+```
+set clusterStarted
+unset clusterStarted
+```
 
 ### Single Await Statement
 
@@ -166,6 +223,7 @@ await_target ::= timer_target
                | update_target
                | activity_target
                | workflow_target
+               | ident_target
 
 timer_target ::= 'timer' '(' duration ')'
 
@@ -175,14 +233,16 @@ update_target ::= 'update' IDENT ['->' params]
 
 activity_target ::= 'activity' IDENT args ['->' result]
 
-workflow_target ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result]
+workflow_target ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result]
+
+ident_target ::= IDENT ['->' result]
 
 duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
 params ::= '(' IDENT (',' IDENT)* ')'
 result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 ```
 
-Single await blocks until the specified operation completes. For signals and updates, the handler body executes first, then the await continues. For activities and workflows, the result is bound to the specified variable(s).
+Single await blocks until the specified operation completes. For signals and updates, the handler body executes first, then the await continues. For activities and workflows, the result is bound to the specified variable(s). For ident targets, the name must refer to a previously declared promise or condition.
 
 **Examples:**
 ```
@@ -191,6 +251,8 @@ await signal Approved
 await signal Approved -> (approver, timestamp)
 await activity Process(data) -> result
 await workflow Child(input) -> output
+await myPromise -> result
+await clusterStarted
 ```
 
 ### Await All Block
@@ -218,6 +280,7 @@ await_one_case ::= signal_case
                  | activity_case
                  | workflow_case
                  | await_all_case
+                 | ident_case
 
 signal_case ::= 'signal' IDENT ['->' params] ':' NEWLINE
                 [INDENT statement+ DEDENT]
@@ -231,18 +294,21 @@ timer_case ::= 'timer' '(' duration ')' ':' NEWLINE
 activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE
                   [INDENT statement+ DEDENT]
 
-workflow_case ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE
+workflow_case ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE
                   [INDENT statement+ DEDENT]
 
 await_all_case ::= 'await' 'all' ':' NEWLINE
                    INDENT statement+ DEDENT
+
+ident_case ::= IDENT ['->' result] ':' NEWLINE
+               [INDENT statement+ DEDENT]
 
 duration ::= NUMBER ('s' | 'm' | 'h' | 'd') | IDENT
 params ::= '(' IDENT (',' IDENT)* ')'
 result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 ```
 
-Waits for the FIRST case to complete (races between signals, updates, timers, activities, workflows, and nested await all operations).
+Waits for the FIRST case to complete (races between signals, updates, timers, activities, workflows, promises, conditions, and nested await all operations).
 
 **Signal cases** wait for a specific signal to arrive. When the signal arrives, the handler body executes first (if defined), then the case body executes (if present). Signal parameters can be bound using `->`.
 
@@ -256,12 +322,14 @@ Waits for the FIRST case to complete (races between signals, updates, timers, ac
 
 **Await all cases** wait for all statements in their body to complete. When all statements complete, the await all case wins.
 
+**Ident cases** wait for a named promise to resolve or a named condition to become true. Promise cases may bind a result using `->`. Condition cases cannot have `-> result` bindings. The name must refer to a previously declared promise or condition.
+
 **Case bodies are optional.** If a case has no body, the colon is still required. This is useful for consuming signals/results without additional processing:
 ```
 await one:
     signal Ready:
     timer(5m):
-        close failed "timeout"
+        close fail("timeout")
 ```
 
 The case that completes first "wins" the race, its body executes (if present), and then execution continues after the `await one` block.
@@ -308,14 +376,16 @@ for_header ::= '(' expr ')' | '(' IDENT 'in' expr ')'
 ### Close Statement
 
 ```
-close_stmt ::= 'close' [close_reason] [expr] NEWLINE
-close_reason ::= 'completed' | 'failed'
+close_stmt ::= 'close' ('complete' | 'fail' | 'continue_as_new') ['(' args ')'] NEWLINE
 ```
 
-Terminates workflow execution with a completion status. Only valid in workflow context (not in activities or queries).
+Terminates workflow execution with an explicit exit state. Only valid in workflow context (not in activities or queries).
 
-- `close` or `close completed` - Normal successful completion
-- `close failed` - Terminates workflow in failed state, optionally with error message/data
+- `close complete` - Normal successful completion
+- `close complete(Result{...})` - Completion with a return value
+- `close fail` - Terminates workflow in failed state
+- `close fail(Error{...})` - Failure with error data
+- `close continue_as_new(args)` - Resets workflow history and continues with new arguments (for long-running workflows)
 
 **Important:** Signals and updates cannot call `close` - they can only mutate state. Only the main workflow body can terminate execution using `close`.
 
@@ -328,14 +398,6 @@ return_stmt ::= 'return' [expr] NEWLINE
 ```
 
 Used in queries and activities to return values. In workflows, prefer `close` for termination.
-
-### Continue As New
-
-```
-continue_as_new_stmt ::= 'continue_as_new' '(' arg_list ')' NEWLINE
-```
-
-Resets workflow history and continues with new arguments. Used for long-running workflows.
 
 ### Break and Continue
 
@@ -394,10 +456,10 @@ field ::= IDENT ':' expr
 ### Keywords
 
 **Async workflow operations:**
-- `spawn` - Asynchronous child workflow
+- `promise` - Declare a non-blocking async operation (binds with `<-`)
 - `detach` - Fire-and-forget child workflow
 - `nexus` - Cross-namespace call
-- `await` - Wait for operations (`await timer`, `await signal`, `await all`, `await one`)
+- `await` - Wait for operations (`await timer`, `await signal`, `await all`, `await one`, `await <promise>`, `await <condition>`)
 - `all` - Wait for all operations (used with `await`)
 - `one` - Wait for first operation (used with `await`)
 
@@ -408,6 +470,12 @@ field ::= IDENT ':' expr
 - `signal` - Signal declaration and await target
 - `query` - Query declaration
 - `update` - Update declaration and await target
+
+**State and conditions:**
+- `state` - Workflow state declaration block
+- `condition` - Named boolean awaitable (declared in `state:` block)
+- `set` - Set a condition to true
+- `unset` - Set a condition to false
 
 **Activity primitives:**
 - `heartbeat` - Report activity progress (activity-only)
@@ -420,9 +488,14 @@ field ::= IDENT ':' expr
 - `for` - Loop
 - `in` - Iteration operator
 
+**Workflow termination:**
+- `close` - Terminate workflow execution
+- `complete` - Successful completion (used with `close`)
+- `fail` - Failed completion (used with `close`)
+- `continue_as_new` - Reset history and continue (used with `close`)
+
 **Flow control:**
 - `return` - Return from definition
-- `continue_as_new` - Reset history and continue
 - `break` - Exit loop
 - `continue` - Next loop iteration
 
@@ -431,6 +504,13 @@ field ::= IDENT ':' expr
 
 **Configuration:**
 - `options` - Options block for calls/definitions
+
+### Symbols
+
+- `->` - Output binding (result assignment)
+- `<-` - Promise binding (async declaration)
+- `:` - Block start
+- `#` - Comment
 
 ### Identifiers
 
@@ -486,12 +566,16 @@ workflow Example(x: int) -> (Result):
 
 Certain keywords are only valid in workflow context and produce errors in activity context:
 
-- `spawn`, `detach`, `nexus` - Workflow calls
+- `promise` - Non-blocking async operations
+- `condition` - Named boolean awaitables
+- `set`, `unset` - Condition mutation
+- `state` - Workflow state block
+- `detach`, `nexus` - Workflow calls
 - `workflow` - Child workflow calls
 - `timer` - Durable sleep (with `await`)
 - `signal`, `query`, `update` - Handler declarations and await targets
 - `await` - Async operation waiting
-- `continue_as_new` - History reset
+- `close` - Workflow termination (includes `complete`, `fail`, `continue_as_new`)
 
 These keywords are **blocked in:**
 - Activity definitions
@@ -512,9 +596,12 @@ After parsing, the resolver performs symbol resolution:
 1. **Build symbol table:** Collect all workflow and activity definitions
 2. **Per-workflow resolution:**
    - Build signal/query/update maps for the workflow
+   - Build condition map from `state:` block declarations
+   - Build promise set from `promise` statements in the workflow body
    - Resolve activity calls to activity definitions
    - Resolve workflow calls to workflow definitions
-   - Resolve await targets to signal/update/activity/workflow declarations
+   - Resolve await targets to signal/update/activity/workflow/promise/condition declarations
+   - Resolve `set`/`unset` targets to condition declarations
    - Walk signal/query/update handler bodies and resolve references
 3. **Report errors:** Undefined references, duplicate definitions, etc.
 
@@ -523,10 +610,12 @@ After parsing, the resolver performs symbol resolution:
 The parser and resolver collect multiple errors before failing, allowing users to fix multiple issues in one pass.
 
 Common error types:
-- Undefined activity/workflow/signal/update
+- Undefined activity/workflow/signal/update/condition/promise
 - Duplicate definitions
 - Temporal keywords in activity context
 - Invalid await targets (e.g., awaiting a query)
+- Condition with result binding (conditions cannot have `-> result`)
+- `set`/`unset` on undefined condition
 
 ## Examples
 
@@ -540,6 +629,7 @@ definition ::= workflow_def | activity_def
 
 workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT
+                 [state_block]
                  [signal_decl*] [query_decl*] [update_decl*]
                  statement*
                  DEDENT
@@ -547,18 +637,27 @@ workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
 activity_def ::= 'activity' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT statement* DEDENT
 
+state_block ::= 'state' ':' NEWLINE INDENT state_stmt* DEDENT
+state_stmt ::= condition_decl | raw_stmt
+condition_decl ::= 'condition' IDENT NEWLINE
+
 signal_decl ::= 'signal' IDENT params ':' NEWLINE INDENT statement* DEDENT
 query_decl ::= 'query' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 update_decl ::= 'update' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 
-statement ::= activity_call | workflow_call | await_stmt
-            | await_all_block | await_one_block | switch_block
-            | if_stmt | for_stmt | close_stmt | return_stmt | continue_as_new_stmt
+statement ::= activity_call | workflow_call | promise_stmt | set_stmt | unset_stmt
+            | await_stmt | await_all_block | await_one_block | switch_block
+            | if_stmt | for_stmt | close_stmt | return_stmt
             | break_stmt | continue_stmt | assignment
 
-await_stmt ::= 'await' (timer_target | signal_target | update_target | activity_target | workflow_target) NEWLINE
+promise_stmt ::= 'promise' IDENT '<-' async_target NEWLINE
+set_stmt ::= 'set' IDENT NEWLINE
+unset_stmt ::= 'unset' IDENT NEWLINE
 
-await_one_case ::= signal_case | update_case | timer_case | activity_case | workflow_case | await_all_case
+await_stmt ::= 'await' (timer_target | signal_target | update_target | activity_target | workflow_target | ident_target) NEWLINE
+ident_target ::= IDENT ['->' result]
+
+await_one_case ::= signal_case | update_case | timer_case | activity_case | workflow_case | await_all_case | ident_case
 
 signal_case ::= 'signal' IDENT ['->' params] ':' NEWLINE [INDENT statement+ DEDENT]
 
@@ -568,7 +667,9 @@ timer_case ::= 'timer' '(' duration ')' ':' NEWLINE [INDENT statement+ DEDENT]
 
 activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 
-workflow_case ::= ['spawn' | 'detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
+workflow_case ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 
-close_stmt ::= 'close' ['completed' | 'failed'] [expr] NEWLINE
+ident_case ::= IDENT ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
+
+close_stmt ::= 'close' ('complete' | 'fail' | 'continue_as_new') ['(' args ')'] NEWLINE
 ```

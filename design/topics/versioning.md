@@ -46,7 +46,7 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
         activity FraudCheck(order)  # New step, only for new workflows
     
     activity ProcessPayment(order)
-    close OrderResult{status: "complete"}
+    close complete(OrderResult{status: "complete"})
 ```
 
 ### How Patching Works
@@ -81,33 +81,33 @@ workflow Process(data: Data) -> Result:
         activity NewValidation(data)  # Added in V2
     
     activity Step2(data)
-    close Result{}
+    close complete(Result{})
 ```
 
 **Removing a Step:**
 ```twf
 workflow Process(data: Data) -> Result:
     activity Step1(data)
-    
+
     if not patched("v3-remove-legacy"):
         activity LegacyStep(data)  # Removed in V3, but runs for old workflows
-    
+
     activity Step2(data)
-    close Result{}
+    close complete(Result{})
 ```
 
 **Changing a Step:**
 ```twf
 workflow Process(data: Data) -> Result:
     activity Step1(data)
-    
+
     if patched("v4-improved-processing"):
         activity ImprovedProcessing(data)
     else:
         activity OldProcessing(data)
-    
+
     activity Step3(data)
-    close Result{}
+    close complete(Result{})
 ```
 
 ### Deprecating Patches

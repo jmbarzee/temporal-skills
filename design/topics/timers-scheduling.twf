@@ -13,10 +13,10 @@ workflow DelayedNotification(userId: string, delay: duration):
 workflow ProcessWithDeadline(data: Data) -> (Result):
     await one:
         activity LongOperation(data) -> result:
-            close Result{success: true, data: result}
+            close complete(Result{success: true, data: result})
         timer(1h):
             activity Cleanup(data)
-            close failed Result{success: false, error: "deadline exceeded"}
+            close fail(Result{success: false, error: "deadline exceeded"})
 
 # --- Periodic execution within workflow ---
 
@@ -28,7 +28,7 @@ workflow HealthMonitor(resourceId: string):
         await timer(5m)
         count = count + 1
         if (count > 1000):
-            continue_as_new(resourceId)
+            close continue_as_new(resourceId)
 
 # --- Polling with backoff ---
 
@@ -39,13 +39,13 @@ workflow WaitForResource(resourceId: string) -> (Resource):
     for:
         activity CheckResource(resourceId) -> resource
         if (resource.ready):
-            close resource
+            close complete(resource)
 
         await one:
             timer(backoff):
                 backoff = min(backoff * 2, maxBackoff)
             timer(30m):
-                close failed Resource{error: "timeout"}
+                close fail(Resource{error: "timeout"})
 
 # --- Deadline with periodic check ---
 
@@ -55,11 +55,11 @@ workflow WaitForCompletion(jobId: string) -> (JobResult):
     for:
         activity GetJobStatus(jobId) -> status
         if (status.complete):
-            close JobResult{status: "complete", data: status.data}
+            close complete(JobResult{status: "complete", data: status.data})
 
         checks = checks + 1
         if (checks > 100):
-            close JobResult{status: "timeout"}
+            close complete(JobResult{status: "timeout"})
 
         await timer(30s)
 
@@ -72,12 +72,12 @@ workflow LongPoller(resourceId: string, iteration: int) -> (Resource):
         activity PollResource(resourceId) -> status
         if (status.ready):
             activity FetchResource(resourceId) -> resource
-            close resource
+            close complete(resource)
 
         await timer(5s)
         count = count + 1
         if (count >= 500):
-            continue_as_new(resourceId, iteration + 1)
+            close continue_as_new(resourceId, iteration + 1)
 
 # --- Supporting activities ---
 

@@ -109,11 +109,13 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int) (
 	switch tok.Type {
 	case token.WORKFLOW, token.ACTIVITY,
 		token.SIGNAL, token.QUERY, token.UPDATE,
-		token.SPAWN, token.DETACH, token.NEXUS,
+		token.DETACH, token.NEXUS,
+		token.PROMISE, token.CONDITION, token.SET, token.UNSET, token.STATE,
 		token.TIMER, token.OPTIONS,
 		token.AWAIT, token.ALL, token.ONE,
 		token.SWITCH, token.CASE,
 		token.IF, token.ELSE, token.FOR, token.IN,
+		token.CLOSE, token.COMPLETE, token.FAIL,
 		token.RETURN, token.CONTINUE_AS_NEW, token.BREAK, token.CONTINUE:
 		return semKeyword, 0, true
 

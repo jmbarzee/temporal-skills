@@ -69,7 +69,7 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
     # Call into notifications namespace
     nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
     
-    close OrderResult{paymentId: paymentResult.id}
+    close complete(OrderResult{paymentId: paymentResult.id})
 ```
 
 ### Target Side (Handler)
@@ -130,14 +130,14 @@ nexus_service PaymentsService:
 
 ---
 
-## Execution Modes: Synchronous, `spawn`, `detach`
+## Execution Modes: Synchronous, `promise`, `detach`
 
 Nexus calls support the same three execution modes as child workflows:
 
 | Mode | Syntax | Behavior |
 |------|--------|----------|
 | **Synchronous** | `nexus "ns" workflow Name(args) -> result` | Caller blocks until operation completes |
-| **Async (spawn)** | `spawn nexus "ns" workflow Name(args) -> handle` | Caller continues, awaits handle later |
+| **Async (promise)** | `promise p <- nexus "ns" workflow Name(args)` | Caller continues, awaits promise later |
 | **Fire-and-forget (detach)** | `detach nexus "ns" workflow Name(args)` | Caller continues, never waits |
 
 ### Synchronous (Default)
@@ -148,25 +148,24 @@ Caller waits for operation to complete:
 workflow Caller() -> Result:
     # Blocks until ProcessPayment completes
     nexus "payments" workflow ProcessPayment(payment) -> result
-    close Result{paymentId: result.id}
+    close complete(Result{paymentId: result.id})
 ```
 
 ### Asynchronous
 
-Start operation with `spawn`, continue without waiting, await the handle later:
+Start operation with `promise`, continue without waiting, await the promise later:
 
 ```twf
 workflow Caller() -> Result:
-    # Start operation, get handle
-    spawn nexus "payments" workflow ProcessPayment(payment) -> handle
-    
+    # Start operation, get promise
+    promise handle <- nexus "payments" workflow ProcessPayment(payment)
+
     # Do other work
     activity DoOtherWork()
-    
+
     # Wait for result when needed
-    await one:
-        handle -> result:
-    close Result{paymentId: result.id}
+    await handle -> result
+    close complete(Result{paymentId: result.id})
 ```
 
 ### Fire-and-Forget
@@ -177,8 +176,8 @@ Start operation with `detach`, never wait:
 workflow Caller() -> Result:
     # Start and don't wait
     detach nexus "notifications" workflow SendEmail(email)
-    
-    close Result{status: "initiated"}
+
+    close complete(Result{status: "initiated"})
 ```
 
 ---
@@ -203,10 +202,10 @@ workflow Caller(data: Data) -> Result:
     # Race nexus call against a deadline
     await one:
         nexus "target" workflow Operation(data) -> result:
-            close Result{success: true, data: result}
+            close complete(Result{success: true, data: result})
         timer(5m):
             activity AlertTimeout(data)
-            close failed Result{success: false, error: "timeout"}
+            close fail(Result{success: false, error: "timeout"})
 ```
 
 ---
@@ -341,7 +340,7 @@ workflow A():
     await one:
         nexus "target" workflow SlowOperation(data) -> result:
         timer(5m):
-            close failed Result{error: "timeout"}
+            close fail(Result{error: "timeout"})
 ```
 
 ---

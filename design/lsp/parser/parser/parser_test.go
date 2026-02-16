@@ -257,21 +257,27 @@ func TestWorkflowCallChild(t *testing.T) {
 	}
 }
 
-func TestWorkflowCallSpawn(t *testing.T) {
+func TestPromiseActivity(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    spawn workflow ProcessAsync(data) -> result
+    promise p <- activity ProcessAsync(data)
 `
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	call := wf.Body[0].(*ast.WorkflowCall)
-	if call.Mode != ast.CallSpawn {
-		t.Errorf("expected CallSpawn, got %d", call.Mode)
+	promise, ok := wf.Body[0].(*ast.PromiseStmt)
+	if !ok {
+		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
 	}
-	if call.Result != "result" {
-		t.Errorf("expected result 'result', got %q", call.Result)
+	if promise.Name != "p" {
+		t.Errorf("expected name 'p', got %q", promise.Name)
+	}
+	if promise.Activity != "ProcessAsync" {
+		t.Errorf("expected activity 'ProcessAsync', got %q", promise.Activity)
+	}
+	if promise.ActivityArgs != "data" {
+		t.Errorf("expected args 'data', got %q", promise.ActivityArgs)
 	}
 }
 
@@ -317,21 +323,212 @@ func TestWorkflowCallNexus(t *testing.T) {
 	}
 }
 
-func TestSpawnNexusWorkflowCall(t *testing.T) {
+func TestPromiseWorkflow(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    spawn nexus "shipping" workflow Ship(order) -> shipment
+    promise p <- workflow ProcessAsync(data)
+
+workflow ProcessAsync(data: Data) -> (Result):
+    close complete(Result{})
 `
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	call := wf.Body[0].(*ast.WorkflowCall)
-	if call.Mode != ast.CallSpawn {
-		t.Errorf("expected CallSpawn, got %d", call.Mode)
+	promise, ok := wf.Body[0].(*ast.PromiseStmt)
+	if !ok {
+		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
 	}
-	if call.Namespace != "shipping" {
-		t.Errorf("expected namespace 'shipping', got %q", call.Namespace)
+	if promise.Name != "p" {
+		t.Errorf("expected name 'p', got %q", promise.Name)
+	}
+	if promise.Workflow != "ProcessAsync" {
+		t.Errorf("expected workflow 'ProcessAsync', got %q", promise.Workflow)
+	}
+}
+
+func TestPromiseTimer(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    promise timeout <- timer(5m)
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	promise, ok := wf.Body[0].(*ast.PromiseStmt)
+	if !ok {
+		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
+	}
+	if promise.Name != "timeout" {
+		t.Errorf("expected name 'timeout', got %q", promise.Name)
+	}
+	if promise.Timer != "5m" {
+		t.Errorf("expected timer '5m', got %q", promise.Timer)
+	}
+}
+
+func TestPromiseSignal(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    signal Approved():
+        approved = true
+    promise p <- signal Approved
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	promise, ok := wf.Body[0].(*ast.PromiseStmt)
+	if !ok {
+		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
+	}
+	if promise.Signal != "Approved" {
+		t.Errorf("expected signal 'Approved', got %q", promise.Signal)
+	}
+}
+
+func TestStateBlockWithCondition(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    state:
+        condition clusterStarted
+        balance = 0
+
+    close complete(Result{})
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if wf.State == nil {
+		t.Fatal("expected state block, got nil")
+	}
+	if len(wf.State.Conditions) != 1 {
+		t.Fatalf("expected 1 condition, got %d", len(wf.State.Conditions))
+	}
+	if wf.State.Conditions[0].Name != "clusterStarted" {
+		t.Errorf("expected condition 'clusterStarted', got %q", wf.State.Conditions[0].Name)
+	}
+	if len(wf.State.RawStmts) != 1 {
+		t.Fatalf("expected 1 raw stmt, got %d", len(wf.State.RawStmts))
+	}
+}
+
+func TestSetUnsetStatements(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    state:
+        condition ready
+
+    signal Activate():
+        set ready
+
+    set ready
+    unset ready
+    close complete(Result{})
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	if wf.State == nil {
+		t.Fatal("expected state block")
+	}
+
+	setStmt, ok := wf.Body[0].(*ast.SetStmt)
+	if !ok {
+		t.Fatalf("expected SetStmt, got %T", wf.Body[0])
+	}
+	if setStmt.Name != "ready" {
+		t.Errorf("expected name 'ready', got %q", setStmt.Name)
+	}
+
+	unsetStmt, ok := wf.Body[1].(*ast.UnsetStmt)
+	if !ok {
+		t.Fatalf("expected UnsetStmt, got %T", wf.Body[1])
+	}
+	if unsetStmt.Name != "ready" {
+		t.Errorf("expected name 'ready', got %q", unsetStmt.Name)
+	}
+}
+
+func TestAwaitIdent(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    state:
+        condition ready
+
+    await ready
+    close complete(Result{})
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	awaitStmt, ok := wf.Body[0].(*ast.AwaitStmt)
+	if !ok {
+		t.Fatalf("expected AwaitStmt, got %T", wf.Body[0])
+	}
+	if awaitStmt.Ident != "ready" {
+		t.Errorf("expected ident 'ready', got %q", awaitStmt.Ident)
+	}
+}
+
+func TestAwaitIdentWithResult(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    promise p <- activity Process(data)
+    await p -> result
+    close complete(Result{})
+
+activity Process(data: Data) -> (Result):
+    return Result{}
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	awaitStmt, ok := wf.Body[1].(*ast.AwaitStmt)
+	if !ok {
+		t.Fatalf("expected AwaitStmt, got %T", wf.Body[1])
+	}
+	if awaitStmt.Ident != "p" {
+		t.Errorf("expected ident 'p', got %q", awaitStmt.Ident)
+	}
+	if awaitStmt.IdentResult != "result" {
+		t.Errorf("expected ident result 'result', got %q", awaitStmt.IdentResult)
+	}
+}
+
+func TestAwaitOneIdentCase(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    state:
+        condition ready
+
+    await one:
+        ready:
+            close complete(Result{status: "ready"})
+        timer(5m):
+            close fail(Result{status: "timeout"})
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	awaitOne, ok := wf.Body[0].(*ast.AwaitOneBlock)
+	if !ok {
+		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[0])
+	}
+	if len(awaitOne.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
+	}
+	if awaitOne.Cases[0].CaseKind() != "ident" {
+		t.Errorf("case[0]: expected ident, got %q", awaitOne.Cases[0].CaseKind())
+	}
+	if awaitOne.Cases[0].Ident != "ready" {
+		t.Errorf("case[0] ident: expected 'ready', got %q", awaitOne.Cases[0].Ident)
 	}
 }
 
@@ -589,19 +786,22 @@ func TestForIteration(t *testing.T) {
 
 func TestContinueAsNew(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    continue_as_new(newArgs)
+    close continue_as_new(newArgs)
 `
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	can, ok := wf.Body[0].(*ast.ContinueAsNewStmt)
+	closeStmt, ok := wf.Body[0].(*ast.CloseStmt)
 	if !ok {
-		t.Fatalf("expected ContinueAsNewStmt, got %T", wf.Body[0])
+		t.Fatalf("expected CloseStmt, got %T", wf.Body[0])
 	}
-	if can.Args != "newArgs" {
-		t.Errorf("expected args 'newArgs', got %q", can.Args)
+	if closeStmt.Reason != "continue_as_new" {
+		t.Errorf("expected reason 'continue_as_new', got %q", closeStmt.Reason)
+	}
+	if closeStmt.Args != "newArgs" {
+		t.Errorf("expected args 'newArgs', got %q", closeStmt.Args)
 	}
 }
 
@@ -927,10 +1127,10 @@ func TestFullWorkflow(t *testing.T) {
             activity CheckPayment(orderId) -> checkResult
         timer (24h):
             activity CancelOrder(orderId)
-            close failed OrderResult{status: "timeout"}
+            close fail(OrderResult{status: "timeout"})
 
     workflow ShipOrder(order) -> shipResult
-    spawn workflow ProcessAsync(data) -> result
+    promise asyncResult <- workflow ProcessAsync(data)
     detach workflow SendNotification(order.customer)
     nexus "payments" workflow Charge(card) -> chargeResult
 
@@ -940,7 +1140,7 @@ func TestFullWorkflow(t *testing.T) {
         else:
             activity HandleDefault(order)
 
-    continue_as_new(orderId)
+    close continue_as_new(orderId)
     return OrderResult{status: "completed"}
 `
 	file, err := ParseFile(input)
@@ -976,7 +1176,7 @@ func TestTimerCaseWithBody(t *testing.T) {
     await one:
         timer (5m):
             activity SendReminder()
-            close
+            close complete
 `
 	file, err := ParseFile(input)
 	if err != nil {
@@ -1008,37 +1208,43 @@ func TestCloseStatement(t *testing.T) {
 		name   string
 		input  string
 		reason string
-		value  string
+		args   string
 	}{
 		{
-			name:   "plain close",
-			input:  "workflow Test():\n    close\n",
-			reason: "",
-			value:  "",
+			name:   "close complete",
+			input:  "workflow Test():\n    close complete\n",
+			reason: "complete",
+			args:   "",
 		},
 		{
-			name:   "close completed",
-			input:  "workflow Test():\n    close completed\n",
-			reason: "completed",
-			value:  "",
+			name:   "close complete with args",
+			input:  "workflow Test():\n    close complete(Result{success: true})\n",
+			reason: "complete",
+			args:   "Result{success: true}",
 		},
 		{
-			name:   "close failed",
-			input:  "workflow Test():\n    close failed\n",
-			reason: "failed",
-			value:  "",
+			name:   "close fail",
+			input:  "workflow Test():\n    close fail\n",
+			reason: "fail",
+			args:   "",
 		},
 		{
-			name:   "close with value",
-			input:  "workflow Test():\n    close Result{success: true}\n",
-			reason: "",
-			value:  "Result{success: true}",
+			name:   "close fail with args",
+			input:  "workflow Test():\n    close fail(Error{message: \"timeout\"})\n",
+			reason: "fail",
+			args:   "Error{message: \"timeout\"}",
 		},
 		{
-			name:   "close failed with value",
-			input:  "workflow Test():\n    close failed Error{message: \"timeout\"}\n",
-			reason: "failed",
-			value:  "Error{message: timeout  }",
+			name:   "close continue_as_new",
+			input:  "workflow Test():\n    close continue_as_new(newArgs)\n",
+			reason: "continue_as_new",
+			args:   "newArgs",
+		},
+		{
+			name:   "close continue_as_new no args",
+			input:  "workflow Test():\n    close continue_as_new\n",
+			reason: "continue_as_new",
+			args:   "",
 		},
 	}
 
@@ -1059,10 +1265,18 @@ func TestCloseStatement(t *testing.T) {
 			if closeStmt.Reason != tt.reason {
 				t.Errorf("reason: expected %q, got %q", tt.reason, closeStmt.Reason)
 			}
-			if closeStmt.Value != tt.value {
-				t.Errorf("value: expected %q, got %q", tt.value, closeStmt.Value)
+			if closeStmt.Args != tt.args {
+				t.Errorf("args: expected %q, got %q", tt.args, closeStmt.Args)
 			}
 		})
+	}
+}
+
+func TestCloseRequiresReason(t *testing.T) {
+	input := "workflow Test():\n    close\n"
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for bare 'close' without reason, got nil")
 	}
 }
 

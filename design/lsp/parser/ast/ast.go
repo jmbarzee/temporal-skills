@@ -42,6 +42,7 @@ type WorkflowDef struct {
 	Params     string // opaque content inside parens
 	ReturnType string // opaque, optional
 	Options    string // opaque, optional
+	State      *StateBlock
 	Signals    []*SignalDecl
 	Queries    []*QueryDecl
 	Updates    []*UpdateDecl
@@ -114,7 +115,6 @@ type WorkflowCallMode int
 
 const (
 	CallChild  WorkflowCallMode = iota // bare workflow call (child)
-	CallSpawn                          // spawn workflow
 	CallDetach                         // detach workflow (fire-and-forget)
 )
 
@@ -155,11 +155,15 @@ type AwaitStmt struct {
 
 	// Workflow await
 	Workflow string // workflow name
-	WorkflowMode WorkflowCallMode // spawn/detach
+	WorkflowMode WorkflowCallMode
 	WorkflowNamespace string // optional nexus namespace
 	WorkflowArgs string
 	WorkflowResult string // optional result binding
 	WorkflowResolved *WorkflowDef
+
+	// Ident await (promise or condition reference)
+	Ident       string // promise or condition name
+	IdentResult string // optional result binding (promises only)
 }
 
 // AwaitKind returns the kind of await statement.
@@ -175,6 +179,8 @@ func (a *AwaitStmt) AwaitKind() string {
 		return "activity"
 	case a.Workflow != "":
 		return "workflow"
+	case a.Ident != "":
+		return "ident"
 	default:
 		return "unknown"
 	}
@@ -225,6 +231,10 @@ type AwaitOneCase struct {
 	// Await all case (nested)
 	AwaitAll *AwaitAllBlock
 
+	// Ident case (promise or condition reference)
+	Ident       string // promise or condition name
+	IdentResult string // optional result binding (promises only)
+
 	Body []Statement // optional body (can be empty)
 }
 
@@ -243,6 +253,8 @@ func (c *AwaitOneCase) CaseKind() string {
 		return "workflow"
 	case c.AwaitAll != nil:
 		return "await_all"
+	case c.Ident != "":
+		return "ident"
 	default:
 		return "unknown"
 	}
@@ -312,18 +324,11 @@ func (*ReturnStmt) stmtNode() {}
 
 type CloseStmt struct {
 	Pos
-	Reason string // "completed", "failed", or "" (default is completed)
-	Value  string // opaque, optional
+	Reason string // "complete", "fail", or "continue_as_new"
+	Args   string // opaque, optional (parenthesized args)
 }
 
 func (*CloseStmt) stmtNode() {}
-
-type ContinueAsNewStmt struct {
-	Pos
-	Args string
-}
-
-func (*ContinueAsNewStmt) stmtNode() {}
 
 type BreakStmt struct {
 	Pos
@@ -350,3 +355,60 @@ type Comment struct {
 }
 
 func (*Comment) stmtNode() {}
+
+// ---------------------------------------------------------------------------
+// State block and new primitives
+// ---------------------------------------------------------------------------
+
+// StateBlock represents a state: block at the top of a workflow definition.
+type StateBlock struct {
+	Pos
+	Conditions []*ConditionDecl
+	RawStmts   []*RawStmt
+}
+
+// ConditionDecl represents a condition declaration inside a state block.
+type ConditionDecl struct {
+	Pos
+	Name string
+}
+
+// PromiseStmt represents a promise declaration: promise name <- async_target
+type PromiseStmt struct {
+	Pos
+	Name string
+
+	// The async target (exactly one set, mirrors AwaitStmt fields)
+	Timer string
+
+	Signal       string
+	SignalParams string
+
+	Update       string
+	UpdateParams string
+
+	Activity       string
+	ActivityArgs   string
+
+	Workflow          string
+	WorkflowNamespace string
+	WorkflowArgs      string
+}
+
+func (*PromiseStmt) stmtNode() {}
+
+// SetStmt represents: set conditionName
+type SetStmt struct {
+	Pos
+	Name string
+}
+
+func (*SetStmt) stmtNode() {}
+
+// UnsetStmt represents: unset conditionName
+type UnsetStmt struct {
+	Pos
+	Name string
+}
+
+func (*UnsetStmt) stmtNode() {}

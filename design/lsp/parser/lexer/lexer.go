@@ -89,6 +89,11 @@ func (l *Lexer) NextToken() token.Token {
 			l.advance()
 			l.advance()
 
+		case ch == '<' && l.pos+1 < len(l.input) && l.input[l.pos+1] == '-':
+			tok = l.makeToken(token.LEFT_ARROW, "<-")
+			l.advance()
+			l.advance()
+
 		case isIdentStart(ch):
 			tok = l.scanIdentifier()
 

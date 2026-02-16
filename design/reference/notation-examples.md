@@ -1,8 +1,8 @@
-# Source: SKILL.md
-# Patterns: basic structure, control flow, parallel, watch/timer, child workflow
+# TWF Notation Examples
 
-# --- Process Order: control flow, parallel, iteration ---
+## Control Flow
 
+```twf
 workflow ProcessOrder(order: Order) -> (Result):
     activity ValidateOrder(order) -> validated
 
@@ -23,48 +23,9 @@ workflow ProcessOrder(order: Order) -> (Result):
 
     close complete(Result{inventory, payment})
 
-# --- Order Fulfillment: timer, signal, child, nexus ---
-
-workflow OrderFulfillment(orderId: string) -> (OrderResult):
-    signal PaymentReceived(transactionId: string, amount: decimal):
-        paymentStatus = "received"
-        lastTransactionId = transactionId
-
-    query GetOrderStatus() -> (OrderStatus):
-        return OrderStatus{status: status, payment: paymentStatus}
-
-    update UpdateShippingAddress(address: Address) -> (Result):
-        shippingAddress = address
-        return Result{success: true}
-
-    activity GetOrder(orderId) -> order
-    paymentStatus = "pending"
-    status = "awaiting_payment"
-
-    # Durable timer
-    await timer(1h)
-
-    # Wait for payment signal with timeout
-    await one:
-        signal PaymentReceived:
-            status = "processing"
-        timer(24h):
-            activity CancelOrder(orderId)
-            close fail(OrderResult{status: "cancelled"})
-
-    # Child workflow
-    workflow ShipOrder(order) -> shipResult
-
-    # Cross-namespace call
-    nexus "notifications" workflow SendNotification(order.customer, "shipped")
-
-    close complete(OrderResult{status: "completed"})
-
-# --- Supporting definitions ---
-
+# Every referenced activity must be defined
 activity ValidateOrder(order: Order) -> (ValidateResult):
-    result = validate(order)
-    return result
+    return validate(order)
 
 activity ExpediteOrder(order: Order):
     expedite(order)
@@ -80,12 +41,61 @@ activity ReserveInventory(order: Order) -> (Inventory):
 
 activity ProcessPayment(order: Order) -> (Payment):
     return charge(order)
+```
 
+## Temporal Primitives in Notation
+
+```twf
+workflow OrderFulfillment(orderId: string) -> (OrderResult):
+    # Handlers go before body
+    # signal = write (fire-and-forget)
+    signal PaymentReceived(transactionId: string, amount: decimal):
+        paymentStatus = "received"
+        lastTransactionId = transactionId
+
+    # query = read (caller gets result)
+    query GetOrderStatus() -> (OrderStatus):
+        return OrderStatus{status: status, payment: paymentStatus}
+
+    # update = read-write (caller sends data, gets result)
+    update UpdateShippingAddress(address: Address) -> (Result):
+        activity ValidateAddress(address) -> validation
+        if (validation.valid):
+            shippingAddress = address
+            return Result{success: true}
+        else:
+            return Result{success: false, error: validation.reason}
+
+    # Workflow body starts after handlers
+    activity GetOrder(orderId) -> order
+    paymentStatus = "pending"
+    status = "awaiting_payment"
+
+    # Durable timer
+    await timer(1h)
+
+    # Wait for signal with timeout
+    await one:
+        signal PaymentReceived:
+            status = "processing"
+        timer(24h):
+            activity CancelOrder(orderId)
+            close fail(OrderResult{status: "cancelled"})
+
+    # Child workflow
+    workflow ShipOrder(order) -> shipResult
+
+    # Cross-namespace call
+    nexus "notifications" workflow SendNotification(order.customer, "shipped")
+
+    close complete(OrderResult{status: "completed"})
+
+# Supporting definitions
 activity GetOrder(orderId: string) -> (Order):
     return db.get(orderId)
 
-activity FulfillOrder(order: Order):
-    fulfill(order)
+activity ValidateAddress(address: Address) -> (Validation):
+    return validate(address)
 
 activity CancelOrder(orderId: string):
     cancel(orderId)
@@ -98,5 +108,9 @@ activity CreateShipment(order: Order) -> (Shipment):
     return ship(order)
 
 workflow SendNotification(customer: Customer, message: string):
-    notify(customer, message)
+    activity Notify(customer, message)
     close complete
+
+activity Notify(customer: Customer, message: string):
+    send(customer, message)
+```

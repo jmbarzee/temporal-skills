@@ -6,3 +6,7 @@ dist/
 
 # Publish tokens (contains secrets)
 .env.publish
+
+
+*/lsp
+*/twf

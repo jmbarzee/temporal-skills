@@ -6,14 +6,14 @@ Patterns for workflows that run for extended periods: continue-as-new, history m
 
 ## The History Problem
 
-Temporal stores every event in workflow history. Long-running workflows accumulate history that:
+Temporal replays the full event history to reconstruct workflow state after any restart. This is the **primary constraint** on long-running workflows — history size directly determines replay cost, and Temporal enforces a hard limit (~50MB / ~50K events).
 
 | Issue | Impact |
 |-------|--------|
-| Memory usage | Large history loaded on each replay |
-| Replay time | Longer replay = slower recovery |
-| Storage costs | More events = more storage |
-| Hard limit | Temporal enforces max history size |
+| Replay cost | **Entire history replayed on every recovery** — this is the main bottleneck |
+| Hard limit | ~50MB event history / ~50K events — workflow terminates if exceeded |
+| Memory | Full history loaded into worker memory during replay |
+| Latency | Longer history = slower recovery after worker restart |
 
 **Solution:** Reset history periodically with `continue_as_new`.
 
@@ -26,18 +26,18 @@ Atomically complete current workflow and start a new execution with fresh histor
 ### Basic Pattern
 
 ```twf
-workflow LongRunningProcessor(state: State) -> void:
+workflow LongRunningProcessor(processor: Processor) -> void:
     eventCount = 0
     
     for:
         await signal NewEvent -> event
         activity ProcessEvent(event)
-        state.processed += 1
+        processor.processed += 1
         eventCount += 1
         
         # Reset history before it gets too large
         if eventCount >= 1000:
-            continue_as_new(state)  # Fresh history, same logical workflow
+            close continue_as_new(processor)  # Fresh history, same logical workflow
 ```
 
 ### Continue-As-New Semantics
@@ -59,24 +59,35 @@ workflow LongRunningProcessor(state: State) -> void:
 | History size | Approaching limit |
 | Periodic reset | End of billing cycle |
 
-### State Serialization
+### SDK Intrinsics for History Tracking
+
+These deterministic SDK functions are available in workflow code (not activities) for deciding when to continue-as-new:
+
+| Function | Returns | Use |
+|----------|---------|-----|
+| `workflow.history_length()` | Event count | Compare against threshold (e.g., `>= 1000`) |
+| `workflow.history_size()` | Bytes | Compare against limit (e.g., `> 40_000_000`) |
+
+These appear in TWF as raw expressions since they're SDK-level calls, not TWF keywords.
+
+### Data Serialization
 
 ```twf
-workflow EntityWorkflow(entity: Entity, state: EntityState) -> void:
+workflow EntityWorkflow(entity: Entity, data: EntityData) -> void:
     for:
         await signal Command -> command
-        state = applyCommand(state, command)
+        data = applyCommand(data, command)
         
-        # Periodic continuation with current state
+        # Periodic continuation with current data
         if should_continue():
-            continue_as_new(entity, state)
+            close continue_as_new(entity, data)
 ```
 
-> Note: State structs are defined at the SDK level, not in TWF notation.
+> Note: Data structs are defined at the SDK level, not in TWF notation.
 
 ```pseudo
-# State must be serializable!
-struct EntityState:
+# Data must be serializable!
+struct EntityData:
     balance: decimal
     lastUpdated: timestamp
     pendingOperations: []Operation
@@ -91,39 +102,39 @@ Long-lived workflow representing a business entity (user, order, account, subscr
 ### Structure
 
 ```twf
-workflow UserEntity(userId: string, state: UserState) -> void:
-    # Initialize state if new
-    if state == null:
-        activity LoadUser(userId) -> state
+workflow UserEntity(userId: string, user: User) -> void:
+    # Initialize user if new
+    if user == null:
+        activity LoadUser(userId) -> user
 
     for:
         # Wait for commands or periodic triggers
         await one:
             signal UpdateProfile:
-                state.profile = signal.data
+                user.profile = signal.data
 
             signal AddCredits:
-                state.credits += signal.amount
+                user.credits += signal.amount
 
             signal Deactivate:
-                state.active = false
-                close  # End entity lifecycle
+                user.active = false
+                close complete  # End entity lifecycle
 
             timer(24h):
                 # Periodic maintenance
 
-        # Persist after any state change
-        activity PersistUser(userId, state)
+        # Persist after any change
+        activity PersistUser(user)
 
         # Continue-as-new periodically
         if eventCount > 500:
-            continue_as_new(userId, state)
+            close continue_as_new(userId, user)
 
-query GetState() -> UserState:
-    return state
+query GetUser() -> User:
+    return user
 
 update UpdateSettings(settings: Settings) -> Result:
-    state.settings = settings
+    user.settings = settings
     return Result{success: true}
 ```
 
@@ -136,12 +147,12 @@ update UpdateSettings(settings: Settings) -> Result:
 temporal.start_workflow(
     workflow: UserEntity,
     id: "user-{userId}",
-    input: {userId: userId, state: null}
+    input: {userId: userId, user: null}
 )
 
 # Interact with entity (signals, queries, updates)
 temporal.signal("user-{userId}", UpdateProfile, {name: "Alice"})
-state = temporal.query("user-{userId}", GetState)
+user = temporal.query("user-{userId}", GetUser)
 result = temporal.update("user-{userId}", AddCredits, {amount: 100})
 
 # Entity continues until explicit termination
@@ -165,7 +176,7 @@ temporal.signal("user-{userId}", Deactivate, {})
 ### Fixed Event Count
 
 ```twf
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     MAX_EVENTS = 1000
     eventCount = 0
     
@@ -174,25 +185,25 @@ workflow Processor(state: State) -> void:
         eventCount += 1
         
         if eventCount >= MAX_EVENTS:
-            continue_as_new(state)
+            close continue_as_new(data)
 ```
 
 ### Time-Based
 
 ```twf
-workflow DailyProcessor(state: State, startTime: timestamp) -> void:
+workflow DailyProcessor(data: ProcessorData, startTime: timestamp) -> void:
     for:
         doWork()
         
         # Continue every 24 hours
         if now() - startTime > 24h:
-            continue_as_new(state, now())
+            close continue_as_new(data, now())
 ```
 
 ### History Size Estimation
 
 ```twf
-workflow AdaptiveProcessor(state: State) -> void:
+workflow AdaptiveProcessor(data: ProcessorData) -> void:
     heavyEventCount = 0
     lightEventCount = 0
     
@@ -207,7 +218,7 @@ workflow AdaptiveProcessor(state: State) -> void:
         # Weight heavy events more
         estimatedSize = heavyEventCount * 10 + lightEventCount
         if estimatedSize > 5000:
-            continue_as_new(state)
+            close continue_as_new(data)
 ```
 
 ---
@@ -229,15 +240,15 @@ Execution 2: starts with signals A, B, C in buffer (if pending)
 > Note: Signal draining logic is SDK-specific. Conceptual pseudo-code below.
 
 ```pseudo
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     for:
         # Process all pending signals before continue
         while has_pending_signals():
             signal = receive_signal()
-            state = process(signal, state)
+            data = process(signal, data)
         
         if should_continue():
-            continue_as_new(state)
+            continue_as_new(data)
 ```
 
 ---
@@ -261,21 +272,21 @@ temporal.query("entity-123", GetState)
 > Note: `upsert_search_attributes` is an SDK-level call, not TWF notation.
 
 ```pseudo
-workflow EntityWorkflow(entityId: string, state: State) -> void:
+workflow EntityWorkflow(entityId: string, entity: Entity) -> void:
     # Set search attributes for discovery (SDK call)
     upsert_search_attributes({
         EntityId: entityId,
-        EntityType: state.type,
-        Status: state.status,
+        EntityType: entity.type,
+        Status: entity.status,
         LastUpdated: now()
     })
     
     for:
         # ... workflow logic ...
         
-        # Update search attributes on state change (SDK call)
+        # Update search attributes on change (SDK call)
         upsert_search_attributes({
-            Status: state.status,
+            Status: entity.status,
             LastUpdated: now()
         })
 ```
@@ -288,73 +299,73 @@ workflow EntityWorkflow(entityId: string, state: State) -> void:
 
 ```twf
 # BAD: Unbounded history growth
-workflow InfiniteLoop(state: State) -> void:
+workflow InfiniteLoop(data: LoopData) -> void:
     for:
         await signal Event -> event
         process(event)
         # Never continues - history grows forever!
 
 # GOOD: Periodic continuation
-workflow InfiniteLoop(state: State) -> void:
+workflow InfiniteLoop(data: LoopData) -> void:
     count = 0
     for:
         await signal Event -> event
         process(event)
         count += 1
         if count > 1000:
-            continue_as_new(state)
+            close continue_as_new(data)
 ```
 
-### Losing State on Continue
+### Losing Data on Continue
 
 ```twf
-# BAD: State not passed to continuation
-workflow Processor(state: State) -> void:
-    modifiedState = transform(state)
-    continue_as_new()  # Lost modifiedState!
+# BAD: Data not passed to continuation
+workflow Processor(data: ProcessorData) -> void:
+    modifiedData = transform(data)
+    close continue_as_new()  # Lost modifiedData!
 
-# GOOD: Pass current state
-workflow Processor(state: State) -> void:
-    modifiedState = transform(state)
-    continue_as_new(modifiedState)
+# GOOD: Pass current data
+workflow Processor(data: ProcessorData) -> void:
+    modifiedData = transform(data)
+    close continue_as_new(modifiedData)
 ```
 
 ### Continue-As-New in Wrong Place
 
 ```twf
 # BAD: Continue in middle of operation
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     activity Step1()
     if shouldContinue:
-        continue_as_new(state)  # Step2 never runs!
+        close continue_as_new(data)  # Step2 never runs!
     activity Step2()
 
 # GOOD: Continue at natural boundary
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     activity Step1()
     activity Step2()
     if shouldContinue:
-        continue_as_new(state)
+        close continue_as_new(data)
 ```
 
 ### Too Frequent Continuation
 
 ```twf
 # BAD: Continue every event
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     event = await signal Event
     process(event)
-    continue_as_new(state)  # Unnecessary overhead!
+    close continue_as_new(data)  # Unnecessary overhead!
 
 # GOOD: Batch before continuing
-workflow Processor(state: State) -> void:
+workflow Processor(data: ProcessorData) -> void:
     count = 0
     for:
         event = await signal Event
         process(event)
         count += 1
         if count >= 1000:
-            continue_as_new(state)
+            close continue_as_new(data)
 ```
 
 ---
@@ -377,7 +388,7 @@ query GetHealth() -> HealthStatus:
     return HealthStatus{
         eventCount: workflow.history_length(),  # SDK-specific API
         uptime: now() - startTime,
-        stateSize: sizeof(state),
+        dataSize: sizeof(data),
         pendingSignals: pending_signal_count()  # SDK-specific API
     }
 ```

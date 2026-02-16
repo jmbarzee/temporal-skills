@@ -6,12 +6,12 @@
 workflow OrderWorkflow(order: Order) -> (OrderResult):
     activity ValidateOrder(order) -> validated
     if (validated.success == false):
-        close failed OrderResult{status: "invalid"}
+        close fail(OrderResult{status: "invalid"})
 
     activity ProcessPayment(order.payment) -> payment
     activity ShipOrder(order)
 
-    close OrderResult{status: "completed", paymentId: payment.id}
+    close complete(OrderResult{status: "completed", paymentId: payment.id})
 
 # --- Workflow with timer for testing ---
 
@@ -25,7 +25,7 @@ workflow ReminderWorkflow(userId: string):
     await timer(48h)
 
     activity SendFinalReminder(userId)
-    close
+    close complete
 
 # --- Workflow with signals for testing ---
 
@@ -47,11 +47,11 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
 
     await one:
         signal Approved:
-            close Decision{status: "approved", approver: approverName}
+            close complete(Decision{status: "approved", approver: approverName})
         signal Rejected:
-            close failed Decision{status: "rejected", reason: rejectReason}
+            close fail(Decision{status: "rejected", reason: rejectReason})
         timer(1h):
-            close Decision{status: "timeout"}
+            close complete(Decision{status: "timeout"})
 
 # --- Workflow with query for testing ---
 
@@ -66,7 +66,7 @@ workflow StatusWorkflow(orderId: string) -> (OrderResult):
     activity ProcessItems(orderId)
 
     status = "completed"
-    close OrderResult{status: status, orderId: orderId}
+    close complete(OrderResult{status: status, orderId: orderId})
 
 # --- Supporting activities ---
 

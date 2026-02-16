@@ -25,10 +25,10 @@ workflow OrderWorkflow(orderId: string) -> (OrderResult):
     await one:
         signal PaymentReceived:
             status = "completed"
-            close OrderResult{status: "completed"}
+            close complete(OrderResult{status: "completed"})
         timer(24h):
             status = "payment_timeout"
-            close failed OrderResult{status: "payment_timeout"}
+            close fail(OrderResult{status: "payment_timeout"})
 
 # --- Approval flow with multi-target await ---
 
@@ -51,12 +51,12 @@ workflow ApprovalWorkflow(request: Request) -> (Decision):
     # Wait for either Approved or Rejected signal, or timeout
     await one:
         signal Approved:
-            close Decision{status: "approved", approver: approver_name}
+            close complete(Decision{status: "approved", approver: approver_name})
         signal Rejected:
-            close failed Decision{status: "rejected", reason: reject_reason}
+            close fail(Decision{status: "rejected", reason: reject_reason})
         timer(7d):
             activity NotifyExpired(request)
-            close failed Decision{status: "expired"}
+            close fail(Decision{status: "expired"})
 
 # --- Batch collector with signal accumulation ---
 
@@ -78,21 +78,28 @@ workflow BatchCollector(batchId: string) -> (BatchResult):
                 break
 
     activity ProcessBatch(batchId, itemCount) -> result
-    close BatchResult{itemCount: itemCount, result: result}
+    close complete(BatchResult{itemCount: itemCount, result: result})
 
 # --- Update-driven subscription workflow ---
+# Updates are read-write: caller sends data and blocks for a result.
 
 workflow SubscriptionWorkflow(userId: string):
     signal Cancel():
         cancelled = true
 
-    update ChangePlan(newPlan: string) -> (ChangeResult):
-        plan = newPlan
-        return ChangeResult{success: true, plan: plan}
-
+    # Simple update: immediate state mutation + return
     update AddCredits(amount: int) -> (CreditResult):
         credits = credits + amount
         return CreditResult{total: credits}
+
+    # Update with activity: validates before mutating, caller blocks for the full round-trip
+    update ChangePlan(newPlan: string) -> (ChangeResult):
+        activity ValidatePlan(newPlan) -> validation
+        if (validation.valid):
+            plan = newPlan
+            return ChangeResult{success: true, plan: plan}
+        else:
+            return ChangeResult{success: false, error: validation.reason}
 
     query GetPlan() -> (string):
         return plan
@@ -108,7 +115,58 @@ workflow SubscriptionWorkflow(userId: string):
             timer(30d):
                 activity BillUser(userId, plan)
 
-    close
+    close complete
+
+# --- Shipping workflow: update racing in await one ---
+# Shows update as an await one case competing with a timer.
+
+workflow ShippingWorkflow(orderId: string) -> (ShipResult):
+    update ChangeAddress(newAddress: Address) -> (AddressResult):
+        address = newAddress
+        return AddressResult{updated: true}
+
+    query GetAddress() -> (Address):
+        return address
+
+    activity GetOrder(orderId) -> order
+    address = order.shippingAddress
+
+    # Race: accept address changes until the cutoff window closes
+    await one:
+        update ChangeAddress:
+            activity NotifyShippingUpdate(orderId, address)
+        timer(1h):
+            activity FinalizeShipping(orderId, address)
+
+    activity Ship(orderId, address) -> shipment
+    close complete(ShipResult{shipment: shipment})
+
+# --- Update handler waiting on condition ---
+# Shows the condition + update handler pattern where the caller blocks
+# until the condition is set by the main workflow body.
+
+workflow ClusterManager(config: Config):
+    state:
+        condition clusterStarted
+
+    signal Shutdown():
+        shutdownRequested = true
+
+    update WaitUntilStarted() -> (ClusterState):
+        await clusterStarted
+        return ClusterState{started: true}
+
+    query GetStatus() -> (string):
+        return status
+
+    status = "provisioning"
+    activity ProvisionCluster(config)
+    activity StartCluster(config)
+    set clusterStarted
+    status = "running"
+
+    await signal Shutdown
+    close complete
 
 # --- Supporting activities ---
 
@@ -129,3 +187,21 @@ activity ProcessBatch(batchId: string, count: int) -> (BatchResult):
 
 activity BillUser(userId: string, plan: string):
     bill(userId, plan)
+
+activity ValidatePlan(plan: string) -> (Validation):
+    return validate_plan(plan)
+
+activity NotifyShippingUpdate(orderId: string, address: Address):
+    notify_shipping(orderId, address)
+
+activity FinalizeShipping(orderId: string, address: Address):
+    finalize(orderId, address)
+
+activity Ship(orderId: string, address: Address) -> (Shipment):
+    return ship(orderId, address)
+
+activity ProvisionCluster(config: Config):
+    provision(config)
+
+activity StartCluster(config: Config):
+    start(config)

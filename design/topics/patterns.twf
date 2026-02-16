@@ -7,7 +7,7 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Step 1: Validate
     activity ValidateOrder(order) -> validated
     if (validated.success == false):
-        close failed OrderResult{status: "invalid", error: validated.error}
+        close fail(OrderResult{status: "invalid", error: validated.error})
 
     # Step 2: Reserve
     activity ReserveInventory(order.items) -> reservation
@@ -21,33 +21,33 @@ workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Step 5: Notify
     activity SendConfirmation(order.customer)
 
-    close OrderResult{status: "completed", trackingId: reservation.trackingId}
+    close complete(OrderResult{status: "completed", trackingId: reservation.trackingId})
 
 # --- Entity Workflow ---
 
-workflow AccountEntity(accountId: string, state: AccountState):
+workflow AccountEntity(accountId: string, account: Account):
     signal Deposit(amount: decimal):
-        state.balance = state.balance + amount
+        account.balance = account.balance + amount
 
     signal Withdraw(amount: decimal):
-        if (state.balance >= amount):
-            state.balance = state.balance - amount
+        if (account.balance >= amount):
+            account.balance = account.balance - amount
 
     signal Close():
         closePending = true
 
     query GetBalance() -> (decimal):
-        return state.balance
+        return account.balance
 
     update Transfer(amount: decimal, toAccount: string) -> (TransferResult):
-        if (state.balance < amount):
+        if (account.balance < amount):
             return TransferResult{success: false, error: "insufficient funds"}
-        state.balance = state.balance - amount
+        account.balance = account.balance - amount
         activity RecordTransaction(accountId, "transfer")
         return TransferResult{success: true}
 
-    if (state == null):
-        activity LoadAccount(accountId) -> state
+    if (account == null):
+        activity LoadAccount(accountId) -> account
 
     eventCount = 0
     closePending = false
@@ -60,13 +60,13 @@ workflow AccountEntity(accountId: string, state: AccountState):
                 activity RecordTransaction(accountId, "withdraw")
             signal Close:
                 activity CloseAccount(accountId)
-                close
+                close complete
             timer(24h):
                 activity DailyReconciliation(accountId)
 
         eventCount = eventCount + 1
         if (eventCount > 1000):
-            continue_as_new(accountId, state)
+            close continue_as_new(accountId, account)
 
 # --- Saga Pattern (adapted without try/catch) ---
 
@@ -84,7 +84,7 @@ workflow BookingWorkflow(booking: Booking) -> (BookingResult):
     activity ChargePayment(booking.payment) -> payment
 
     # All succeeded
-    close BookingResult{status: "confirmed"}
+    close complete(BookingResult{status: "confirmed"})
 
 # --- Saga compensation workflow (called on failure) ---
 
@@ -93,7 +93,7 @@ workflow CompensateBooking(flight: string, hotel: string, car: string):
     activity CancelFlight(flight)
     activity CancelHotel(hotel)
     activity CancelCar(car)
-    close
+    close complete
 
 # --- Fan-Out/Fan-In ---
 
@@ -105,7 +105,7 @@ workflow BatchProcessor(items: []Item) -> (BatchResult):
 
     # Fan-in: aggregate results (SDK collects results from await all)
     activity AggregateResults(items) -> aggregated
-    close BatchResult{processed: aggregated.count}
+    close complete(BatchResult{processed: aggregated.count})
 
 # --- Pipeline ---
 
@@ -116,7 +116,7 @@ workflow DataPipeline(rawData: RawData) -> (ProcessedData):
     # Stage 2: Validate
     activity Validate(ingested) -> validated
     if (validated.valid == false):
-        close failed ProcessedData{status: "invalid", errors: validated.errors}
+        close fail(ProcessedData{status: "invalid", errors: validated.errors})
 
     # Stage 3: Transform
     activity Transform(validated.data) -> transformed
@@ -127,59 +127,59 @@ workflow DataPipeline(rawData: RawData) -> (ProcessedData):
     # Stage 5: Load
     activity Load(enriched)
 
-    close ProcessedData{status: "complete", recordCount: enriched.count}
+    close complete(ProcessedData{status: "complete", recordCount: enriched.count})
 
 # --- State Machine ---
 
 workflow DocumentApproval(doc: Document) -> (ApprovalResult):
     signal Submit():
-        state = "pending_review"
+        phase = "pending_review"
         activity NotifyReviewers(doc)
 
     signal Approve():
-        state = "approved"
+        phase = "approved"
 
     signal Reject():
-        state = "rejected"
+        phase = "rejected"
 
     signal RequestChanges():
-        state = "changes_requested"
+        phase = "changes_requested"
 
     signal Withdraw():
-        state = "withdrawn"
+        phase = "withdrawn"
 
-    state = "draft"
+    phase = "draft"
 
     for:
-        switch (state):
+        switch (phase):
             case "draft":
                 await one:
                     signal Submit:
                     timer(90d):
-                        state = "expired"
+                        phase = "expired"
             case "pending_review":
                 await one:
                     signal Approve:
                     signal Reject:
                     signal RequestChanges:
                     timer(30d):
-                        state = "expired"
+                        phase = "expired"
             case "changes_requested":
                 await one:
                     signal Submit:
                     signal Withdraw:
                     timer(30d):
-                        state = "expired"
+                        phase = "expired"
             case "approved":
                 activity PublishDocument(doc)
-                close ApprovalResult{status: "approved"}
+                close complete(ApprovalResult{status: "approved"})
             case "rejected":
                 activity ArchiveDocument(doc)
-                close ApprovalResult{status: "rejected"}
+                close complete(ApprovalResult{status: "rejected"})
             case "withdrawn":
-                close ApprovalResult{status: "withdrawn"}
+                close complete(ApprovalResult{status: "withdrawn"})
             case "expired":
-                close ApprovalResult{status: "expired"}
+                close complete(ApprovalResult{status: "expired"})
 
 # --- Polling ---
 
@@ -192,17 +192,17 @@ workflow WaitForResource(resourceId: string) -> (Resource):
 
         if (status.ready):
             activity GetResource(resourceId) -> resource
-            close resource
+            close complete(resource)
 
         if (status.failed):
-            close failed Resource{error: status.error}
+            close fail(Resource{error: status.error})
 
         # Wait with backoff, timeout via await one + timer
         await one:
             timer(backoff):
                 backoff = min(backoff * 2, maxBackoff)
             timer(30m):
-                close failed Resource{error: "timeout"}
+                close fail(Resource{error: "timeout"})
 
 # --- Supporting activities ---
 
@@ -221,7 +221,7 @@ activity ShipOrder(order: Order, reservation: Reservation):
 activity SendConfirmation(customer: Customer):
     notify(customer)
 
-activity LoadAccount(accountId: string) -> (AccountState):
+activity LoadAccount(accountId: string) -> (Account):
     return db.load(accountId)
 
 activity RecordTransaction(accountId: string, txType: string):

@@ -41,7 +41,7 @@ workflow OrderFulfillment(order: Order) -> OrderResult:
     activity ValidateOrder(order)
     await signal PaymentReceived
     activity ShipOrder(order)
-    close OrderResult{status: "completed"}
+    close complete(OrderResult{status: "completed"})
 ```
 
 ### Operation Deadline Pattern
@@ -51,10 +51,10 @@ workflow ProcessWithDeadline(data: Data) -> Result:
     # Race between operation and deadline
     await one:
         activity LongOperation(data) -> result:
-            close Result{success: true, data: result}
+            close complete(Result{success: true, data: result})
         timer(1h):
             activity Cleanup(data)
-            close failed Result{success: false, error: "deadline exceeded"}
+            close fail(Result{success: false, error: "deadline exceeded"})
 ```
 
 ### Timeout on Signal Wait
@@ -65,12 +65,12 @@ workflow ApprovalWorkflow(request: Request) -> Decision:
 
     await one:
         signal Approved:
-            close Decision{status: "approved"}
+            close complete(Decision{status: "approved"})
         signal Rejected:
-            close Decision{status: "rejected"}
+            close complete(Decision{status: "rejected"})
         timer(7d):
             activity NotifyExpired(request)
-            close Decision{status: "expired"}
+            close complete(Decision{status: "expired"})
 ```
 
 ---
@@ -96,7 +96,7 @@ workflow WaitForResource(resourceId: string) -> Resource:
     for:
         activity CheckResource(resourceId) -> resource
         if resource.ready:
-            close resource
+            close complete(resource)
 
         await timer(backoff)
         backoff = min(backoff * 2, max_backoff)
@@ -109,13 +109,13 @@ workflow WaitForCompletion(jobId: string) -> JobResult:
     for:
         activity GetJobStatus(jobId) -> status
         if status.complete:
-            close JobResult{status: "complete", data: status.data}
+            close complete(JobResult{status: "complete", data: status.data})
 
         await one:
             timer(30s):
                 # Continue polling
             timer(2h):
-                close failed JobResult{status: "timeout"}
+                close fail(JobResult{status: "timeout"})
 ```
 
 ---
@@ -222,7 +222,7 @@ workflow PollForever(resourceId: string):
         await timer(5s)
         count += 1
         if count > 1000:
-            continue_as_new(resourceId)  # Reset history
+            close continue_as_new(resourceId)  # Reset history
 ```
 
 ### Non-Deterministic Time Checks
@@ -237,9 +237,9 @@ workflow Process(data: Data):
 workflow Process(data: Data):
     await one:
         activity DoWork(data) -> result:
-            close Result{status: "success"}
+            close complete(Result{status: "success"})
         timer(some_deadline):
-            close failed Result{status: "timeout"}
+            close fail(Result{status: "timeout"})
 ```
 
 ### Timer for Immediate Execution

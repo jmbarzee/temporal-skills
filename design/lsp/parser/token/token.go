@@ -22,9 +22,15 @@ const (
 	UPDATE
 
 	// Keywords -- workflow call modifiers
-	SPAWN
 	DETACH
 	NEXUS
+
+	// Keywords -- promises and conditions
+	PROMISE
+	CONDITION
+	SET
+	UNSET
+	STATE
 
 	// Keywords -- calls and primitives
 	TIMER
@@ -47,16 +53,17 @@ const (
 
 	// Keywords -- simple statements
 	CLOSE
-	COMPLETED
-	FAILED
+	COMPLETE
+	FAIL
 	RETURN
 	CONTINUE_AS_NEW
 	BREAK
 	CONTINUE
 
 	// Symbols
-	COLON    // :
-	ARROW    // ->
+	COLON      // :
+	ARROW      // ->
+	LEFT_ARROW // <-
 
 	// Values
 	IDENT    // non-keyword identifiers
@@ -76,9 +83,13 @@ var tokenNames = map[TokenType]string{
 	SIGNAL:          "SIGNAL",
 	QUERY:           "QUERY",
 	UPDATE:          "UPDATE",
-	SPAWN:           "SPAWN",
 	DETACH:          "DETACH",
 	NEXUS:           "NEXUS",
+	PROMISE:         "PROMISE",
+	CONDITION:       "CONDITION",
+	SET:             "SET",
+	UNSET:           "UNSET",
+	STATE:           "STATE",
 	TIMER:           "TIMER",
 	OPTIONS:         "OPTIONS",
 	AWAIT:           "AWAIT",
@@ -91,14 +102,15 @@ var tokenNames = map[TokenType]string{
 	FOR:             "FOR",
 	IN:              "IN",
 	CLOSE:           "CLOSE",
-	COMPLETED:       "COMPLETED",
-	FAILED:          "FAILED",
+	COMPLETE:        "COMPLETE",
+	FAIL:            "FAIL",
 	RETURN:          "RETURN",
 	CONTINUE_AS_NEW: "CONTINUE_AS_NEW",
 	BREAK:           "BREAK",
 	CONTINUE:        "CONTINUE",
 	COLON:           "COLON",
 	ARROW:           "ARROW",
+	LEFT_ARROW:      "LEFT_ARROW",
 	IDENT:           "IDENT",
 	STRING:          "STRING",
 	ARGS:            "ARGS",
@@ -134,9 +146,13 @@ var keywords = map[string]TokenType{
 	"signal":          SIGNAL,
 	"query":           QUERY,
 	"update":          UPDATE,
-	"spawn":           SPAWN,
 	"detach":          DETACH,
 	"nexus":           NEXUS,
+	"promise":         PROMISE,
+	"condition":       CONDITION,
+	"set":             SET,
+	"unset":           UNSET,
+	"state":           STATE,
 	"timer":           TIMER,
 	"options":         OPTIONS,
 	"await":           AWAIT,
@@ -149,8 +165,8 @@ var keywords = map[string]TokenType{
 	"for":             FOR,
 	"in":              IN,
 	"close":           CLOSE,
-	"completed":       COMPLETED,
-	"failed":          FAILED,
+	"complete":        COMPLETE,
+	"fail":            FAIL,
 	"return":          RETURN,
 	"continue_as_new": CONTINUE_AS_NEW,
 	"break":           BREAK,

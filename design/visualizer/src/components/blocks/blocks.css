@@ -55,9 +55,17 @@
   --block-raw-border: #E2E8F0;
   --block-raw-text: #64748B;
 
+  --block-promise-bg: linear-gradient(135deg, #E0F7FA 0%, #CCF2F6 100%);
+  --block-promise-border: #67D6E4;
+  --block-promise-text: #155E63;
+
   --block-subtle-bg: #F8FAFC;
   --block-subtle-border: #E2E8F0;
   --block-subtle-text: #94A3B8;
+
+  --decl-condition-bg: rgba(129, 230, 217, 0.25);
+  --decl-condition-border: #81E6D9;
+  --decl-condition-text: #234E47;
 
   --decl-signal-bg: rgba(254, 202, 202, 0.35);
   --decl-signal-border: #FECACA;
@@ -128,9 +136,17 @@
   --block-raw-border: #3D4550;
   --block-raw-text: #A0AEC0;
 
+  --block-promise-bg: linear-gradient(135deg, #1A3035 0%, #20383E 100%);
+  --block-promise-border: #3DA5B0;
+  --block-promise-text: #88DDE8;
+
   --block-subtle-bg: #1E2024;
   --block-subtle-border: #3D4550;
   --block-subtle-text: #718096;
+
+  --decl-condition-bg: rgba(77, 170, 157, 0.2);
+  --decl-condition-border: #4DAA9D;
+  --decl-condition-text: #A8E8DC;
 
   --decl-signal-bg: rgba(239, 154, 154, 0.2);
   --decl-signal-border: #EF9A9A;
@@ -362,10 +378,6 @@
   color: var(--block-workflow-call-text);
 }
 
-.block-workflow-call.block-mode-spawn {
-  border-color: #68D391;
-}
-
 .block-workflow-call.block-mode-detach {
   border-style: dashed;
 }
@@ -508,6 +520,12 @@
   color: var(--block-workflow-call-text);
 }
 
+.tagged-ident {
+  background: var(--block-await-bg);
+  border: 1px solid var(--block-await-border);
+  color: var(--block-await-text);
+}
+
 /* Single await statement - Teal */
 .block-await-stmt {
   background: var(--block-await-bg);
@@ -562,6 +580,16 @@
 
 .block-await-stmt-workflow>.block-header {
   color: var(--block-workflow-call-text);
+}
+
+/* Await ident (promise/condition reference) - Teal (default await) */
+.block-await-stmt-ident {
+  background: var(--block-await-bg);
+  border-color: var(--block-await-border);
+}
+
+.block-await-stmt-ident>.block-header {
+  color: var(--block-await-text);
 }
 
 /* Signal - Red (matches declaration color) */
@@ -675,6 +703,28 @@
   color: var(--block-raw-text);
 }
 
+/* Promise - Cyan/Teal (async non-blocking) */
+.block-promise {
+  background: var(--block-promise-bg);
+  border: 1px solid var(--block-promise-border);
+}
+
+.block-promise>.block-header {
+  color: var(--block-promise-text);
+}
+
+/* Set/Unset - Subtle (condition mutation) */
+.block-set,
+.block-unset {
+  background: var(--block-subtle-bg);
+  border: 1px solid var(--block-subtle-border);
+}
+
+.block-set>.block-header,
+.block-unset>.block-header {
+  color: var(--block-subtle-text);
+}
+
 /* Break/Continue - Subtle */
 .block-break,
 .block-continue {
@@ -760,6 +810,23 @@
 .declarations-icon.declaration-update {
   background: var(--decl-update-bg);
   color: var(--decl-update-text);
+}
+
+.declaration-condition {
+  background: var(--decl-condition-bg);
+  border-color: var(--decl-condition-border);
+  color: var(--decl-condition-text);
+}
+
+.declarations-icon.declaration-condition {
+  background: var(--decl-condition-bg);
+  color: var(--decl-condition-text);
+}
+
+.declaration-raw-state {
+  background: var(--block-raw-bg);
+  border-color: var(--block-raw-border);
+  color: var(--block-raw-text);
 }
 
 /* Unresolved/Missing definition styles

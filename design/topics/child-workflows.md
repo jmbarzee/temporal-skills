@@ -30,24 +30,24 @@ workflow ParentWorkflow(input: Input) -> Result:
     options(workflow_id: "child-{input.id}", timeout: 1h, retry_policy: {max_attempts: 3})
     workflow ChildWorkflow(input.data) -> childResult
     
-    close Result{childResult}
+    close complete(Result{childResult})
 
 workflow ChildWorkflow(data: Data) -> ChildResult:
     activity Step1(data)
     activity Step2(data)
-    close ChildResult{success: true}
+    close complete(ChildResult{success: true})
 ```
 
 ---
 
-## Execution Modes: `workflow`, `spawn`, `detach`
+## Execution Modes: `workflow`, `promise`, `detach`
 
 Child workflows support three execution modes:
 
 | Mode | Syntax | Behavior | Result |
 |------|--------|----------|--------|
 | **Synchronous** | `workflow Name(args) -> result` | Parent blocks until child completes | Child result bound to variable |
-| **Async (spawn)** | `spawn workflow Name(args) -> handle` | Parent continues immediately | Handle for later awaiting |
+| **Async (promise)** | `promise p <- workflow Name(args)` | Parent continues immediately | Promise for later awaiting |
 | **Fire-and-forget (detach)** | `detach workflow Name(args)` | Parent continues, never waits | No result binding |
 
 ### Synchronous (Default)
@@ -57,26 +57,25 @@ Parent blocks until child workflow completes and receives the result:
 ```twf
 workflow Parent(input: Input) -> Result:
     workflow ChildWorkflow(input.data) -> childResult
-    close Result{childResult}
+    close complete(Result{childResult})
 ```
 
-### Async with `spawn`
+### Async with `promise`
 
-Start a child workflow and get a handle. Continue with other work, then await the handle later:
+Start a child workflow and get a promise. Continue with other work, then await the promise later:
 
 ```twf
 workflow Parent(input: Input) -> Result:
     # Start child without blocking
-    spawn workflow SlowChild(input.data) -> handle
-    
+    promise handle <- workflow SlowChild(input.data)
+
     # Do other work in parallel
     activity QuickTask(input)
-    
+
     # Await child result when needed
-    await one:
-        handle -> childResult:
-    
-    close Result{childResult}
+    await handle -> childResult
+
+    close complete(Result{childResult})
 ```
 
 ### Fire-and-forget with `detach`
@@ -86,32 +85,31 @@ Start a child workflow that runs independently. The parent never waits for it an
 ```twf
 workflow Parent(input: Input) -> Result:
     activity ProcessOrder(input) -> result
-    
+
     # Fire-and-forget notification - runs independently
     detach workflow SendNotification(input.customer, result)
-    
-    close Result{result}
+
+    close complete(Result{result})
 ```
 
 > **Note:** `detach` implies `ABANDON` parent close policy. The detached child continues even if the parent is cancelled or terminated.
 
-### `spawn` and `detach` with Nexus
+### `promise` and `detach` with Nexus
 
 Both modifiers also work with nexus calls for cross-namespace workflows:
 
 ```twf
 workflow Parent(input: Input) -> Result:
     # Async nexus call
-    spawn nexus "payments" workflow ProcessPayment(input.payment) -> handle
-    
+    promise handle <- nexus "payments" workflow ProcessPayment(input.payment)
+
     # Fire-and-forget nexus call
     detach nexus "notifications" workflow SendEmail(input.customer)
-    
-    # Await the async handle
-    await one:
-        handle -> paymentResult:
-    
-    close Result{paymentResult}
+
+    # Await the async promise
+    await handle -> paymentResult
+
+    close complete(Result{paymentResult})
 ```
 
 ---
@@ -161,7 +159,7 @@ workflow Parent(input: Input) -> Result:
 workflow Parent(input: Input) -> Result:
     # Child workflow call -- if it fails, the parent workflow fails
     workflow ChildWorkflow(input) -> result
-    close Result{success: true, data: result}
+    close complete(Result{success: true, data: result})
 ```
 
 ### Retry Policies for Children
@@ -230,7 +228,7 @@ workflow DeployApplication(app: App) -> DeployResult:
     workflow DeployFrontend(app.frontend)
     workflow ConfigureRouting(app)
     
-    close DeployResult{status: "deployed"}
+    close complete(DeployResult{status: "deployed"})
 ```
 
 ### Parallel Children
@@ -242,7 +240,7 @@ workflow ProcessBatch(items: []Item) -> BatchResult:
         for (item in items):
             workflow ProcessItem(item) -> result
     
-    close BatchResult{}
+    close complete(BatchResult{})
 ```
 
 ### Conditional Children
@@ -257,7 +255,7 @@ workflow Onboarding(user: User) -> OnboardingResult:
         workflow StandardSetup(user)
     
     workflow SendWelcomeEmail(user)
-    close OnboardingResult{success: true}
+    close complete(OnboardingResult{success: true})
 ```
 
 ### Hierarchical Decomposition

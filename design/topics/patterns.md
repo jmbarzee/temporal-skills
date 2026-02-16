@@ -35,7 +35,7 @@ workflow OrderFulfillment(order: Order) -> OrderResult:
     # Step 1: Validate
     activity ValidateOrder(order) -> validated
     if not validated.success:
-        close failed OrderResult{status: "invalid", error: validated.error}
+        close fail(OrderResult{status: "invalid", error: validated.error})
     
     # Step 2: Reserve
     activity ReserveInventory(order.items) -> reservation
@@ -49,7 +49,7 @@ workflow OrderFulfillment(order: Order) -> OrderResult:
     # Step 5: Notify
     activity SendConfirmation(order.customer)
     
-    close OrderResult{status: "completed", trackingId: reservation.trackingId}
+    close complete(OrderResult{status: "completed", trackingId: reservation.trackingId})
 ```
 
 ### When to Use
@@ -73,38 +73,38 @@ A long-running workflow representing a business entity.
 ### Pattern
 
 ```twf
-workflow AccountEntity(accountId: string, state: AccountState) -> void:
-    if state == null:
-        activity LoadAccount(accountId) -> state
+workflow AccountEntity(accountId: string, account: Account) -> void:
+    if account == null:
+        activity LoadAccount(accountId) -> account
 
     for:
         await one:
             signal Deposit:
-                state.balance += signal.amount
+                account.balance += signal.amount
                 activity RecordTransaction(accountId, "deposit", signal.amount)
 
             signal Withdraw:
-                if state.balance >= signal.amount:
-                    state.balance -= signal.amount
+                if account.balance >= signal.amount:
+                    account.balance -= signal.amount
                     activity RecordTransaction(accountId, "withdraw", signal.amount)
 
             signal Close:
                 activity CloseAccount(accountId)
-                close
+                close complete
 
             timer(24h):
-                activity DailyReconciliation(accountId, state)
+                activity DailyReconciliation(accountId, account)
 
         if history_size() > 1000:
-            continue_as_new(accountId, state)
+            close continue_as_new(accountId, account)
 
 query GetBalance() -> decimal:
-    return state.balance
+    return account.balance
 
 update Transfer(amount: decimal, toAccount: string) -> TransferResult:
-    if state.balance < amount:
+    if account.balance < amount:
         return TransferResult{success: false, error: "insufficient funds"}
-    state.balance -= amount
+    account.balance -= amount
     activity InitiateTransfer(toAccount, amount)
     return TransferResult{success: true}
 ```
@@ -150,7 +150,7 @@ workflow BookingWorkflow(booking: Booking) -> BookingResult:
     # on failure: activity CancelCar(car.id), CancelHotel(...), CancelFlight(...)
     
     # All succeeded
-    close BookingResult{status: "confirmed", flight, hotel, car, payment}
+    close complete(BookingResult{status: "confirmed", flight, hotel, car, payment})
     
     # On any step failure, compensations run in reverse order
     # SDK-level error handling drives the compensation logic
@@ -197,7 +197,7 @@ workflow BatchProcessor(items: []Item) -> BatchResult:
     # Fan-in: aggregate results (conceptual -- SDK collects results)
     activity AggregateResults(items) -> aggregated
     
-    close BatchResult{results: aggregated}
+    close complete(BatchResult{results: aggregated})
 ```
 
 ### Variations
@@ -211,7 +211,7 @@ workflow RateLimitedBatch(items: []Item) -> BatchResult:
             for (item in batch):
                 activity ProcessItem(item) -> result
     
-    close BatchResult{}
+    close complete(BatchResult{})
 ```
 
 **With Early Exit:**
@@ -223,7 +223,7 @@ workflow FirstSuccessful(sources: []Source) -> Data:
     
     # SDK-level: find first successful result
     activity FindFirstSuccess(sources) -> data
-    close data
+    close complete(data)
 ```
 
 ### When to Use
@@ -254,7 +254,7 @@ workflow DataPipeline(rawData: RawData) -> ProcessedData:
     # Stage 2: Validate
     activity Validate(ingested) -> validated
     if not validated.valid:
-        close failed ProcessedData{status: "invalid", errors: validated.errors}
+        close fail(ProcessedData{status: "invalid", errors: validated.errors})
     
     # Stage 3: Transform
     activity Transform(validated.data) -> transformed
@@ -265,7 +265,7 @@ workflow DataPipeline(rawData: RawData) -> ProcessedData:
     # Stage 5: Load
     activity Load(enriched)
     
-    close ProcessedData{status: "complete", recordCount: enriched.count}
+    close complete(ProcessedData{status: "complete", recordCount: enriched.count})
 ```
 
 ### With Conditional Stages
@@ -281,7 +281,7 @@ workflow AdaptivePipeline(data: Data) -> Result:
         activity ConvertLegacy(processed) -> processed
     
     activity Finalize(processed) -> result
-    close result
+    close complete(result)
 ```
 
 ### When to Use
@@ -306,43 +306,43 @@ Explicit states and transitions.
 
 ```twf
 workflow DocumentApproval(doc: Document) -> ApprovalResult:
-    state = "draft"
+    phase = "draft"
 
     for:
-        if state == "draft":
+        if phase == "draft":
             await signal Submit
             activity NotifyReviewers(doc)
-            state = "pending_review"
+            phase = "pending_review"
 
-        elif state == "pending_review":
+        elif phase == "pending_review":
             await one:
                 signal Approve:
-                    state = "approved"
+                    phase = "approved"
                 signal Reject:
-                    state = "rejected"
+                    phase = "rejected"
                 signal RequestChanges:
-                    state = "changes_requested"
+                    phase = "changes_requested"
 
-        elif state == "changes_requested":
+        elif phase == "changes_requested":
             await one:
                 signal Submit:
-                    state = "pending_review"
+                    phase = "pending_review"
                 signal Withdraw:
-                    state = "withdrawn"
+                    phase = "withdrawn"
 
-        elif state == "approved":
+        elif phase == "approved":
             activity PublishDocument(doc)
-            close ApprovalResult{status: "approved"}
+            close complete(ApprovalResult{status: "approved"})
 
-        elif state == "rejected":
+        elif phase == "rejected":
             activity ArchiveDocument(doc)
-            close ApprovalResult{status: "rejected"}
+            close complete(ApprovalResult{status: "rejected"})
 
-        elif state == "withdrawn":
-            close ApprovalResult{status: "withdrawn"}
+        elif phase == "withdrawn":
+            close complete(ApprovalResult{status: "withdrawn"})
 
-query GetState() -> string:
-    return state
+query GetPhase() -> string:
+    return phase
 ```
 
 ### State Transition Table
@@ -386,11 +386,11 @@ workflow WaitForResource(resourceId: string) -> Resource:
 
         if status.ready:
             activity GetResource(resourceId) -> resource
-            close resource
+            close complete(resource)
 
         if status.failed:
             activity CancelProvisioning(resourceId)
-            close failed ProvisioningError{error: status.error}
+            close fail(ProvisioningError{error: status.error})
 
         # Wait with backoff, deadline via await one + timer
         await one:
@@ -398,7 +398,7 @@ workflow WaitForResource(resourceId: string) -> Resource:
                 backoff = min(backoff * 2, maxBackoff)
             timer(30m):
                 activity CancelProvisioning(resourceId)
-                close failed ProvisioningTimeout{}
+                close fail(ProvisioningTimeout{})
 ```
 
 ### With Progress Updates
@@ -415,7 +415,7 @@ workflow MonitorJob(jobId: string) -> JobResult:
 
         if status.complete:
             activity GetJobResult(jobId) -> result
-            close result
+            close complete(result)
 
         await timer(30s)
 ```

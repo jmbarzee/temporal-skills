@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
+import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, StateBlock } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useRefocus } from './useRefocus'
@@ -34,15 +34,19 @@ interface WorkflowDefBlockProps {
 
 function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
   const signature = formatWorkflowSignature(def)
+  const [stateExpanded, setStateExpanded] = React.useState(false)
   const [signalsExpanded, setSignalsExpanded] = React.useState(false)
   const [queriesExpanded, setQueriesExpanded] = React.useState(false)
   const [updatesExpanded, setUpdatesExpanded] = React.useState(false)
   const refocus = useRefocus()
 
+  const hasState = def.state && ((def.state.conditions && def.state.conditions.length > 0) || (def.state.rawStmts && def.state.rawStmts.length > 0))
   const hasSignals = def.signals && def.signals.length > 0
   const hasQueries = def.queries && def.queries.length > 0
   const hasUpdates = def.updates && def.updates.length > 0
 
+  const stateItemCount = (def.state?.conditions?.length || 0) + (def.state?.rawStmts?.length || 0)
+  const toggleState = () => { setStateExpanded(!stateExpanded); refocus() }
   const toggleSignals = () => { setSignalsExpanded(!signalsExpanded); refocus() }
   const toggleQueries = () => { setQueriesExpanded(!queriesExpanded); refocus() }
   const toggleUpdates = () => { setUpdatesExpanded(!updatesExpanded); refocus() }
@@ -72,6 +76,36 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
         
         {expanded && (
           <div className="block-body">
+          {/* State block - conditions and raw state declarations */}
+          {hasState && (
+            <div className="block-declarations-group">
+              <div className="declarations-header" onClick={toggleState}>
+                <span className="block-toggle">{stateExpanded ? '▼' : '▶'}</span>
+                <span className="declarations-icon declaration-condition">◉</span>
+                <span className="declarations-label">state</span>
+                <span className="declarations-count">({stateItemCount})</span>
+              </div>
+              {stateExpanded && (
+                <div className="block-declarations">
+                  {(def.state!.conditions || []).map((c, i) => (
+                    <div key={`cond-${i}`} className="declaration declaration-condition">
+                      <span className="block-toggle-placeholder" />
+                      <span className="declaration-icon">◉</span>
+                      <span className="declaration-keyword">condition</span>
+                      <span className="declaration-name">{c.name}</span>
+                    </div>
+                  ))}
+                  {(def.state!.rawStmts || []).map((r, i) => (
+                    <div key={`raw-${i}`} className="declaration declaration-raw-state">
+                      <span className="block-toggle-placeholder" />
+                      <span className="declaration-icon">≡</span>
+                      <span className="declaration-name">{r.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {/* Signals - data flowing IN to workflow */}
           {hasSignals && (
             <div className="block-declarations-group">

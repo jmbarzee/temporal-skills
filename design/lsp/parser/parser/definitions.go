@@ -48,6 +48,16 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
+	// Optional state block (must come before handlers and body).
+	p.skipBlankLinesAndComments()
+	var stateBlock *ast.StateBlock
+	if p.current.Type == token.STATE {
+		stateBlock, err = parseStateBlock(p)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Parse signal/query/update declarations (must come before body stmts).
 	var signals []*ast.SignalDecl
 	var queries []*ast.QueryDecl
@@ -100,6 +110,7 @@ parseBody:
 		Params:     params.Literal,
 		ReturnType: returnType,
 		Options:    options,
+		State:      stateBlock,
 		Signals:    signals,
 		Queries:    queries,
 		Updates:    updates,
@@ -323,5 +334,80 @@ func parseUpdateDecl(p *Parser) (*ast.UpdateDecl, error) {
 		Params:     params.Literal,
 		ReturnType: returnType,
 		Body:       body,
+	}, nil
+}
+
+// parseStateBlock parses: STATE COLON NEWLINE INDENT (condition_decl | raw_stmt)* DEDENT
+func parseStateBlock(p *Parser) (*ast.StateBlock, error) {
+	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+	p.advance() // consume STATE
+
+	if _, err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.INDENT); err != nil {
+		return nil, err
+	}
+
+	block := &ast.StateBlock{Pos: pos}
+
+	for p.current.Type != token.DEDENT && p.current.Type != token.EOF {
+		if p.current.Type == token.NEWLINE {
+			p.advance()
+			continue
+		}
+		if p.current.Type == token.COMMENT {
+			p.advance()
+			if p.current.Type == token.NEWLINE {
+				p.advance()
+			}
+			continue
+		}
+
+		if p.current.Type == token.CONDITION {
+			cond, err := parseConditionDecl(p)
+			if err != nil {
+				return nil, err
+			}
+			block.Conditions = append(block.Conditions, cond)
+		} else {
+			// Raw statement (variable initialization, etc.)
+			stmt, err := parseRawStmt(p)
+			if err != nil {
+				return nil, err
+			}
+			if raw, ok := stmt.(*ast.RawStmt); ok {
+				block.RawStmts = append(block.RawStmts, raw)
+			}
+		}
+	}
+
+	if p.current.Type == token.DEDENT {
+		p.advance()
+	}
+
+	return block, nil
+}
+
+// parseConditionDecl parses: CONDITION IDENT NEWLINE
+func parseConditionDecl(p *Parser) (*ast.ConditionDecl, error) {
+	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+	p.advance() // consume CONDITION
+
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.current.Type == token.NEWLINE {
+		p.advance()
+	}
+
+	return &ast.ConditionDecl{
+		Pos:  pos,
+		Name: name.Literal,
 	}, nil
 }

@@ -60,7 +60,7 @@ workflow Parent(data: Data) -> Result:
     options(start_to_close_timeout: 1h, heartbeat_timeout: 30s)
     activity LongProcess(data) -> result
     
-    close result
+    close complete(result)
 ```
 
 ### Resume from Heartbeat Details
@@ -134,7 +134,7 @@ workflow ApprovalWorkflow(request: Request) -> Decision:
     if result.approved:
         activity ExecuteApprovedAction(request)
     
-    close Decision{approved: result.approved}
+    close complete(Decision{approved: result.approved})
 ```
 
 ### External Completion API
@@ -189,7 +189,7 @@ workflow ProcessOrder(order: Order) -> Result:
     # Regular activity: goes through task queue
     activity ProcessPayment(order) -> result
     
-    close result
+    close complete(result)
 ```
 
 ### Local Activity Limitations
@@ -249,7 +249,7 @@ workflow Parent(data: Data) -> Result:
     options(schedule_to_start_timeout: 5m, start_to_close_timeout: 10m)
     activity LowPriorityTask(data) -> result
     
-    close result
+    close complete(result)
 ```
 
 ### Timeout Selection Guidelines

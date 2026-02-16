@@ -11,6 +11,7 @@
     { "include": "#primitives" },
     { "include": "#async" },
     { "include": "#blocks" },
+    { "include": "#state" },
     { "include": "#control-flow" },
     { "include": "#arrow" },
     { "include": "#parens" }
@@ -65,7 +66,7 @@
       "patterns": [
         {
           "name": "keyword.other.twf",
-          "match": "\\b(spawn|detach|nexus)\\b"
+          "match": "\\b(detach|nexus)\\b"
         }
       ]
     },
@@ -73,7 +74,7 @@
       "patterns": [
         {
           "name": "keyword.other.twf",
-          "match": "\\b(timer|options)\\b"
+          "match": "\\b(timer|options|heartbeat)\\b"
         }
       ]
     },
@@ -81,7 +82,7 @@
       "patterns": [
         {
           "name": "keyword.control.twf",
-          "match": "\\b(await|or)\\b"
+          "match": "\\b(await|all|one|promise)\\b"
         }
       ]
     },
@@ -89,7 +90,7 @@
       "patterns": [
         {
           "name": "keyword.control.twf",
-          "match": "\\b(parallel|select|switch|case)\\b"
+          "match": "\\b(switch|case)\\b"
         }
       ]
     },
@@ -97,7 +98,15 @@
       "patterns": [
         {
           "name": "keyword.control.twf",
-          "match": "\\b(if|else|for|in|return|break|continue|continue_as_new)\\b"
+          "match": "\\b(if|else|for|in|close|complete|fail|return|break|continue|continue_as_new)\\b"
+        }
+      ]
+    },
+    "state": {
+      "patterns": [
+        {
+          "name": "keyword.other.twf",
+          "match": "\\b(state|condition|set|unset)\\b"
         }
       ]
     },

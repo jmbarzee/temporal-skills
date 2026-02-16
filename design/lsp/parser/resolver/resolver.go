@@ -72,12 +72,30 @@ func Resolve(file *ast.File) []*ResolveError {
 			updates[u.Name] = u
 		}
 
+		// Build condition map from state block.
+		conditions := make(map[string]*ast.ConditionDecl)
+		if wf.State != nil {
+			for _, c := range wf.State.Conditions {
+				conditions[c.Name] = c
+			}
+		}
+
+		// Build promise set from workflow body.
+		promises := make(map[string]*ast.PromiseStmt)
+		for _, stmt := range wf.Body {
+			if p, ok := stmt.(*ast.PromiseStmt); ok {
+				promises[p.Name] = p
+			}
+		}
+
 		ctx := &resolveCtx{
 			workflows:  workflows,
 			activities: activities,
 			signals:    signals,
 			queries:    queries,
 			updates:    updates,
+			conditions: conditions,
+			promises:   promises,
 		}
 
 		// Resolve handler bodies.
@@ -104,6 +122,8 @@ type resolveCtx struct {
 	signals    map[string]*ast.SignalDecl
 	queries    map[string]*ast.QueryDecl
 	updates    map[string]*ast.UpdateDecl
+	conditions map[string]*ast.ConditionDecl
+	promises   map[string]*ast.PromiseStmt
 	errs       []*ResolveError
 }
 
@@ -208,6 +228,82 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				})
 			}
 		}
+		if s.Ident != "" {
+			_, isPromise := c.promises[s.Ident]
+			_, isCondition := c.conditions[s.Ident]
+			if !isPromise && !isCondition {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined promise or condition: %s", s.Ident),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+			// Conditions cannot have result bindings
+			if isCondition && s.IdentResult != "" {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", s.Ident),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+
+	case *ast.PromiseStmt:
+		// Resolve the async target references
+		if s.Activity != "" {
+			if _, ok := c.activities[s.Activity]; !ok {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined activity: %s", s.Activity),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+		if s.Workflow != "" {
+			if _, ok := c.workflows[s.Workflow]; !ok {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined workflow: %s", s.Workflow),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+		if s.Signal != "" {
+			if _, ok := c.signals[s.Signal]; !ok {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined signal: %s", s.Signal),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+		if s.Update != "" {
+			if _, ok := c.updates[s.Update]; !ok {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("undefined update: %s", s.Update),
+					Line:   s.Line,
+					Column: s.Column,
+				})
+			}
+		}
+
+	case *ast.SetStmt:
+		if _, ok := c.conditions[s.Name]; !ok {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
+				Line:   s.Line,
+				Column: s.Column,
+			})
+		}
+
+	case *ast.UnsetStmt:
+		if _, ok := c.conditions[s.Name]; !ok {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
+				Line:   s.Line,
+				Column: s.Column,
+			})
+		}
 	}
 }
 
@@ -252,6 +348,26 @@ func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
 		} else {
 			c.errs = append(c.errs, &ResolveError{
 				Msg:    fmt.Sprintf("undefined workflow: %s", awaitCase.Workflow),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+	}
+
+	if awaitCase.Ident != "" {
+		_, isPromise := c.promises[awaitCase.Ident]
+		_, isCondition := c.conditions[awaitCase.Ident]
+		if !isPromise && !isCondition {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined promise or condition: %s", awaitCase.Ident),
+				Line:   awaitCase.Line,
+				Column: awaitCase.Column,
+			})
+		}
+		// Conditions cannot have result bindings
+		if isCondition && awaitCase.IdentResult != "" {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", awaitCase.Ident),
 				Line:   awaitCase.Line,
 				Column: awaitCase.Column,
 			})

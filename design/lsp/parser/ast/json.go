@@ -44,10 +44,22 @@ type WorkflowDefJSON struct {
 	Params     string             `json:"params"`
 	ReturnType string             `json:"returnType,omitempty"`
 	Options    string             `json:"options,omitempty"`
+	State      *StateBlockJSON    `json:"state,omitempty"`
 	Signals    []*SignalDeclJSON  `json:"signals,omitempty"`
 	Queries    []*QueryDeclJSON   `json:"queries,omitempty"`
 	Updates    []*UpdateDeclJSON  `json:"updates,omitempty"`
 	Body       []json.RawMessage  `json:"body"`
+}
+
+// StateBlockJSON is the JSON representation of a state: block.
+type StateBlockJSON struct {
+	Conditions []*ConditionDeclJSON `json:"conditions,omitempty"`
+	RawStmts   []rawStmtJSON        `json:"rawStmts,omitempty"`
+}
+
+// ConditionDeclJSON is the JSON representation of a condition declaration.
+type ConditionDeclJSON struct {
+	Name string `json:"name"`
 }
 
 func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
@@ -63,6 +75,21 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 		Queries:    make([]*QueryDeclJSON, 0, len(w.Queries)),
 		Updates:    make([]*UpdateDeclJSON, 0, len(w.Updates)),
 		Body:       make([]json.RawMessage, 0, len(w.Body)),
+	}
+	if w.State != nil {
+		sj := &StateBlockJSON{}
+		for _, c := range w.State.Conditions {
+			sj.Conditions = append(sj.Conditions, &ConditionDeclJSON{Name: c.Name})
+		}
+		for _, r := range w.State.RawStmts {
+			sj.RawStmts = append(sj.RawStmts, rawStmtJSON{
+				Type:   "raw",
+				Line:   r.Line,
+				Column: r.Column,
+				Text:   r.Text,
+			})
+		}
+		wj.State = sj
 	}
 	for _, s := range w.Signals {
 		sj := &SignalDeclJSON{
@@ -234,6 +261,8 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			WorkflowNamespace: s.WorkflowNamespace,
 			WorkflowArgs:  s.WorkflowArgs,
 			WorkflowResult: s.WorkflowResult,
+			Ident:         s.Ident,
+			IdentResult:   s.IdentResult,
 		})
 	case *AwaitAllBlock:
 		body := make([]json.RawMessage, 0, len(s.Body))
@@ -285,6 +314,8 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				WorkflowArgs:      c.WorkflowArgs,
 				WorkflowResult:    c.WorkflowResult,
 				AwaitAll:          awaitAllData,
+				Ident:             c.Ident,
+				IdentResult:       c.IdentResult,
 				Body:              caseBody,
 			})
 		}
@@ -383,13 +414,6 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Line:   s.Line,
 			Column: s.Column,
 			Reason: s.Reason,
-			Value:  s.Value,
-		})
-	case *ContinueAsNewStmt:
-		return json.Marshal(continueAsNewStmtJSON{
-			Type:   "continueAsNew",
-			Line:   s.Line,
-			Column: s.Column,
 			Args:   s.Args,
 		})
 	case *BreakStmt:
@@ -418,6 +442,37 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Column: s.Column,
 			Text:   s.Text,
 		})
+	case *PromiseStmt:
+		return json.Marshal(promiseStmtJSON{
+			Type:              "promise",
+			Line:              s.Line,
+			Column:            s.Column,
+			Name:              s.Name,
+			Timer:             s.Timer,
+			Signal:            s.Signal,
+			SignalParams:      s.SignalParams,
+			Update:            s.Update,
+			UpdateParams:      s.UpdateParams,
+			Activity:          s.Activity,
+			ActivityArgs:      s.ActivityArgs,
+			Workflow:          s.Workflow,
+			WorkflowNamespace: s.WorkflowNamespace,
+			WorkflowArgs:      s.WorkflowArgs,
+		})
+	case *SetStmt:
+		return json.Marshal(setStmtJSON{
+			Type:   "set",
+			Line:   s.Line,
+			Column: s.Column,
+			Name:   s.Name,
+		})
+	case *UnsetStmt:
+		return json.Marshal(unsetStmtJSON{
+			Type:   "unset",
+			Line:   s.Line,
+			Column: s.Column,
+			Name:   s.Name,
+		})
 	default:
 		return json.Marshal(stmt)
 	}
@@ -427,8 +482,6 @@ func workflowCallModeString(mode WorkflowCallMode) string {
 	switch mode {
 	case CallChild:
 		return "child"
-	case CallSpawn:
-		return "spawn"
 	case CallDetach:
 		return "detach"
 	default:
@@ -490,6 +543,8 @@ type awaitStmtJSON struct {
 	WorkflowNamespace string `json:"workflowNamespace,omitempty"`
 	WorkflowArgs      string `json:"workflowArgs,omitempty"`
 	WorkflowResult    string `json:"workflowResult,omitempty"`
+	Ident             string `json:"ident,omitempty"`
+	IdentResult       string `json:"identResult,omitempty"`
 }
 
 type awaitAllBlockJSON struct {
@@ -515,6 +570,8 @@ type awaitOneCaseJSON struct {
 	WorkflowArgs      string            `json:"workflowArgs,omitempty"`
 	WorkflowResult    string            `json:"workflowResult,omitempty"`
 	AwaitAll          json.RawMessage   `json:"awaitAll,omitempty"`
+	Ident             string            `json:"ident,omitempty"`
+	IdentResult       string            `json:"identResult,omitempty"`
 	Body              []json.RawMessage `json:"body"`
 }
 
@@ -570,15 +627,8 @@ type closeStmtJSON struct {
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
-	Reason string `json:"reason,omitempty"`
-	Value  string `json:"value,omitempty"`
-}
-
-type continueAsNewStmtJSON struct {
-	Type   string `json:"type"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
-	Args   string `json:"args"`
+	Reason string `json:"reason"`
+	Args   string `json:"args,omitempty"`
 }
 
 type breakStmtJSON struct {
@@ -605,4 +655,35 @@ type commentJSON struct {
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 	Text   string `json:"text"`
+}
+
+type promiseStmtJSON struct {
+	Type              string `json:"type"`
+	Line              int    `json:"line"`
+	Column            int    `json:"column"`
+	Name              string `json:"name"`
+	Timer             string `json:"timer,omitempty"`
+	Signal            string `json:"signal,omitempty"`
+	SignalParams      string `json:"signalParams,omitempty"`
+	Update            string `json:"update,omitempty"`
+	UpdateParams      string `json:"updateParams,omitempty"`
+	Activity          string `json:"activity,omitempty"`
+	ActivityArgs      string `json:"activityArgs,omitempty"`
+	Workflow          string `json:"workflow,omitempty"`
+	WorkflowNamespace string `json:"workflowNamespace,omitempty"`
+	WorkflowArgs      string `json:"workflowArgs,omitempty"`
+}
+
+type setStmtJSON struct {
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Name   string `json:"name"`
+}
+
+type unsetStmtJSON struct {
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Name   string `json:"name"`
 }

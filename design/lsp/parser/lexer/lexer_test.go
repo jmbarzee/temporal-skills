@@ -7,12 +7,14 @@ import (
 )
 
 func TestKeywords(t *testing.T) {
-	input := "workflow activity signal query update spawn detach nexus timer options await all one switch case if else for in return continue_as_new break continue"
+	input := "workflow activity signal query update detach nexus promise condition set unset state timer options await all one switch case if else for in close complete fail return continue_as_new break continue"
 	expected := []token.TokenType{
 		token.WORKFLOW, token.ACTIVITY, token.SIGNAL, token.QUERY, token.UPDATE,
-		token.SPAWN, token.DETACH, token.NEXUS, token.TIMER, token.OPTIONS,
+		token.DETACH, token.NEXUS, token.PROMISE, token.CONDITION, token.SET, token.UNSET, token.STATE,
+		token.TIMER, token.OPTIONS,
 		token.AWAIT, token.ALL, token.ONE, token.SWITCH,
 		token.CASE, token.IF, token.ELSE, token.FOR, token.IN,
+		token.CLOSE, token.COMPLETE, token.FAIL,
 		token.RETURN, token.CONTINUE_AS_NEW, token.BREAK, token.CONTINUE,
 		token.NEWLINE, token.EOF,
 	}
@@ -310,10 +312,25 @@ func TestLineNumbers(t *testing.T) {
 	}
 }
 
-func TestSpawnKeyword(t *testing.T) {
-	input := "spawn workflow Foo(x)"
+func TestLeftArrow(t *testing.T) {
+	input := "promise p <- activity Foo(x)"
 	expected := []token.TokenType{
-		token.SPAWN, token.WORKFLOW, token.IDENT, token.ARGS,
+		token.PROMISE, token.IDENT, token.LEFT_ARROW, token.ACTIVITY, token.IDENT, token.ARGS,
+		token.NEWLINE, token.EOF,
+	}
+	l := New(input)
+	for i, exp := range expected {
+		tok := l.NextToken()
+		if tok.Type != exp {
+			t.Fatalf("token[%d]: expected %s, got %s (%q)", i, exp, tok.Type, tok.Literal)
+		}
+	}
+}
+
+func TestNewKeywords(t *testing.T) {
+	input := "promise condition set unset state"
+	expected := []token.TokenType{
+		token.PROMISE, token.CONDITION, token.SET, token.UNSET, token.STATE,
 		token.NEWLINE, token.EOF,
 	}
 	l := New(input)

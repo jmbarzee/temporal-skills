@@ -1,5 +1,5 @@
 # Source: nexus.md
-# Patterns: cross-namespace calls via nexus: child, spawn, detach
+# Patterns: cross-namespace calls via nexus: child, promise, detach
 
 # --- Caller workflow using nexus ---
 
@@ -13,7 +13,7 @@ workflow OrderWorkflow(order: Order) -> (OrderResult):
     # Call into notifications namespace (fire-and-forget)
     detach nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
 
-    close OrderResult{paymentId: paymentResult.id}
+    close complete(OrderResult{paymentId: paymentResult.id})
 
 # --- Spawn nexus workflow (async) ---
 
@@ -23,7 +23,7 @@ workflow AsyncNexusCaller(data: Data) -> (Result):
         nexus "processing" workflow ProcessAsync(data) -> processResult
         activity DoLocalWork(data) -> localResult
 
-    close Result{localResult, processResult}
+    close complete(Result{localResult, processResult})
 
 # --- Multiple nexus calls ---
 
@@ -33,14 +33,14 @@ workflow MultiNamespaceWorkflow(request: Request) -> (AggregateResult):
     nexus "pricing" workflow CalculatePrice(request.items) -> priceResult
     nexus "shipping" workflow EstimateShipping(request.destination) -> shippingResult
 
-    close AggregateResult{inventoryResult, priceResult, shippingResult}
+    close complete(AggregateResult{inventoryResult, priceResult, shippingResult})
 
 # --- Nexus with options ---
 
 workflow NexusWithOptions(payment: Payment) -> (PaymentResult):
     nexus "payments" workflow ChargeCard(payment) -> result
         options(scheduleToCloseTimeout: 5m)
-    close PaymentResult{result}
+    close complete(PaymentResult{result})
 
 # --- Supporting local activities ---
 
@@ -56,31 +56,31 @@ workflow ProcessPayment(payment: Payment) -> (PaymentResult):
     activity ValidatePaymentDetails(payment)
     activity ChargePaymentMethod(payment) -> result
     activity RecordTransaction(result)
-    close PaymentResult{id: result.id}
+    close complete(PaymentResult{id: result.id})
 
 workflow SendConfirmation(customer: Customer, paymentResult: PaymentResult):
     activity SendEmail(customer.email, paymentResult)
-    close
+    close complete
 
 workflow ProcessAsync(data: Data) -> (ProcessResult):
     activity ProcessData(data) -> result
-    close ProcessResult{result}
+    close complete(ProcessResult{result})
 
 workflow CheckInventory(items: []Item) -> (InventoryResult):
     activity CheckStock(items) -> stock
-    close InventoryResult{stock}
+    close complete(InventoryResult{stock})
 
 workflow CalculatePrice(items: []Item) -> (PriceResult):
     activity ComputePrice(items) -> price
-    close PriceResult{price}
+    close complete(PriceResult{price})
 
 workflow EstimateShipping(destination: Address) -> (ShippingResult):
     activity CalcShipping(destination) -> estimate
-    close ShippingResult{estimate}
+    close complete(ShippingResult{estimate})
 
 workflow ChargeCard(payment: Payment) -> (ChargeResult):
     activity ProcessCharge(payment) -> result
-    close ChargeResult{result}
+    close complete(ChargeResult{result})
 
 # --- Supporting activities for target workflows ---
 

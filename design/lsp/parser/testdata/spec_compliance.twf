@@ -86,8 +86,8 @@ workflow SpecCompliance(input: Input) -> (Result):
     # Test: Child workflow call
     workflow SubWorkflow(data) -> subResult
 
-    # Test: Spawn workflow
-    spawn workflow BackgroundTask(data) -> bgResult
+    # Test: Promise workflow (non-blocking)
+    promise bgResult <- workflow BackgroundTask(data)
 
     # Test: Detach workflow
     detach workflow FireAndForget(data)
@@ -109,10 +109,10 @@ workflow SpecCompliance(input: Input) -> (Result):
 
     # ===== CONTINUE-AS-NEW =====
     if (progress < 100):
-        continue_as_new(input.id, input.iteration + 1)
+        close continue_as_new(input.id, input.iteration + 1)
 
     # ===== CLOSE =====
-    close result
+    close complete(result)
 
 # ===== ACTIVITY DEFINITIONS =====
 
@@ -205,16 +205,16 @@ activity LongTask2() -> (Result):
     return Result{success: true}
 
 workflow SubWorkflow(data: Data) -> (Result):
-    close Result{data: data}
+    close complete(Result{data: data})
 
 workflow BackgroundTask(data: Data) -> (Result):
-    close Result{data: data}
+    close complete(Result{data: data})
 
 workflow FireAndForget(data: Data):
     activity LogEvent(data)
 
 workflow ExternalTask(data: Data) -> (Result):
-    close Result{data: data}
+    close complete(Result{data: data})
 
 activity LogEvent(data: Data):
     log(data)

@@ -194,10 +194,7 @@ func signatureFor(node ast.Node) string {
 			return workflowSig(n.Resolved)
 		}
 		prefix := "workflow"
-		switch n.Mode {
-		case ast.CallSpawn:
-			prefix = "spawn workflow"
-		case ast.CallDetach:
+		if n.Mode == ast.CallDetach {
 			prefix = "detach workflow"
 		}
 		if n.Namespace != "" {
@@ -225,9 +222,7 @@ func signatureFor(node ast.Node) string {
 			return fmt.Sprintf("await activity %s(%s)", n.Activity, n.ActivityArgs)
 		case "workflow":
 			prefix := "await workflow"
-			if n.WorkflowMode == ast.CallSpawn {
-				prefix = "await spawn workflow"
-			} else if n.WorkflowMode == ast.CallDetach {
+			if n.WorkflowMode == ast.CallDetach {
 				prefix = "await detach workflow"
 			}
 			if n.WorkflowResult != "" {

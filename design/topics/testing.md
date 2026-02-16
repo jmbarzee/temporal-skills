@@ -81,12 +81,12 @@ Test workflow logic by mocking activities. Use Temporal's test framework.
 workflow OrderWorkflow(order: Order) -> OrderResult:
     activity ValidateOrder(order) -> validated
     if not validated.success:
-        close failed OrderResult{status: "invalid"}
-    
+        close fail(OrderResult{status: "invalid"})
+
     activity ProcessPayment(order.payment) -> payment
     activity ShipOrder(order)
-    
-    close OrderResult{status: "completed", paymentId: payment.id}
+
+    close complete(OrderResult{status: "completed", paymentId: payment.id})
 ```
 
 ```pseudo
@@ -181,11 +181,11 @@ test "OrderWorkflow replays deterministically":
 workflow ApprovalWorkflow(request: Request) -> Decision:
     await one:
         signal Approved:
-            close Decision{status: "approved"}
+            close complete(Decision{status: "approved"})
         signal Rejected:
-            close Decision{status: "rejected"}
+            close complete(Decision{status: "rejected"})
         timer(1h):
-            close Decision{status: "timeout"}
+            close complete(Decision{status: "timeout"})
 ```
 
 ```pseudo
@@ -225,7 +225,7 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
     activity ProcessOrder(order)
     
     status = "completed"
-    close OrderResult{status: status}
+    close complete(OrderResult{status: status})
 
 query GetStatus() -> string:
     return status
@@ -307,11 +307,11 @@ test "ReminderWorkflow sends reminders at correct intervals":
 ```twf
 workflow ParentWorkflow(data: Data) -> Result:
     workflow ChildWorkflow(data.item) -> childResult
-    close Result{childData: childResult}
+    close complete(Result{childData: childResult})
 
 workflow ChildWorkflow(item: Item) -> ChildResult:
     activity ProcessItem(item)
-    close ChildResult{processed: true}
+    close complete(ChildResult{processed: true})
 ```
 
 ```pseudo

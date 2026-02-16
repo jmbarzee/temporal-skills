@@ -106,6 +106,16 @@
         }
       ]
     },
+    "semanticTokenScopes": [
+      {
+        "language": "twf",
+        "scopes": {
+          "type": ["storage.type.twf"],
+          "function": ["entity.name.function.twf"],
+          "variable": ["variable.other.twf"]
+        }
+      }
+    ],
     "configuration": {
       "title": "TWF Language Server",
       "properties": {
@@ -120,6 +130,18 @@
           "description": "Path to the twf parser binary for visualization. If empty, looks for 'parse' on PATH."
         }
       }
+    }
+  },
+  "configurationDefaults": {
+    "editor.tokenColorCustomizations": {
+      "textMateRules": [
+        {
+          "scope": "keyword.control.twf",
+          "settings": {
+            "foreground": "#569CD6"
+          }
+        }
+      ]
     }
   },
   "scripts": {

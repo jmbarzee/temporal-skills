@@ -13,6 +13,8 @@ Design Temporal workflows using `.twf` (Temporal Workflow Format) — a language
 
 Core loop: **write TWF → `twf check` → fix/consult → repeat**. Parser errors are design feedback — validate early and often.
 
+**Write before you read.** Draft TWF from the workflow description even if you're unsure — use `twf check --lenient` for incomplete designs. Consult references only to fix specific errors, not to prepare.
+
 ```
   ┌────────────┐
   │ Write/Edit │◄──────────────┐
@@ -42,26 +44,43 @@ Core loop: **write TWF → `twf check` → fix/consult → repeat**. Parser erro
 
 ### Worked Example
 
-```twf
-workflow Greet(name: string) -> (Greeting):
-    activity BuildGreeting(name) -> greeting
-    close complete(Greeting{greeting})
-```
-
-`twf check` → `resolve error at 2:5: undefined activity "BuildGreeting"`
-
-Fix — add the definition:
+**Draft** — write from the description, don't worry about completeness:
 
 ```twf
-workflow Greet(name: string) -> (Greeting):
-    activity BuildGreeting(name) -> greeting
-    close complete(Greeting{greeting})
-
-activity BuildGreeting(name: string) -> (Greeting):
-    return format("Hello, {name}")
+workflow ProcessOrder(order: Order) -> (OrderResult):
+    activity ValidateOrder(order) -> validated
+    activity ChargePayment(order.payment) -> payment
+    activity ShipOrder(order, payment) -> shipment
+    close complete(OrderResult{shipment})
 ```
 
-`twf check` → `✓ OK`
+**Iteration 1** — `twf check` finds errors:
+
+```
+resolve error at 2:5: undefined activity "ValidateOrder"
+resolve error at 3:5: undefined activity "ChargePayment"
+resolve error at 4:5: undefined activity "ShipOrder"
+```
+
+Fix — add the missing definitions. `twf check` → `✓ OK`
+
+**Iteration 2** — design review. Shipping involves creating a shipment, waiting for carrier pickup, and tracking — multiple steps with independent retry. Consult [workflow-boundaries.md](./reference/workflow-boundaries.md): multi-step orchestration with its own lifecycle → child workflow.
+
+Revise — extract `ShipOrder` as a child workflow:
+
+```twf
+workflow ProcessOrder(order: Order) -> (OrderResult):
+    activity ValidateOrder(order) -> validated
+    activity ChargePayment(order.payment) -> payment
+    workflow ShipOrder(order, payment) -> shipment
+    close complete(OrderResult{shipment})
+```
+
+`twf check` → `✓ OK`. Design is structurally sound.
+
+### Revising an Existing Design
+
+To revise an existing `.twf` file: run `twf symbols` to understand current structure, make edits, then re-enter the core loop (`twf check` → fix → repeat). Treat user feedback as new requirements — ask clarifying questions before editing if the feedback is ambiguous.
 
 ### When to Consult the User
 
@@ -92,7 +111,26 @@ activity BuildGreeting(name: string) -> (Greeting):
 
 Full grammar: [`LANGUAGE.md`](./lsp/LANGUAGE.md). All `.twf` must pass `twf check` before presenting to user.
 
-Activity bodies are intentionally free-form (`raw_stmt`) — they represent SDK-level implementation, not orchestration. Use pseudocode or descriptive text.
+Activity bodies are intentionally free-form (`raw_stmt`) — they represent SDK-level implementation, not orchestration. Use pseudocode or descriptive text. The right level of detail depends on how obvious the behavior is from the name and signature:
+
+- **Obvious** — minimal body. `activity SendEmail(to: string, body: string)` doesn't need elaboration.
+- **Non-obvious** — describe key operations and external systems:
+
+```twf
+activity ExecuteToolCalls(toolCalls: ToolCalls) -> (ToolResults):
+    # Look up each tool by name in the tool registry
+    # Execute calls in parallel where possible
+    # If a tool is not found, return an error result (don't fail the activity)
+```
+
+- **Complex contract** — describe error conditions, ordering, and idempotency requirements:
+
+```twf
+activity ReconcileInventory(warehouseId: string, expected: Inventory) -> (ReconcileResult):
+    # Fetch current inventory, diff against expected, flag discrepancies
+    # Must be idempotent — running twice with same input produces same flags
+    # Warehouse API is rate-limited: max 10 requests/second
+```
 
 ### Rules (enforced by `twf check`)
 
@@ -126,37 +164,41 @@ activity DoWork(input: InputType) -> (WorkResult):
 
 ---
 
+## Completion
+
+The design is ready to present when:
+
+1. `twf check` passes with no errors
+2. `twf symbols` lists all expected workflows and activities
+3. All I/O, time, and randomness live in activities (determinism)
+4. Activities are idempotent (retries produce same result)
+5. Failure modes have recovery strategies
+
+For the full checklist: [design-checklist.md](./reference/design-checklist.md). Present a summary alongside the `.twf` file: key workflows, activity purposes, and notable design decisions.
+
+---
+
+## Handoff
+
+The deliverable is the `.twf` file. Do not implement SDK code within this skill. If an authoring skill is available (e.g. `author-go`, `author-ts`), suggest it. Alongside the `.twf` file, note: target SDK/language, external system assumptions, and design decisions not captured in the notation.
+
+---
+
 ## Reference Index
 
 Read only what the current design requires.
-
-### Design Essentials
 
 | Topic | When to Consult | File |
 |-------|-----------------|------|
 | Core Principles | Determinism/idempotency review | [core-principles.md](./reference/core-principles.md) |
 | Workflow Boundaries | Activity vs child workflow decision | [workflow-boundaries.md](./reference/workflow-boundaries.md) |
+| Signal vs Update | Choosing between signal and update for external input | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
 | Notation Examples | Control flow, handlers, timers, nexus in TWF | [notation-examples.md](./reference/notation-examples.md) |
 | Notation Reference | All TWF syntax constructs | [notation-reference.md](./reference/notation-reference.md) |
 | Design Checklist | Final verification before presenting | [design-checklist.md](./reference/design-checklist.md) |
 | Anti-Patterns | Common Temporal design mistakes | [anti-patterns.md](./reference/anti-patterns.md) |
-| Editor Setup | VS Code/Cursor extension | [editor-setup.md](./reference/editor-setup.md) |
-| Primitives Reference | Temporal primitive lookup | [primitives-reference.md](./reference/primitives-reference.md) |
-
-### Topic Deep-Dives
-
-| Topic | When to Consult | File |
-|-------|-----------------|------|
-| Signals, Queries, Updates | External communication with running workflows | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
-| Promises and Conditions | Async operations, named conditions | [promises-conditions.md](./topics/promises-conditions.md) |
-| Child Workflows | Parent/child decomposition | [child-workflows.md](./topics/child-workflows.md) |
-| Timers and Scheduling | Durable timers, schedules, deadlines | [timers-scheduling.md](./topics/timers-scheduling.md) |
-| Advanced Activities | Heartbeats, async completion | [activities-advanced.md](./topics/activities-advanced.md) |
-| Long-Running Workflows | Continue-as-new, history management | [long-running.md](./topics/long-running.md) |
-| Nexus | Cross-namespace calls | [nexus.md](./topics/nexus.md) |
-| Task Queues | Worker routing, scaling | [task-queues.md](./topics/task-queues.md) |
-| Workflow Patterns | Saga, pipeline, fan-out/fan-in | [patterns.md](./topics/patterns.md) |
-| Testing | Test strategy for workflows | [testing.md](./topics/testing.md) |
-| Versioning | Evolving existing workflows safely | [versioning.md](./topics/versioning.md) |
 | Common Errors | Troubleshooting `twf check` | [common-errors.md](./reference/common-errors.md) |
-| Full Grammar | Exact grammar rules | [lsp/LANGUAGE.md](./lsp/LANGUAGE.md) |
+| Primitives Reference | Temporal primitive lookup | [primitives-reference.md](./reference/primitives-reference.md) |
+| Editor Setup | VS Code/Cursor extension | [editor-setup.md](./reference/editor-setup.md) |
+
+Topic deep-dives are in `reference/` and `topics/` — consult as needed during design.

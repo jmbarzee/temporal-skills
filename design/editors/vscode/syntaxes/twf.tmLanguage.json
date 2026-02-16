@@ -7,11 +7,7 @@
     { "include": "#string" },
     { "include": "#definition" },
     { "include": "#declaration" },
-    { "include": "#call-modifiers" },
-    { "include": "#primitives" },
-    { "include": "#async" },
-    { "include": "#blocks" },
-    { "include": "#state" },
+    { "include": "#temporal-primitives" },
     { "include": "#control-flow" },
     { "include": "#arrow" },
     { "include": "#parens" }
@@ -56,41 +52,17 @@
         {
           "match": "\\b(signal|query|update)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
           "captures": {
-            "1": { "name": "storage.type.declaration.twf" },
+            "1": { "name": "storage.type.twf" },
             "2": { "name": "entity.name.function.twf" }
           }
         }
       ]
     },
-    "call-modifiers": {
+    "temporal-primitives": {
       "patterns": [
         {
-          "name": "keyword.other.twf",
-          "match": "\\b(detach|nexus)\\b"
-        }
-      ]
-    },
-    "primitives": {
-      "patterns": [
-        {
-          "name": "keyword.other.twf",
-          "match": "\\b(timer|options|heartbeat)\\b"
-        }
-      ]
-    },
-    "async": {
-      "patterns": [
-        {
-          "name": "keyword.control.twf",
-          "match": "\\b(await|all|one|promise)\\b"
-        }
-      ]
-    },
-    "blocks": {
-      "patterns": [
-        {
-          "name": "keyword.control.twf",
-          "match": "\\b(switch|case)\\b"
+          "name": "storage.type.twf",
+          "match": "\\b(timer|options|heartbeat|state|condition|set|unset|promise|close|complete|fail|continue_as_new)\\b"
         }
       ]
     },
@@ -98,15 +70,7 @@
       "patterns": [
         {
           "name": "keyword.control.twf",
-          "match": "\\b(if|else|for|in|close|complete|fail|return|break|continue|continue_as_new)\\b"
-        }
-      ]
-    },
-    "state": {
-      "patterns": [
-        {
-          "name": "keyword.other.twf",
-          "match": "\\b(state|condition|set|unset)\\b"
+          "match": "\\b(if|else|for|in|switch|case|await|all|one|return|break|continue|detach|nexus)\\b"
         }
       ]
     },

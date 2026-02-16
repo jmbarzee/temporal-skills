@@ -89,17 +89,21 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
                 <div className="block-declarations">
                   {(def.state!.conditions || []).map((c, i) => (
                     <div key={`cond-${i}`} className="declaration declaration-condition">
-                      <span className="block-toggle-placeholder" />
-                      <span className="declaration-icon">◉</span>
-                      <span className="declaration-keyword">condition</span>
-                      <span className="declaration-name">{c.name}</span>
+                      <div className="declaration-header">
+                        <span className="block-toggle-placeholder" />
+                        <span className="declaration-icon">◉</span>
+                        <span className="declaration-keyword">condition</span>
+                        <span className="declaration-name">{c.name}</span>
+                      </div>
                     </div>
                   ))}
                   {(def.state!.rawStmts || []).map((r, i) => (
                     <div key={`raw-${i}`} className="declaration declaration-raw-state">
-                      <span className="block-toggle-placeholder" />
-                      <span className="declaration-icon">≡</span>
-                      <span className="declaration-name">{r.text}</span>
+                      <div className="declaration-header">
+                        <span className="block-toggle-placeholder" />
+                        <span className="declaration-icon">≡</span>
+                        <span className="declaration-name">{r.text}</span>
+                      </div>
                     </div>
                   ))}
                 </div>

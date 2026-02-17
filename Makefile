@@ -123,7 +123,16 @@ publish-ovsx:
 #   make release TYPE=major
 #   make release VERSION=1.2.3     (explicit version)
 
-.PHONY: release
+.PHONY: release release-patch release-minor release-major
+
+release-patch:
+	$(MAKE) release TYPE=patch
+
+release-minor:
+	$(MAKE) release TYPE=minor
+
+release-major:
+	$(MAKE) release TYPE=major
 
 release:
 	$(eval NEW_VERSION := $(shell bash scripts/version.sh "$(VERSION)" "$(TYPE)"))

@@ -40,3 +40,6 @@ jobs:
           cd ../../tools/visualizer && npm ci
 
       - run: make build
+
+      - name: Verify VSIX packaging
+        run: make package

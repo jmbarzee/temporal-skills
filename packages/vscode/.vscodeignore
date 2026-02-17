@@ -4,3 +4,9 @@ tsconfig.json
 .vscode/
 .env.publish
 *.vsix
+
+# Re-include build artifacts that .gitignore excludes
+!out/**
+!dist/**
+!bin/**
+!skills/**

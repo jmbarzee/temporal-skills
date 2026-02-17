@@ -1,0 +1,12 @@
+src/
+tsconfig.json
+.vscode/
+.env.publish
+*.vsix
+
+# Re-include build artifacts and dependencies that .gitignore excludes
+!out/**
+!dist/**
+!bin/**
+!skills/**
+!node_modules/**

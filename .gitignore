@@ -1,11 +1,15 @@
-# VS Code Extension
+# Dependencies
 node_modules/
-out/
-dist/
+
+# VS Code Extension build artifacts
+packages/vscode/out/
+packages/vscode/dist/
+packages/vscode/bin/
+packages/vscode/skills/
 *.vsix
 
 # Publish tokens (contains secrets)
 .env.publish
 
-
-*/twf
+# Built Go binaries
+tools/lsp/twf

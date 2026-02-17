@@ -1,0 +1,180 @@
+{
+  "name": "twf-syntax",
+  "displayName": "Temporal Workflow (.twf)",
+  "description": "Design Temporal workflows with the TWF notation — language server, interactive visualizer, and AI design skills for activities, child workflows, signals, queries, updates, timers, promises, and Nexus",
+  "version": "0.3.2",
+  "publisher": "jmbarzee",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jmbarzee/temporal-skills"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "temporal",
+    "workflow",
+    "twf",
+    "dsl",
+    "durable execution",
+    "orchestration",
+    "activities",
+    "signals",
+    "queries",
+    "updates",
+    "child workflows",
+    "timers",
+    "promises",
+    "nexus",
+    "visualization"
+  ],
+  "icon": "icon.png",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:twf",
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "twf",
+        "aliases": [
+          "Temporal Workflow",
+          "twf"
+        ],
+        "extensions": [
+          ".twf"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "twf",
+        "scopeName": "source.twf",
+        "path": "./syntaxes/twf.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "twf.visualize",
+        "title": "Visualize Workflow",
+        "category": "TWF",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "twf.visualizeFolder",
+        "title": "Visualize All Workflows in Folder",
+        "category": "TWF",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "twf.installSkills",
+        "title": "Install Temporal Skills",
+        "category": "TWF",
+        "icon": "$(lightbulb)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceLangId == twf",
+          "command": "twf.visualize",
+          "group": "navigation"
+        },
+        {
+          "when": "explorerResourceIsFolder",
+          "command": "twf.visualizeFolder",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "twf.visualize",
+          "when": "resourceLangId == twf"
+        },
+        {
+          "command": "twf.visualizeFolder"
+        },
+        {
+          "command": "twf.installSkills"
+        }
+      ]
+    },
+    "semanticTokenScopes": [
+      {
+        "language": "twf",
+        "scopes": {
+          "type": [
+            "storage.type.twf"
+          ],
+          "function": [
+            "entity.name.function.twf"
+          ],
+          "variable": [
+            "variable.other.twf"
+          ]
+        }
+      }
+    ],
+    "configuration": {
+      "title": "TWF Language Server",
+      "properties": {
+        "twf.lsp.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the twf binary. If empty, looks for 'twf' on PATH."
+        },
+        "twf.parser.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the twf parser binary for visualization. If empty, looks for 'parse' on PATH."
+        }
+      }
+    }
+  },
+  "configurationDefaults": {
+    "editor.tokenColorCustomizations": {
+      "textMateRules": [
+        {
+          "scope": "keyword.control.twf",
+          "settings": {
+            "foreground": "#569CD6"
+          }
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:webview": "cd ../../tools/visualizer && npm run build:webview"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

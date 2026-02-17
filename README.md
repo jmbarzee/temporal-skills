@@ -4,7 +4,7 @@ AI skills for designing and developing Temporal workflows, distributed as a VS C
 
 ## Install
 
-Install **Temporal Workflow (.twf)** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jmbarzee.temporal-twf) or [Open VSX](https://open-vsx.org/extension/jmbarzee/temporal-twf). The extension bundles:
+Install **Temporal Workflow (.twf)** from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=jmbarzee.twf-syntax) or [Open VSX](https://open-vsx.org/extension/jmbarzee/twf-syntax). The extension bundles:
 
 - **AI Skills** — automatically installed to `~/.cursor/skills/` so Cursor's agent can use them immediately
 - **`twf` CLI** — parser, validator, and language server for `.twf` files, added to your terminal PATH

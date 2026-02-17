@@ -2,7 +2,7 @@
 
 ## VS Code / Cursor Extension
 
-**"Temporal Workflow (.twf)"** extension (`temporal-twf`, publisher: `jmbarzee`):
+**"Temporal Workflow (.twf)"** extension (`twf-syntax`, publisher: `jmbarzee`):
 - Syntax highlighting for `.twf` files
 - Live workflow visualization (graph view)
 - LSP integration (diagnostics, go-to-definition, hover)

@@ -2,7 +2,7 @@
   "name": "twf-syntax",
   "displayName": "Temporal Workflow (.twf)",
   "description": "Design Temporal workflows with the TWF notation — language server, interactive visualizer, and AI design skills for activities, child workflows, signals, queries, updates, timers, promises, and Nexus",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "jmbarzee",
   "license": "MIT",
   "repository": {

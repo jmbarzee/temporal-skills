@@ -37,6 +37,24 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Register install skills command
+  const installSkillsCommand = vscode.commands.registerCommand(
+    "twf.installSkills",
+    async () => {
+      try {
+        await installSkills(context);
+        const cursorSkillsDir = path.join(os.homedir(), ".cursor", "skills");
+        vscode.window.showInformationMessage(
+          `Temporal skills installed to ${cursorSkillsDir}`
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to install skills: ${msg}`);
+      }
+    }
+  );
+  context.subscriptions.push(installSkillsCommand);
+
   // Register visualize file command
   const visualizeCommand = vscode.commands.registerCommand(
     "twf.visualize",

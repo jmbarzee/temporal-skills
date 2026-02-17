@@ -1,7 +1,7 @@
 {
-  "name": "twf-syntax",
+  "name": "temporal-twf",
   "displayName": "Temporal Workflow (.twf)",
-  "description": "Syntax highlighting, language support, and visualization for Temporal Workflow Definition (.twf) files",
+  "description": "Design Temporal workflows with the TWF notation — language server, interactive visualizer, and AI design skills for activities, child workflows, signals, queries, updates, timers, promises, and Nexus",
   "version": "0.3.0",
   "publisher": "jmbarzee",
   "license": "MIT",
@@ -21,12 +21,16 @@
     "workflow",
     "twf",
     "dsl",
-    "orchestration",
     "durable execution",
-    "microservices",
-    "saga",
+    "orchestration",
     "activities",
-    "state machine",
+    "signals",
+    "queries",
+    "updates",
+    "child workflows",
+    "timers",
+    "promises",
+    "nexus",
     "visualization"
   ],
   "icon": "icon.png",
@@ -68,6 +72,12 @@
         "title": "Visualize All Workflows in Folder",
         "category": "TWF",
         "icon": "$(folder)"
+      },
+      {
+        "command": "twf.installSkills",
+        "title": "Install Temporal Skills",
+        "category": "TWF",
+        "icon": "$(lightbulb)"
       }
     ],
     "menus": {
@@ -104,6 +114,9 @@
         },
         {
           "command": "twf.visualizeFolder"
+        },
+        {
+          "command": "twf.installSkills"
         }
       ]
     },
@@ -111,9 +124,15 @@
       {
         "language": "twf",
         "scopes": {
-          "type": ["storage.type.twf"],
-          "function": ["entity.name.function.twf"],
-          "variable": ["variable.other.twf"]
+          "type": [
+            "storage.type.twf"
+          ],
+          "function": [
+            "entity.name.function.twf"
+          ],
+          "variable": [
+            "variable.other.twf"
+          ]
         }
       }
     ],

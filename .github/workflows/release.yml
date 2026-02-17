@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.vsce_target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - vsce_target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+          - vsce_target: darwin-x64
+            goos: darwin
+            goarch: amd64
+          - vsce_target: linux-x64
+            goos: linux
+            goarch: amd64
+          - vsce_target: linux-arm64
+            goos: linux
+            goarch: arm64
+          - vsce_target: win32-x64
+            goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/lsp/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          cd packages/vscode && npm ci
+          cd ../../tools/visualizer && npm ci
+
+      - name: Build shared artifacts
+        run: |
+          make build-visualizer
+          make build-skills
+          make build-extension
+
+      - name: Package platform VSIX
+        run: make package-platform VSCE_TARGET=${{ matrix.vsce_target }} GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.vsce_target }}
+          path: packages/vscode/*.vsix
+
+  publish:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vsix-*
+          merge-multiple: true
+          path: packages/vscode/
+
+      - name: Publish to VS Code Marketplace
+        run: make publish-vscode
+        env:
+          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+
+      - name: Publish to Open VSX
+        run: make publish-ovsx
+        env:
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/vscode/*.vsix
+          generate_release_notes: true

@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/jbarzee/go/src/github.com/jmbarzee/temporal-skills log --oneline -5)",
+      "Bash(go version:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(git add:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:code.visualstudio.com)",
+      "Bash(go doc:*)",
+      "Bash(go vet:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(go run:*)",
+      "Bash(/tmp/twf-parse:*)",
+      "Bash(./twf check:*)",
+      "Bash(./twf symbols:*)",
+      "Bash(./twf parse:*)",
+      "Bash(./build.sh:*)",
+      "Bash(go list:*)",
+      "Bash(for file in ../examples/*.twf)",
+      "Bash(./twf:*)",
+      "Bash(done)",
+      "Bash(../twf check:*)",
+      "Bash(xargs:*)",
+      "Bash(go mod edit:*)",
+      "Bash(go get:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(echo:*)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:claude.com)",
+      "WebFetch(domain:research.google)",
+      "WebFetch(domain:solafide.ca)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}

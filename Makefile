@@ -72,13 +72,13 @@ vet:
 
 ## Package a VSIX for the local platform
 package: build
-	cd $(EXT_DIR) && npx vsce package
+	cd $(EXT_DIR) && npx @vscode/vsce package
 	@echo "Packaged VSIX"
 
 ## Package a VSIX for a single explicit target (used by CI matrix)
 ## Usage: make package-platform VSCE_TARGET=darwin-arm64 GOOS=darwin GOARCH=arm64
 package-platform: build-lsp
-	cd $(EXT_DIR) && npx vsce package --target $(VSCE_TARGET)
+	cd $(EXT_DIR) && npx @vscode/vsce package --target $(VSCE_TARGET)
 	@echo "Packaged VSIX for $(VSCE_TARGET)"
 
 ## Package VSIXes for all platforms
@@ -103,7 +103,7 @@ publish-vscode:
 	fi
 	@for vsix in $(EXT_DIR)/*.vsix; do \
 		echo "Publishing $$vsix to VS Code Marketplace..."; \
-		cd $(EXT_DIR) && npx vsce publish --packagePath $$(basename $$vsix) -p $(VSCE_TOKEN) && cd ../..; \
+		cd $(EXT_DIR) && npx @vscode/vsce publish --packagePath $$(basename $$vsix) -p $(VSCE_TOKEN) && cd ../..; \
 	done
 
 ## Publish all platform VSIXes to Open VSX

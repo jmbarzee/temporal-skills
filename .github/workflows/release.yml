@@ -9,8 +9,26 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    name: Validate tag matches package.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./packages/vscode/package.json').version")
+          echo "Git tag:      v${TAG_VERSION}"
+          echo "package.json: ${PKG_VERSION}"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v${TAG_VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+
   build:
     name: Build (${{ matrix.vsce_target }})
+    needs: validate
     runs-on: ubuntu-latest
     strategy:
       matrix:

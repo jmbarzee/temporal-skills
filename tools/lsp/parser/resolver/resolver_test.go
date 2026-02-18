@@ -209,6 +209,50 @@ func TestMultipleUndefinedErrors(t *testing.T) {
 // REMOVED: TestHintResolution - hint statements are no longer supported.
 // REMOVED: TestHintUndefinedSignal - hint statements are no longer supported.
 
+func TestStructuredOptionsResolution(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    activity Bar(x) -> y
+        options:
+            start_to_close_timeout: 30s
+            retry_policy:
+                maximum_attempts: 3
+                initial_interval: 1s
+
+    workflow Child(y) -> z
+        options:
+            workflow_run_timeout: 1h
+
+    return z
+
+activity Bar(x: int) -> (int):
+    return x
+
+workflow Child(y: int) -> (int):
+    return y
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if len(errs) > 0 {
+		for _, e := range errs {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+
+	// Verify resolution links still work with structured options.
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	actCall := wf.Body[0].(*ast.ActivityCall)
+	if actCall.Resolved == nil {
+		t.Error("activity call not resolved")
+	}
+	if actCall.Options == nil || len(actCall.Options.Entries) != 2 {
+		t.Error("expected 2 option entries on activity call")
+	}
+	wfCall := wf.Body[1].(*ast.WorkflowCall)
+	if wfCall.Resolved == nil {
+		t.Error("workflow call not resolved")
+	}
+}
+
 func TestHandlerBodyResolution(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     signal Cancel(reason: string):

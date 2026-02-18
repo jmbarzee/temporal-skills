@@ -1,6 +1,7 @@
 workflow Test() -> (Result):
     x = 1
     activity Activity1(input) -> result
-        options(timeout: 30s)
+        options:
+            start_to_close_timeout: 30s
     y = 2
     return Result{success: true}

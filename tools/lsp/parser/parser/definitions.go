@@ -7,7 +7,7 @@ import (
 
 // parseWorkflowDef parses:
 // WORKFLOW IDENT ARGS [ ARROW ARGS ] COLON NEWLINE
-// INDENT [ options_stmt ] { signal_def | query_def | update_def } workflow_body DEDENT
+// INDENT { signal_def | query_def | update_def } workflow_body DEDENT
 func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume WORKFLOW
@@ -39,12 +39,6 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 	if _, err := p.expect(token.INDENT); err != nil {
-		return nil, err
-	}
-
-	// Optional options statement at start of body.
-	options, err := p.parseOptionalOptionsStmt()
-	if err != nil {
 		return nil, err
 	}
 
@@ -109,7 +103,6 @@ parseBody:
 		Name:       name.Literal,
 		Params:     params.Literal,
 		ReturnType: returnType,
-		Options:    options,
 		State:      stateBlock,
 		Signals:    signals,
 		Queries:    queries,
@@ -120,7 +113,7 @@ parseBody:
 
 // parseActivityDef parses:
 // ACTIVITY IDENT ARGS [ ARROW ARGS ] COLON NEWLINE
-// INDENT [ options_stmt ] activity_body DEDENT
+// INDENT activity_body DEDENT
 func parseActivityDef(p *Parser) (ast.Definition, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume ACTIVITY
@@ -155,11 +148,6 @@ func parseActivityDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
-	options, err := p.parseOptionalOptionsStmt()
-	if err != nil {
-		return nil, err
-	}
-
 	prevWorkflow := p.inWorkflow
 	prevActivity := p.inActivity
 	p.inWorkflow = false
@@ -176,7 +164,6 @@ func parseActivityDef(p *Parser) (ast.Definition, error) {
 		Name:       name.Literal,
 		Params:     params.Literal,
 		ReturnType: returnType,
-		Options:    options,
 		Body:       body,
 	}, nil
 }

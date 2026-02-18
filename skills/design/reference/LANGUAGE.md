@@ -98,7 +98,6 @@ Update handler bodies execute when the update is received. Handlers have access 
 ```
 activity_def ::= 'activity' IDENT params ['->' return_type] ':' NEWLINE
                  INDENT
-                 [options_stmt]
                  statement*
                  DEDENT
 ```
@@ -158,12 +157,13 @@ args ::= '(' [arg_list] ')'
 arg_list ::= expr (',' expr)*
 result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 
-options_block ::= INDENT 'options' '(' option_list ')' NEWLINE DEDENT
-option_list ::= option (',' option)*
-option ::= IDENT ':' expr
+options_block ::= INDENT 'options' ':' NEWLINE INDENT option_entry* DEDENT DEDENT
+option_entry ::= IDENT ':' value NEWLINE
+               | IDENT ':' NEWLINE INDENT option_entry* DEDENT
+value ::= STRING | DURATION | NUMBER | IDENT
 ```
 
-**Note:** When using options blocks, the `options(...)` line must be indented on the line following the activity call. Options blocks require arrow syntax (`activity Foo() -> result`) not assignment syntax (`result = activity Foo()`).
+**Note:** When using options blocks, the `options:` block must be indented on the line following the activity call. Options blocks require arrow syntax (`activity Foo() -> result`) not assignment syntax (`result = activity Foo()`).
 
 ### Workflow Call
 
@@ -503,7 +503,7 @@ field ::= IDENT ':' expr
 - `and`, `or`, `not` - Logical operators
 
 **Configuration:**
-- `options` - Options block for calls/definitions
+- `options` - Options block for activity/workflow calls
 
 ### Symbols
 

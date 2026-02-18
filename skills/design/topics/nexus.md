@@ -61,14 +61,15 @@ Nexus enables workflows in one Temporal namespace to call workflows in another n
 workflow OrderWorkflow(order: Order) -> OrderResult:
     # Validate locally
     activity ValidateOrder(order)
-    
+
     # Call into payments namespace via Nexus
-    options(timeout: 5m)
     nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
-    
+        options:
+            timeout: 5m
+
     # Call into notifications namespace
     nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
-    
+
     close complete(OrderResult{paymentId: paymentResult.id})
 ```
 

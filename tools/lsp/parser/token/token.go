@@ -65,6 +65,10 @@ const (
 	ARROW      // ->
 	LEFT_ARROW // <-
 
+	// Literals
+	NUMBER   // numeric literal (e.g. 3, 2.0)
+	DURATION // numeric with duration suffix (e.g. 60s, 5m, 1h, 500ms)
+
 	// Values
 	IDENT    // non-keyword identifiers
 	STRING   // quoted string (for nexus namespaces)
@@ -111,6 +115,8 @@ var tokenNames = map[TokenType]string{
 	COLON:           "COLON",
 	ARROW:           "ARROW",
 	LEFT_ARROW:      "LEFT_ARROW",
+	NUMBER:          "NUMBER",
+	DURATION:        "DURATION",
 	IDENT:           "IDENT",
 	STRING:          "STRING",
 	ARGS:            "ARGS",

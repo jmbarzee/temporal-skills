@@ -27,8 +27,12 @@ workflow ParentWorkflow(input: Input) -> Result:
     workflow ChildWorkflow(input.data) -> childResult
     
     # Child workflow with options
-    options(workflow_id: "child-{input.id}", timeout: 1h, retry_policy: {max_attempts: 3})
     workflow ChildWorkflow(input.data) -> childResult
+        options:
+            workflow_id: "child-{input.id}"
+            timeout: 1h
+            retry_policy:
+                maximum_attempts: 3
     
     close complete(Result{childResult})
 
@@ -167,8 +171,13 @@ workflow Parent(input: Input) -> Result:
 ```twf
 workflow Parent(input: Input) -> Result:
     # Child with custom retry policy
-    options(retry_policy: {initial_interval: 1s, backoff_coefficient: 2.0, max_interval: 60s, max_attempts: 5})
     workflow ProcessOrder(input.order)
+        options:
+            retry_policy:
+                initial_interval: 1s
+                backoff_coefficient: 2.0
+                maximum_interval: 60s
+                maximum_attempts: 5
 ```
 
 ---
@@ -182,16 +191,19 @@ Child workflow IDs determine uniqueness and idempotency.
 ```twf
 workflow Parent(input: Input) -> Result:
     # Pattern 1: Derived from parent + child identifier
-    options(workflow_id: "{workflow.id}-child-{item.id}")
     workflow ChildWorkflow(item)
-    
+        options:
+            workflow_id: "{workflow.id}-child-{item.id}"
+
     # Pattern 2: Deterministic from business entity
-    options(workflow_id: "order-{order.id}")
     workflow ProcessOrder(order)
-    
+        options:
+            workflow_id: "order-{order.id}"
+
     # Pattern 3: With attempt counter for retries
-    options(workflow_id: "op-{data.id}-attempt-{attemptCount}")
     workflow RetryableOperation(data)
+        options:
+            workflow_id: "op-{data.id}-attempt-{attemptCount}"
 ```
 
 ### Idempotency via Workflow ID
@@ -201,8 +213,10 @@ workflow Parent(items: []Item) -> Result:
     # Same workflow ID = same workflow execution
     # If child already exists and completed, returns cached result
     for (item in items):
-        options(workflow_id: "process-item-{item.id}", workflow_id_reuse_policy: ALLOW_DUPLICATE_FAILED_ONLY)
         workflow ProcessItem(item)
+            options:
+                workflow_id: "process-item-{item.id}"
+                workflow_id_reuse_policy: ALLOW_DUPLICATE_FAILED_ONLY
 ```
 
 ### Workflow ID Reuse Policies
@@ -349,11 +363,13 @@ workflow Parent(items: []Item):
 ```twf
 # BAD: Collision risk
 workflow Parent(order: Order):
-    options(workflow_id: "process-order")  # Same ID for all orders!
     workflow ProcessOrder(order)
+        options:
+            workflow_id: "process-order"  # Same ID for all orders!
 
 # GOOD: Unique per entity
 workflow Parent(order: Order):
-    options(workflow_id: "process-order-{order.id}")
     workflow ProcessOrder(order)
+        options:
+            workflow_id: "process-order-{order.id}"
 ```

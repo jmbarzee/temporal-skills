@@ -177,13 +177,15 @@ Batch: 2 workers (cost efficient)
 Separate queues for different priorities:
 
 ```twf
-workflow OrderWorkflow(order: Order) -> Result:
-    if order.priority == "express":
-        options(task_queue: "high-priority")
+workflow OrderWorkflow(order: Order) -> (Result):
+    if (order.priority == "express"):
         activity ProcessOrder(order)
+            options:
+                task_queue: "high-priority"
     else:
-        options(task_queue: "standard")
         activity ProcessOrder(order)
+            options:
+                task_queue: "standard"
 ```
 
 Worker deployment:
@@ -198,10 +200,11 @@ standard_workers: 5
 Separate queues per tenant:
 
 ```twf
-workflow TenantWorkflow(tenantId: string, data: Data) -> Result:
+workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
     # Route to tenant-specific queue
-    options(task_queue: "tenant-{tenantId}")
     activity ProcessData(data)
+        options:
+            task_queue: "tenant-{tenantId}"
 ```
 
 ```pseudo
@@ -215,14 +218,16 @@ for tenant in tenants:
 Route based on required capabilities:
 
 ```twf
-workflow MediaWorkflow(media: Media) -> Result:
-    if media.type == "video":
+workflow MediaWorkflow(media: Media) -> (Result):
+    if (media.type == "video"):
         # Needs GPU workers
-        options(task_queue: "gpu-workers")
         activity TranscodeVideo(media)
+            options:
+                task_queue: "gpu-workers"
     else:
-        options(task_queue: "standard-workers")
         activity ProcessImage(media)
+            options:
+                task_queue: "standard-workers"
 ```
 
 ### Geographic Routing
@@ -230,10 +235,11 @@ workflow MediaWorkflow(media: Media) -> Result:
 Route to region-specific workers:
 
 ```twf
-workflow GlobalWorkflow(request: Request) -> Result:
+workflow GlobalWorkflow(request: Request) -> (Result):
     # Route to nearest region
-    options(task_queue: "workers-{request.region}")
     activity ProcessLocally(request)
+        options:
+            task_queue: "workers-{request.region}"
 ```
 
 ---
@@ -391,14 +397,16 @@ worker = Worker(
 ```twf
 # BAD: Creates queue per request (never cleaned up)
 workflow Process(requestId: string):
-    options(task_queue: "request-{requestId}")  # Unbounded queues!
     activity DoWork()
+        options:
+            task_queue: "request-{requestId}"  # Unbounded queues!
 
 # GOOD: Bounded set of queues
 workflow Process(request: Request):
     queue = selectQueue(request.priority)  # "high", "medium", "low"
-    options(task_queue: queue)
     activity DoWork()
+        options:
+            task_queue: queue
 ```
 
 ---

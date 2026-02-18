@@ -6,10 +6,12 @@
 workflow PriorityOrderWorkflow(order: Order) -> (Result):
     if (order.priority == "express"):
         activity ProcessOrder(order) -> result
-            options(taskQueue: "high-priority")
+            options:
+                task_queue: "high-priority"
     else:
         activity ProcessOrder(order) -> result
-            options(taskQueue: "standard")
+            options:
+                task_queue: "standard"
 
     close complete(Result{result})
 
@@ -18,7 +20,8 @@ workflow PriorityOrderWorkflow(order: Order) -> (Result):
 workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
     # Route to tenant-specific queue
     activity ProcessTenantData(data) -> result
-        options(taskQueue: "tenant-{tenantId}")
+        options:
+            task_queue: "tenant-{tenantId}"
 
     close complete(Result{result})
 
@@ -28,10 +31,12 @@ workflow MediaWorkflow(media: Media) -> (Result):
     if (media.type == "video"):
         # Needs GPU workers
         activity TranscodeVideo(media) -> result
-            options(taskQueue: "gpu-workers")
+            options:
+                task_queue: "gpu-workers"
     else:
         activity ProcessImage(media) -> result
-            options(taskQueue: "standard-workers")
+            options:
+                task_queue: "standard-workers"
 
     close complete(Result{result})
 
@@ -40,7 +45,8 @@ workflow MediaWorkflow(media: Media) -> (Result):
 workflow GlobalWorkflow(request: Request) -> (Result):
     # Route to nearest region
     activity ProcessLocally(request) -> result
-        options(taskQueue: "workers-{request.region}")
+        options:
+            task_queue: "workers-{request.region}"
 
     close complete(Result{result})
 
@@ -49,7 +55,9 @@ workflow GlobalWorkflow(request: Request) -> (Result):
 workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
     # Validate on fast queue
     activity QuickValidation(job) -> validated
-        options(taskQueue: "fast-queue", startToCloseTimeout: 5s)
+        options:
+            task_queue: "fast-queue"
+            start_to_close_timeout: 5s
 
     if (validated.valid == false):
         close fail(JobResult{status: "invalid"})
@@ -58,10 +66,12 @@ workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
     switch (job.type):
         case "compute":
             activity HeavyCompute(job) -> result
-                options(taskQueue: "compute-workers")
+                options:
+                    task_queue: "compute-workers"
         case "io":
             activity IOBoundWork(job) -> result
-                options(taskQueue: "io-workers")
+                options:
+                    task_queue: "io-workers"
         else:
             activity DefaultProcess(job) -> result
 

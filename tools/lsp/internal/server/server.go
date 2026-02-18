@@ -66,7 +66,7 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 					},
 					SemanticTokensProvider: &protocol316.SemanticTokensOptions{
 						Legend: protocol316.SemanticTokensLegend{
-							TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter", "type", "variable"},
+							TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter", "type", "variable", "property", "number"},
 							TokenModifiers: []string{"declaration"},
 						},
 						Full: true,

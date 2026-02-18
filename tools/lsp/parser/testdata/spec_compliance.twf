@@ -28,10 +28,14 @@ workflow SpecCompliance(input: Input) -> (Result):
     # ===== ACTIVITY CALLS =====
     # Test: Activity call with options block
     activity ValidateInput(input) -> validated
-        options(startToCloseTimeout: 30s)
+        options:
+            start_to_close_timeout: 30s
 
     activity FetchData(input.id) -> data
-        options(startToCloseTimeout: 1m, retryPolicy: {maxAttempts: 3})
+        options:
+            start_to_close_timeout: 1m
+            retry_policy:
+                maximum_attempts: 3
 
     # Test: Positional constructor fields
     result = Result{data, validated}
@@ -53,14 +57,16 @@ workflow SpecCompliance(input: Input) -> (Result):
     # Test: For loop (iteration)
     for (item in data.items):
         activity ProcessItem(item) -> processed
-            options(startToCloseTimeout: 30s)
+            options:
+                start_to_close_timeout: 30s
         result.items.append(processed)
 
     # Test: For loop (conditional)
     attempts = 0
     for (attempts < 3):
         activity ProcessData(data) -> success
-            options(startToCloseTimeout: 1m)
+            options:
+                start_to_close_timeout: 1m
         if (success):
             break
         attempts = attempts + 1
@@ -148,16 +154,21 @@ activity Task2(input: Input) -> (Result):
 workflow EdgeCases(input: Input):
     # Test: Nested parentheses in arguments
     activity TestNested(config: Config{nested: Nested{value: "test"}}) -> result
-        options(startToCloseTimeout: 1m)
+        options:
+            start_to_close_timeout: 1m
 
     # Test: Complex expression in parameters
     computedValue = (x + y) * 2
     activity Compute(value: computedValue, flag: enabled && validated) -> computed
-        options(startToCloseTimeout: 30s)
+        options:
+            start_to_close_timeout: 30s
 
     # Test: Options block with complex nested structure
     activity ComplexOptions(input) -> result2
-        options(taskQueue: "default", retry: RetryPolicy{maxAttempts: 3})
+        options:
+            task_queue: "default"
+            retry_policy:
+                maximum_attempts: 3
 
 workflow MinimalWorkflow():
     # Minimal valid workflow

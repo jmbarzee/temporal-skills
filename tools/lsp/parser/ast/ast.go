@@ -41,7 +41,6 @@ type WorkflowDef struct {
 	Name       string
 	Params     string // opaque content inside parens
 	ReturnType string // opaque, optional
-	Options    string // opaque, optional
 	State      *StateBlock
 	Signals    []*SignalDecl
 	Queries    []*QueryDecl
@@ -56,7 +55,6 @@ type ActivityDef struct {
 	Name       string
 	Params     string
 	ReturnType string
-	Options    string
 	Body       []Statement
 }
 
@@ -104,7 +102,7 @@ type ActivityCall struct {
 	Name     string
 	Args     string
 	Result   string // optional
-	Options  string // optional
+	Options  *OptionsBlock
 	Resolved *ActivityDef
 }
 
@@ -125,7 +123,7 @@ type WorkflowCall struct {
 	Name      string
 	Args      string
 	Result    string // optional
-	Options   string // optional
+	Options   *OptionsBlock
 	Resolved  *WorkflowDef
 }
 
@@ -412,3 +410,22 @@ type UnsetStmt struct {
 }
 
 func (*UnsetStmt) stmtNode() {}
+
+// ---------------------------------------------------------------------------
+// Options blocks
+// ---------------------------------------------------------------------------
+
+// OptionsBlock represents a structured options { ... } block.
+type OptionsBlock struct {
+	Pos
+	Entries []*OptionEntry
+}
+
+// OptionEntry represents a single key-value pair or nested block inside options.
+type OptionEntry struct {
+	Pos
+	Key       string
+	Value     string         // literal for flat entries
+	ValueType string         // "string", "duration", "number", "bool", "enum"
+	Nested    []*OptionEntry // non-nil for nested blocks (e.g. retry_policy)
+}

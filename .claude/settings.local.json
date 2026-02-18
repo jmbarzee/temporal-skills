@@ -34,7 +34,9 @@
       "WebFetch(domain:claude.com)",
       "WebFetch(domain:research.google)",
       "WebFetch(domain:solafide.ca)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $f ===\")"
     ]
   }
 }

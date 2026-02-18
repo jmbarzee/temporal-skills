@@ -4,7 +4,9 @@
 
 ```twf
 activity ProcessLargeFile(fileId: string) -> (ProcessResult):
-    options(startToCloseTimeout: 2h, heartbeatTimeout: 30s)
+    options:
+        start_to_close_timeout: 2h
+        heartbeat_timeout: 30s
     file = download(fileId)
     for (chunk in file.chunks):
         process(chunk)

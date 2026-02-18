@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/token"
 )
 
@@ -85,50 +86,33 @@ func (p *Parser) skipBlankLinesAndComments() {
 	}
 }
 
-// parseOptionalOptionsLine checks for an options line after a call:
-// INDENT OPTIONS ARGS NEWLINE DEDENT
-// Returns the options args string (empty if no options found).
-func (p *Parser) parseOptionalOptionsLine() (string, error) {
+// parseOptionalOptionsLine checks for an options block after a call:
+// INDENT OPTIONS COLON NEWLINE INDENT entries DEDENT NEWLINE DEDENT
+// Returns the options block (nil if no options found).
+func (p *Parser) parseOptionalOptionsLine(ctx OptionsContext) (*ast.OptionsBlock, error) {
 	if p.current.Type != token.INDENT {
-		return "", nil
+		return nil, nil
 	}
 	if p.peek.Type != token.OPTIONS {
-		return "", nil
+		return nil, nil
 	}
 	// Consume INDENT
 	p.advance()
 	// Consume OPTIONS
 	p.advance()
-	// Expect ARGS
-	args, err := p.expect(token.ARGS)
+	// Parse the options block (expects COLON, NEWLINE, INDENT, entries, DEDENT)
+	opts, err := p.parseOptionsBlock(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	// Consume NEWLINE if present
 	if p.current.Type == token.NEWLINE {
 		p.advance()
 	}
-	// Expect DEDENT
+	// Expect DEDENT (outer)
 	if _, err := p.expect(token.DEDENT); err != nil {
-		return "", err
+		return nil, err
 	}
-	return args.Literal, nil
+	return opts, nil
 }
 
-// parseOptionalOptionsStmt checks for an options statement at the start of a body:
-// OPTIONS ARGS NEWLINE
-// Returns the options args string (empty if no options found).
-func (p *Parser) parseOptionalOptionsStmt() (string, error) {
-	if p.current.Type != token.OPTIONS {
-		return "", nil
-	}
-	p.advance() // consume OPTIONS
-	args, err := p.expect(token.ARGS)
-	if err != nil {
-		return "", err
-	}
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-	return args.Literal, nil
-}

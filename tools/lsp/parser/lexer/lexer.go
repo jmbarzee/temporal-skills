@@ -94,6 +94,9 @@ func (l *Lexer) NextToken() token.Token {
 			l.advance()
 			l.advance()
 
+		case isDigit(ch):
+			tok = l.scanNumber()
+
 		case isIdentStart(ch):
 			tok = l.scanIdentifier()
 
@@ -259,6 +262,36 @@ func (l *Lexer) scanIdentifier() token.Token {
 	return tok
 }
 
+func (l *Lexer) scanNumber() token.Token {
+	tok := l.makeToken(token.NUMBER, "")
+	start := l.pos
+	// Consume digits.
+	for l.pos < len(l.input) && isDigit(l.input[l.pos]) {
+		l.advance()
+	}
+	// Optional decimal part.
+	if l.pos < len(l.input) && l.input[l.pos] == '.' && l.pos+1 < len(l.input) && isDigit(l.input[l.pos+1]) {
+		l.advance() // consume '.'
+		for l.pos < len(l.input) && isDigit(l.input[l.pos]) {
+			l.advance()
+		}
+	}
+	// Check for duration suffix: ms, s, m, h, d.
+	if l.pos < len(l.input) {
+		ch := l.input[l.pos]
+		if ch == 'm' && l.pos+1 < len(l.input) && l.input[l.pos+1] == 's' {
+			l.advance()
+			l.advance()
+			tok.Type = token.DURATION
+		} else if ch == 's' || ch == 'm' || ch == 'h' || ch == 'd' {
+			l.advance()
+			tok.Type = token.DURATION
+		}
+	}
+	tok.Literal = string(l.input[start:l.pos])
+	return tok
+}
+
 func (l *Lexer) scanRawText() token.Token {
 	tok := l.makeToken(token.RAW_TEXT, "")
 	start := l.pos
@@ -293,6 +326,10 @@ func isIdentStart(ch byte) bool {
 
 func isIdentContinue(ch byte) bool {
 	return isIdentStart(ch) || (ch >= '0' && ch <= '9')
+}
+
+func isDigit(ch byte) bool {
+	return ch >= '0' && ch <= '9'
 }
 
 // LexError represents a lexer error with position.

@@ -64,11 +64,13 @@ author-go/SKILL.md (orchestrator, inline)
 
 **Purpose:** Scan SDK and project dependencies to build a manifest of available types, imports, and patterns. Answers "what already exists?" so the orchestrator can follow the "prefer imports over generation" principle.
 
+**Critical:** Don't just `go doc` individual types in isolation. Trace the actual call chain from activity code to SDK method and verify every type in the signature. SDK types often have union/wrapper variants (e.g., `ToolParam` vs `ToolUnionParam`) that only surface when you check the struct field that accepts them. The manifest must reflect the types the code will actually compile against, not the types that look right by name.
+
 **Sources (suggest both, don't constrain):**
 - Local module cache: `$GOPATH/pkg/mod/go.temporal.io/sdk@version/`
 - Web: SDK docs, godoc, GitHub source
 
-**Returns:** Structured summary -- available types, import paths, relevant SDK patterns.
+**Returns:** Structured summary -- available types, import paths, relevant SDK patterns. For each SDK call site, include the exact method signature and the concrete types of every parameter and return value.
 
 ```yaml
 ---

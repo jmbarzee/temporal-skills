@@ -36,7 +36,7 @@ func parseActivityCall(p *Parser) (ast.Statement, error) {
 		p.advance()
 	}
 
-	options, err := p.parseOptionalOptionsLine()
+	options, err := p.parseOptionalOptionsLine(OptionsContextActivity)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 		p.advance()
 	}
 
-	options, err := p.parseOptionalOptionsLine()
+	options, err := p.parseOptionalOptionsLine(OptionsContextWorkflow)
 	if err != nil {
 		return nil, err
 	}

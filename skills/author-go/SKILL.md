@@ -40,17 +40,21 @@ For each activity:
 - **Check existing code:** does the project already have a client/library for this?
 - **Check `go.mod`:** is a relevant SDK already imported?
 - **If unresolved:** suggest specific options with tradeoffs to the user
-- **Read the chosen SDK's API:** run `go doc <package>` for local modules, or read source in `$GOPATH/pkg/mod/`. Note actual function signatures and types — don't infer from naming alone.
+- **Read the chosen dependency's API:** identify the method the activity will call, then trace its signature to concrete types. See [types.md](./reference/types.md) for the full resolution strategy.
 
 This step does not need to resolve everything. If a dependency choice is unclear or blocked on another decision, defer it and continue. But resolve as many as possible early — it prevents expensive rework later.
 
 **Deliverable:** a dependency map, presented to the user for confirmation before Layer 1 begins.
 
+A dependency is resolved when you can write the call expression with verified types. The map should include the method, every parameter type, and the return type — all confirmed from `go doc` or source, not inferred from names.
+
 ```
 Example dependency map:
-  ProcessPayment → stripe-go (paymentintent.New, stripe.PaymentIntentParams)
-  SendEmail      → sendgrid-go (client.SendWithContext, mail.SGMailV3)
-  GetOrder       → database/sql (no external SDK)
+  ProcessPayment → stripe-go
+    paymentintent.New(params *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error)
+  SendEmail → sendgrid-go
+    client.SendWithContext(ctx, mail *sgmail.SGMailV3) (*rest.Response, error)
+  GetOrder → database/sql (no external dependency)
   CalculateTotal → pure logic (no dependency)
 ```
 
@@ -172,7 +176,7 @@ Read only what the current generation step requires.
 
 | DSL Construct | Go Mapping | File |
 |---------------|------------|------|
-| `options(...)` | `ActivityOptions` / `ChildWorkflowOptions` | [options.md](./reference/options.md) |
+| `options: ...` | `ActivityOptions` / `ChildWorkflowOptions` | [options.md](./reference/options.md) |
 | `nexus "ns" workflow ...` | Nexus operation client | [nexus.md](./reference/nexus.md) |
 | `detach workflow ...` | Fire-and-forget (no `.Get`) | [detach.md](./reference/detach.md) |
 | `if`/`for`/`switch`/`break`/`continue` | Go equivalents | [control-flow.md](./reference/control-flow.md) |

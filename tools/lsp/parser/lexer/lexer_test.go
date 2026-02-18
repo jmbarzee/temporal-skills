@@ -343,17 +343,100 @@ func TestNewKeywords(t *testing.T) {
 }
 
 func TestOptionsKeyword(t *testing.T) {
-	input := "options(timeout: 30s)"
+	input := "options:"
 	l := New(input)
 	tok := l.NextToken()
 	if tok.Type != token.OPTIONS {
 		t.Fatalf("expected OPTIONS, got %s", tok.Type)
 	}
 	tok = l.NextToken()
-	if tok.Type != token.ARGS {
-		t.Fatalf("expected ARGS, got %s", tok.Type)
+	if tok.Type != token.COLON {
+		t.Fatalf("expected COLON, got %s", tok.Type)
 	}
-	if tok.Literal != "timeout: 30s" {
-		t.Fatalf("expected 'timeout: 30s', got %q", tok.Literal)
+}
+
+func TestDurationToken(t *testing.T) {
+	tests := []struct {
+		input string
+		lit   string
+	}{
+		{"60s", "60s"},
+		{"5m", "5m"},
+		{"1h", "1h"},
+		{"500ms", "500ms"},
+		{"7d", "7d"},
+	}
+	for _, tt := range tests {
+		l := New(tt.input)
+		tok := l.NextToken()
+		if tok.Type != token.DURATION {
+			t.Errorf("input %q: expected DURATION, got %s", tt.input, tok.Type)
+		}
+		if tok.Literal != tt.lit {
+			t.Errorf("input %q: expected literal %q, got %q", tt.input, tt.lit, tok.Literal)
+		}
+	}
+}
+
+func TestNumberToken(t *testing.T) {
+	tests := []struct {
+		input string
+		lit   string
+	}{
+		{"3", "3"},
+		{"2.0", "2.0"},
+		{"100", "100"},
+		{"1.5", "1.5"},
+	}
+	for _, tt := range tests {
+		l := New(tt.input)
+		tok := l.NextToken()
+		if tok.Type != token.NUMBER {
+			t.Errorf("input %q: expected NUMBER, got %s", tt.input, tok.Type)
+		}
+		if tok.Literal != tt.lit {
+			t.Errorf("input %q: expected literal %q, got %q", tt.input, tt.lit, tok.Literal)
+		}
+	}
+}
+
+func TestOptionsBlockTokenStream(t *testing.T) {
+	input := "activity Foo(x) -> y\n    options:\n        task_queue: \"workers\"\n        start_to_close: 60s\n"
+	expected := []struct {
+		typ token.TokenType
+		lit string
+	}{
+		{token.ACTIVITY, "activity"},
+		{token.IDENT, "Foo"},
+		{token.ARGS, "x"},
+		{token.ARROW, "->"},
+		{token.IDENT, "y"},
+		{token.NEWLINE, ""},
+		{token.INDENT, ""},
+		{token.OPTIONS, "options"},
+		{token.COLON, ":"},
+		{token.NEWLINE, ""},
+		{token.INDENT, ""},
+		{token.IDENT, "task_queue"},
+		{token.COLON, ":"},
+		{token.STRING, "workers"},
+		{token.NEWLINE, ""},
+		{token.IDENT, "start_to_close"},
+		{token.COLON, ":"},
+		{token.DURATION, "60s"},
+		{token.NEWLINE, ""},
+		{token.DEDENT, ""},
+		{token.DEDENT, ""},
+		{token.EOF, ""},
+	}
+	l := New(input)
+	for i, exp := range expected {
+		tok := l.NextToken()
+		if tok.Type != exp.typ {
+			t.Fatalf("token[%d]: expected type %s, got %s (%q)", i, exp.typ, tok.Type, tok.Literal)
+		}
+		if exp.lit != "" && tok.Literal != exp.lit {
+			t.Fatalf("token[%d]: expected literal %q, got %q", i, exp.lit, tok.Literal)
+		}
 	}
 }

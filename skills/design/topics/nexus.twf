@@ -39,7 +39,8 @@ workflow MultiNamespaceWorkflow(request: Request) -> (AggregateResult):
 
 workflow NexusWithOptions(payment: Payment) -> (PaymentResult):
     nexus "payments" workflow ChargeCard(payment) -> result
-        options(scheduleToCloseTimeout: 5m)
+        options:
+            workflow_execution_timeout: 5m
     close complete(PaymentResult{result})
 
 # --- Supporting local activities ---

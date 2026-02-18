@@ -35,6 +35,45 @@ func marshalDefinition(def Definition) (json.RawMessage, error) {
 	}
 }
 
+// OptionsBlockJSON is the JSON representation of an options block.
+type OptionsBlockJSON struct {
+	Entries []OptionEntryJSON `json:"entries"`
+}
+
+// OptionEntryJSON is the JSON representation of a single option entry.
+type OptionEntryJSON struct {
+	Key       string            `json:"key"`
+	Value     string            `json:"value,omitempty"`
+	ValueType string            `json:"valueType,omitempty"`
+	Nested    []OptionEntryJSON `json:"nested,omitempty"`
+}
+
+func marshalOptionsBlock(ob *OptionsBlock) *OptionsBlockJSON {
+	if ob == nil {
+		return nil
+	}
+	obj := &OptionsBlockJSON{
+		Entries: marshalOptionEntries(ob.Entries),
+	}
+	return obj
+}
+
+func marshalOptionEntries(entries []*OptionEntry) []OptionEntryJSON {
+	result := make([]OptionEntryJSON, 0, len(entries))
+	for _, e := range entries {
+		ej := OptionEntryJSON{
+			Key:       e.Key,
+			Value:     e.Value,
+			ValueType: e.ValueType,
+		}
+		if len(e.Nested) > 0 {
+			ej.Nested = marshalOptionEntries(e.Nested)
+		}
+		result = append(result, ej)
+	}
+	return result
+}
+
 // WorkflowDefJSON is the JSON representation of WorkflowDef.
 type WorkflowDefJSON struct {
 	Type       string             `json:"type"`
@@ -43,7 +82,6 @@ type WorkflowDefJSON struct {
 	Name       string             `json:"name"`
 	Params     string             `json:"params"`
 	ReturnType string             `json:"returnType,omitempty"`
-	Options    string             `json:"options,omitempty"`
 	State      *StateBlockJSON    `json:"state,omitempty"`
 	Signals    []*SignalDeclJSON  `json:"signals,omitempty"`
 	Queries    []*QueryDeclJSON   `json:"queries,omitempty"`
@@ -70,7 +108,6 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 		Name:       w.Name,
 		Params:     w.Params,
 		ReturnType: w.ReturnType,
-		Options:    w.Options,
 		Signals:    make([]*SignalDeclJSON, 0, len(w.Signals)),
 		Queries:    make([]*QueryDeclJSON, 0, len(w.Queries)),
 		Updates:    make([]*UpdateDeclJSON, 0, len(w.Updates)),
@@ -162,7 +199,6 @@ type ActivityDefJSON struct {
 	Name       string            `json:"name"`
 	Params     string            `json:"params"`
 	ReturnType string            `json:"returnType,omitempty"`
-	Options    string            `json:"options,omitempty"`
 	Body       []json.RawMessage `json:"body"`
 }
 
@@ -174,7 +210,6 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 		Name:       a.Name,
 		Params:     a.Params,
 		ReturnType: a.ReturnType,
-		Options:    a.Options,
 		Body:       make([]json.RawMessage, 0, len(a.Body)),
 	}
 	for _, stmt := range a.Body {
@@ -228,7 +263,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Name:    s.Name,
 			Args:    s.Args,
 			Result:  s.Result,
-			Options: s.Options,
+			Options: marshalOptionsBlock(s.Options),
 		})
 	case *WorkflowCall:
 		return json.Marshal(workflowCallJSON{
@@ -240,7 +275,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Name:      s.Name,
 			Args:      s.Args,
 			Result:    s.Result,
-			Options:   s.Options,
+			Options:   marshalOptionsBlock(s.Options),
 		})
 	case *AwaitStmt:
 		return json.Marshal(awaitStmtJSON{
@@ -504,25 +539,25 @@ func forVariantString(v ForVariant) string {
 
 // Statement JSON types
 type activityCallJSON struct {
-	Type    string `json:"type"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column"`
-	Name    string `json:"name"`
-	Args    string `json:"args"`
-	Result  string `json:"result,omitempty"`
-	Options string `json:"options,omitempty"`
+	Type    string            `json:"type"`
+	Line    int               `json:"line"`
+	Column  int               `json:"column"`
+	Name    string            `json:"name"`
+	Args    string            `json:"args"`
+	Result  string            `json:"result,omitempty"`
+	Options *OptionsBlockJSON `json:"options,omitempty"`
 }
 
 type workflowCallJSON struct {
-	Type      string `json:"type"`
-	Line      int    `json:"line"`
-	Column    int    `json:"column"`
-	Mode      string `json:"mode"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-	Args      string `json:"args"`
-	Result    string `json:"result,omitempty"`
-	Options   string `json:"options,omitempty"`
+	Type      string            `json:"type"`
+	Line      int               `json:"line"`
+	Column    int               `json:"column"`
+	Mode      string            `json:"mode"`
+	Namespace string            `json:"namespace,omitempty"`
+	Name      string            `json:"name"`
+	Args      string            `json:"args"`
+	Result    string            `json:"result,omitempty"`
+	Options   *OptionsBlockJSON `json:"options,omitempty"`
 }
 
 type awaitStmtJSON struct {

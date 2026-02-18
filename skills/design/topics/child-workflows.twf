@@ -9,7 +9,10 @@ workflow ParentWorkflow(input: Input) -> (Result):
 
     # Child with options
     workflow ChildWorkflow(input.data) -> childResult2
-        options(workflowExecutionTimeout: 1h, retryPolicy: {maxAttempts: 3})
+        options:
+            workflow_execution_timeout: 1h
+            retry_policy:
+                maximum_attempts: 3
 
     close complete(Result{childResult, childResult2})
 

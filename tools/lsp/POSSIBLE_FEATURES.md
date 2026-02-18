@@ -38,10 +38,11 @@ namespace "orders":
 workflow ProcessOrder(order: Order) -> (Result):
     # Route heavy work to GPU workers
     activity RenderImage(order.image)
-        options(task_queue: "gpu-workers")
+        options:
+            task_queue: "gpu-workers"
 ```
 
-**Open questions:** Is `options(task_queue: ...)` sufficient, or does the DSL need a top-level `task_queue` declaration block?
+**Open questions:** Is `options: task_queue: ...` sufficient, or does the DSL need a top-level `task_queue` declaration block?
 
 ---
 
@@ -197,7 +198,7 @@ workflow ProcessOrder(order: Order) -> (Result):
     activity NotifyCustomer(order, payment)
 ```
 
-**Why needed:** Polyglot Temporal deployments are common — a Go workflow may call Python ML activities and TypeScript frontend services. Language annotations make this explicit at design time, enabling code generation targeting the correct SDK, clearer ownership boundaries, and better onboarding context.
+**Why needed:** Polyglot Temporal deployments are common - a Go workflow may call Python ML activities and TypeScript frontend services. Language annotations make this explicit at design time, enabling code generation targeting the correct SDK, clearer ownership boundaries, and better onboarding context.
 
 **Open questions:** Should `@lang` apply at the block level (workflow, activity) or also at the file level as a default? Should it be a fixed enum of supported SDKs (`go`, `python`, `typescript`, `java`, `dotnet`, `php`) or freeform? How does it interact with Nexus boundaries where language is already implicit?
 
@@ -213,7 +214,8 @@ workflow ProcessOrder(order: Order) -> (Result):
 @ref("payments/activities/charge.go")
 activity ChargePayment(order: Order) -> (Payment):
     heartbeat 30s
-    options(start_to_close: 60s)
+    options:
+        start_to_close_timeout: 60s
 ```
 
 **Why needed:** As a design DSL, TWF captures intent — but teams also need to find the real code. Reference annotations close that loop, making `.twf` files a living index of the project. LSP features like go-to-definition could resolve `@ref` paths to open the actual source file.

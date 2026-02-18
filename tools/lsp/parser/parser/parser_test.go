@@ -552,7 +552,10 @@ func TestDetachWithArrowError(t *testing.T) {
 func TestOptionsOnCall(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     activity CreateShipment(order) -> shipment
-        options(startToCloseTimeout: 30s, retryPolicy: {maxAttempts: 3})
+        options:
+            start_to_close_timeout: 30s
+            retry_policy:
+                maximum_attempts: 3
 `
 	file, err := ParseFile(input)
 	if err != nil {
@@ -560,15 +563,31 @@ func TestOptionsOnCall(t *testing.T) {
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
 	call := wf.Body[0].(*ast.ActivityCall)
-	if call.Options != "startToCloseTimeout: 30s, retryPolicy: {maxAttempts: 3}" {
-		t.Errorf("unexpected options: %q", call.Options)
+	if call.Options == nil {
+		t.Fatal("expected options, got nil")
+	}
+	if len(call.Options.Entries) != 2 {
+		t.Fatalf("expected 2 option entries, got %d", len(call.Options.Entries))
+	}
+	if call.Options.Entries[0].Key != "start_to_close_timeout" {
+		t.Errorf("expected key 'start_to_close_timeout', got %q", call.Options.Entries[0].Key)
+	}
+	if call.Options.Entries[0].Value != "30s" {
+		t.Errorf("expected value '30s', got %q", call.Options.Entries[0].Value)
+	}
+	if call.Options.Entries[1].Key != "retry_policy" {
+		t.Errorf("expected key 'retry_policy', got %q", call.Options.Entries[1].Key)
+	}
+	if len(call.Options.Entries[1].Nested) != 1 {
+		t.Fatalf("expected 1 nested entry, got %d", len(call.Options.Entries[1].Nested))
 	}
 }
 
 func TestOptionsOnWorkflowCall(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     workflow ShipOrder(order) -> result
-        options(workflowExecutionTimeout: 24h)
+        options:
+            workflow_execution_timeout: 24h
 `
 	file, err := ParseFile(input)
 	if err != nil {
@@ -576,29 +595,19 @@ func TestOptionsOnWorkflowCall(t *testing.T) {
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
 	call := wf.Body[0].(*ast.WorkflowCall)
-	if call.Options != "workflowExecutionTimeout: 24h" {
-		t.Errorf("unexpected options: %q", call.Options)
+	if call.Options == nil {
+		t.Fatal("expected options, got nil")
+	}
+	if len(call.Options.Entries) != 1 {
+		t.Fatalf("expected 1 option entry, got %d", len(call.Options.Entries))
+	}
+	if call.Options.Entries[0].Key != "workflow_execution_timeout" {
+		t.Errorf("expected key 'workflow_execution_timeout', got %q", call.Options.Entries[0].Key)
 	}
 }
 
-func TestOptionsOnDefinition(t *testing.T) {
-	input := `activity GetOrder(orderId: string) -> (Order):
-    options(startToCloseTimeout: 10s)
-    order = db.get(orderId)
-    return order
-`
-	file, err := ParseFile(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	act := file.Definitions[0].(*ast.ActivityDef)
-	if act.Options != "startToCloseTimeout: 10s" {
-		t.Errorf("unexpected options: %q", act.Options)
-	}
-	if len(act.Body) != 2 {
-		t.Fatalf("expected 2 body statements, got %d", len(act.Body))
-	}
-}
+// REMOVED: TestOptionsOnDefinition - options on definitions are no longer supported.
+// Options are only valid on activity/workflow calls.
 
 // REMOVED: TestTimer - TimerStmt is no longer a standalone statement.
 // Timers are now used via await timer(duration) or await one cases.
@@ -914,7 +923,8 @@ activity Bar(x: int) -> (int):
 func TestActivityCallWithOptions(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     activity CreateShipment(order) -> shipment
-        options(startToCloseTimeout: 30s)
+        options:
+            start_to_close_timeout: 30s
     activity GetOrder(orderId) -> order
 `
 	file, err := ParseFile(input)
@@ -926,12 +936,12 @@ func TestActivityCallWithOptions(t *testing.T) {
 		t.Fatalf("expected 2 body statements, got %d", len(wf.Body))
 	}
 	call1 := wf.Body[0].(*ast.ActivityCall)
-	if call1.Options != "startToCloseTimeout: 30s" {
-		t.Errorf("expected options, got %q", call1.Options)
+	if call1.Options == nil {
+		t.Error("expected options, got nil")
 	}
 	call2 := wf.Body[1].(*ast.ActivityCall)
-	if call2.Options != "" {
-		t.Errorf("expected no options, got %q", call2.Options)
+	if call2.Options != nil {
+		t.Errorf("expected no options, got %v", call2.Options)
 	}
 }
 
@@ -1000,18 +1010,118 @@ func TestForInActivity(t *testing.T) {
 	}
 }
 
-func TestWorkflowDefWithOptions(t *testing.T) {
+// REMOVED: TestWorkflowDefWithOptions - options on definitions are no longer supported.
+// Options are only valid on activity/workflow calls.
+
+func TestOptionsNestedRetryPolicy(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    options(workflowExecutionTimeout: 24h)
-    return x
+    activity Bar(x) -> y
+        options:
+            start_to_close_timeout: 60s
+            retry_policy:
+                maximum_attempts: 3
+                initial_interval: 1s
 `
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	if wf.Options != "workflowExecutionTimeout: 24h" {
-		t.Errorf("expected options, got %q", wf.Options)
+	call := wf.Body[0].(*ast.ActivityCall)
+	if call.Options == nil {
+		t.Fatal("expected options, got nil")
+	}
+	if len(call.Options.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(call.Options.Entries))
+	}
+	rp := call.Options.Entries[1]
+	if rp.Key != "retry_policy" {
+		t.Errorf("expected key 'retry_policy', got %q", rp.Key)
+	}
+	if len(rp.Nested) != 2 {
+		t.Fatalf("expected 2 nested entries, got %d", len(rp.Nested))
+	}
+	if rp.Nested[0].Key != "maximum_attempts" {
+		t.Errorf("expected nested key 'maximum_attempts', got %q", rp.Nested[0].Key)
+	}
+	if rp.Nested[0].Value != "3" {
+		t.Errorf("expected value '3', got %q", rp.Nested[0].Value)
+	}
+}
+
+func TestOptionsUnrecognizedKey(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    activity Bar(x) -> y
+        options:
+            bogus_key: 5s
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for unrecognized key, got nil")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T: %v", err, err)
+	}
+	if pe.Msg != "unknown option key: bogus_key" {
+		t.Errorf("unexpected error message: %q", pe.Msg)
+	}
+}
+
+func TestOptionsWrongValueType(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    activity Bar(x) -> y
+        options:
+            start_to_close_timeout: 3
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for wrong value type, got nil")
+	}
+}
+
+func TestOptionsEnumValidation(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    workflow Child(x) -> y
+        options:
+            parent_close_policy: TERMINATE
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	call := wf.Body[0].(*ast.WorkflowCall)
+	if call.Options == nil || len(call.Options.Entries) != 1 {
+		t.Fatal("expected 1 option entry")
+	}
+	if call.Options.Entries[0].Value != "TERMINATE" {
+		t.Errorf("expected value 'TERMINATE', got %q", call.Options.Entries[0].Value)
+	}
+}
+
+func TestOptionsInvalidEnum(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    workflow Child(x) -> y
+        options:
+            parent_close_policy: INVALID
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for invalid enum, got nil")
+	}
+}
+
+func TestOptionsEmpty(t *testing.T) {
+	// Empty options: with no indented content is a parse error
+	// (indentation-based syntax requires at least one entry).
+	input := `workflow Foo(x: int) -> (Result):
+    activity Bar(x) -> y
+        options:
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for empty options block, got nil")
 	}
 }
 

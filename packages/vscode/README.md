@@ -49,7 +49,7 @@ The TWF notation covers the core Temporal feature set:
 | Nexus | `nexus` | Cross-namespace workflow calls |
 | Continue-as-New | `close continue_as_new` | Reset history for long-running workflows |
 | Heartbeats | `heartbeat` | Report activity progress, detect worker death |
-| Options | `options { }` | Task queues, timeouts, retry policies, priority |
+| Options | `options:` | Task queues, timeouts, retry policies, priority |
 | Workflow Termination | `close complete` / `close fail` | Explicit workflow exit with status |
 
 ## Installation

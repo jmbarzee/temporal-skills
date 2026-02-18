@@ -56,10 +56,12 @@ activity LongRunningTask(taskId: string) -> TaskResult:
 ### Heartbeat Timeout Configuration
 
 ```twf
-workflow Parent(data: Data) -> Result:
-    options(start_to_close_timeout: 1h, heartbeat_timeout: 30s)
+workflow Parent(data: Data) -> (Result):
     activity LongProcess(data) -> result
-    
+        options:
+            start_to_close_timeout: 1h
+            heartbeat_timeout: 30s
+
     close complete(result)
 ```
 
@@ -124,16 +126,17 @@ activity RequestHumanApproval(request: ApprovalRequest) -> ApprovalResult:
 ### Workflow Using Async Activity
 
 ```twf
-workflow ApprovalWorkflow(request: Request) -> Decision:
+workflow ApprovalWorkflow(request: Request) -> (Decision):
     activity NotifyRequestCreated(request)
-    
+
     # This activity blocks until external completion
-    options(start_to_close_timeout: 7d, heartbeat_timeout: 0)
     activity RequestHumanApproval(request) -> result
-    
-    if result.approved:
+        options:
+            start_to_close_timeout: 7d
+
+    if (result.approved):
         activity ExecuteApprovedAction(request)
-    
+
     close complete(Decision{approved: result.approved})
 ```
 
@@ -178,17 +181,19 @@ Lightweight activities that execute in the workflow worker process without task 
 
 ### Local Activity Pattern
 
-> Note: Local activities are an SDK-level concept. In TWF notation, use `activity` with an `options()` block specifying local execution. The syntax below is conceptual.
+> Note: Local activities are an SDK-level concept. In TWF notation, use `activity` with an `options:` block specifying local execution. The syntax below is conceptual.
 
 ```twf
-workflow ProcessOrder(order: Order) -> Result:
+workflow ProcessOrder(order: Order) -> (Result):
     # Local activity: fast, in-process (SDK: use local activity API)
-    options(local: true, start_to_close_timeout: 5s)
     activity ValidateInput(order) -> validated
-    
+        options:
+            local: true
+            start_to_close_timeout: 5s
+
     # Regular activity: goes through task queue
     activity ProcessPayment(order) -> result
-    
+
     close complete(result)
 ```
 
@@ -206,9 +211,15 @@ workflow ProcessOrder(order: Order) -> Result:
 > Note: Local activity configuration is SDK-specific.
 
 ```twf
-workflow Parent(data: Data) -> Result:
-    options(local: true, start_to_close_timeout: 10s, local_retry_threshold: 5s, retry_policy: {max_attempts: 3, initial_interval: 100ms})
+workflow Parent(data: Data) -> (Result):
     activity QuickValidation(data) -> result
+        options:
+            local: true
+            start_to_close_timeout: 10s
+            local_retry_threshold: 5s
+            retry_policy:
+                maximum_attempts: 3
+                initial_interval: 100ms
 ```
 
 ---
@@ -236,19 +247,24 @@ schedule_to_close >= schedule_to_start + start_to_close
 ### Configuration Examples
 
 ```twf
-workflow Parent(data: Data) -> Result:
+workflow Parent(data: Data) -> (Result):
     # Short operation, tight timeout
-    options(start_to_close_timeout: 30s)
     activity QuickLookup(data.id) -> result
-    
+        options:
+            start_to_close_timeout: 30s
+
     # Long operation with heartbeat
-    options(start_to_close_timeout: 2h, heartbeat_timeout: 60s)
     activity ProcessBatch(data) -> result
-    
+        options:
+            start_to_close_timeout: 2h
+            heartbeat_timeout: 60s
+
     # Operation with queue wait tolerance
-    options(schedule_to_start_timeout: 5m, start_to_close_timeout: 10m)
     activity LowPriorityTask(data) -> result
-    
+        options:
+            schedule_to_start_timeout: 5m
+            start_to_close_timeout: 10m
+
     close complete(result)
 ```
 
@@ -269,15 +285,15 @@ workflow Parent(data: Data) -> Result:
 ### Retry Configuration
 
 ```twf
-workflow Parent(data: Data) -> Result:
-    options(retry_policy: {
-        initial_interval: 1s,
-        backoff_coefficient: 2.0,
-        max_interval: 60s,
-        max_attempts: 5,
-        non_retryable_errors: ["InvalidInput", "NotFound"]
-    })
+workflow Parent(data: Data) -> (Result):
     activity UnreliableService(data) -> result
+        options:
+            retry_policy:
+                initial_interval: 1s
+                backoff_coefficient: 2.0
+                maximum_interval: 60s
+                maximum_attempts: 5
+                non_retryable_errors: ["InvalidInput", "NotFound"]
 ```
 
 ### Error Classification

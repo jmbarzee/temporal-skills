@@ -22,7 +22,7 @@
 | `await update Name` | Wait for update |
 | `await one:` | Race: first to complete wins |
 | `await all:` | Join: wait for all |
-| `options(key: value)` | Options for next statement |
+| `options: key: value` | Options block for activity/workflow calls |
 | `-> (Type)` | Return type (always parenthesized) |
 | `-> result` | Bind preceding result |
 | `close complete\|fail\|continue_as_new(Value)` | End workflow with result, failure, or continuation |

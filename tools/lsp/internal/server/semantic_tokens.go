@@ -19,6 +19,8 @@ const (
 	semParameter = 7
 	semType      = 8
 	semVariable  = 9
+	semProperty  = 10
+	semNumber    = 11
 )
 
 // Semantic token modifier bits.
@@ -48,6 +50,8 @@ func buildSemanticTokens(content string) []uint32 {
 	var prevLine, prevCol uint32
 	var prevType token.TokenType
 	indentLevel := 0
+	inOptions := false
+	optionsBaseIndent := 0
 
 	for _, tok := range tokens {
 		switch tok.Type {
@@ -60,11 +64,19 @@ func buildSemanticTokens(content string) []uint32 {
 			if indentLevel < 0 {
 				indentLevel = 0
 			}
+			if inOptions && indentLevel <= optionsBaseIndent {
+				inOptions = false
+			}
 			prevType = tok.Type
 			continue
 		}
 
-		tokenType, modifiers, shouldEmit := classifyToken(tok, prevType, indentLevel)
+		if tok.Type == token.OPTIONS {
+			inOptions = true
+			optionsBaseIndent = indentLevel
+		}
+
+		tokenType, modifiers, shouldEmit := classifyToken(tok, prevType, indentLevel, inOptions)
 		if !shouldEmit {
 			if !isStructural(tok.Type) {
 				prevType = tok.Type
@@ -107,15 +119,19 @@ func isStructural(tt token.TokenType) bool {
 }
 
 // classifyToken determines the semantic token type and modifiers for a token.
-func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int) (tokenType uint32, modifiers uint32, shouldEmit bool) {
+func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int, inOptions bool) (tokenType uint32, modifiers uint32, shouldEmit bool) {
 	switch tok.Type {
 	// Category 1: Temporal primitive keywords → semType
 	case token.WORKFLOW, token.ACTIVITY,
 		token.SIGNAL, token.QUERY, token.UPDATE,
-		token.TIMER, token.OPTIONS,
+		token.TIMER,
 		token.PROMISE, token.STATE, token.CONDITION, token.SET, token.UNSET,
 		token.CLOSE, token.COMPLETE, token.FAIL, token.CONTINUE_AS_NEW:
 		return semType, 0, true
+
+	// OPTIONS keyword: muted (property) when introducing an options block.
+	case token.OPTIONS:
+		return semProperty, 0, true
 
 	// Category 3: Control flow keywords — no semantic token emitted.
 	// The TextMate grammar handles these with keyword.control.twf, and
@@ -130,6 +146,10 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int) (
 		return 0, 0, false
 
 	case token.IDENT:
+		if inOptions {
+			// Inside options block: option keys and enum values.
+			return semProperty, 0, true
+		}
 		return classifyIdent(prevType, indentLevel)
 
 	case token.STRING:
@@ -143,6 +163,9 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int) (
 
 	case token.ARGS:
 		return semParameter, 0, true
+
+	case token.DURATION, token.NUMBER:
+		return semNumber, 0, true
 
 	default:
 		return 0, 0, false

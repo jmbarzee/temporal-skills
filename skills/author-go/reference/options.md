@@ -6,7 +6,8 @@
 
 ```twf
 activity QuickLookup(data.id) -> result
-    options(startToCloseTimeout: 30s)
+    options:
+        start_to_close_timeout: 30s
 ```
 
 ### Go
@@ -25,7 +26,13 @@ err := workflow.ExecuteActivity(actCtx, QuickLookup, data.Id).Get(ctx, &result)
 
 ```twf
 activity UnreliableService(data) -> result
-    options(startToCloseTimeout: 2m, retryPolicy: {maxAttempts: 5, initialInterval: 1s, backoffCoefficient: 2.0, maxInterval: 60s})
+    options:
+        start_to_close_timeout: 2m
+        retry_policy:
+            maximum_attempts: 5
+            initial_interval: 1s
+            backoff_coefficient: 2.0
+            maximum_interval: 60s
 ```
 
 ### Go
@@ -50,7 +57,10 @@ err := workflow.ExecuteActivity(actCtx, UnreliableService, data).Get(ctx, &resul
 
 ```twf
 workflow ChildWorkflow(input.data) -> childResult
-    options(workflowExecutionTimeout: 1h, retryPolicy: {maxAttempts: 3})
+    options:
+        workflow_execution_timeout: 1h
+        retry_policy:
+            maximum_attempts: 3
 ```
 
 ### Go
@@ -68,7 +78,6 @@ err := workflow.ExecuteChildWorkflow(childCtx, ChildWorkflow, input.Data).Get(ct
 
 ## Notes
 
-- When no `options(...)` is specified, set a default `ActivityOptions` with `StartToCloseTimeout` on `ctx` near the top of the workflow function
-- Option keys map: `startToCloseTimeout` → `StartToCloseTimeout`, `scheduleToCloseTimeout` → `ScheduleToCloseTimeout`, `heartbeatTimeout` → `HeartbeatTimeout`
-- `retryPolicy` → `&temporal.RetryPolicy{...}` (pointer)
-- Activity definition-level `options(...)` sets defaults; call-site options override
+- When no `options:` block is specified, set a default `ActivityOptions` with `StartToCloseTimeout` on `ctx` near the top of the workflow function
+- Option keys map: `start_to_close_timeout` → `StartToCloseTimeout`, `schedule_to_close_timeout` → `ScheduleToCloseTimeout`, `heartbeat_timeout` → `HeartbeatTimeout`
+- `retry_policy:` → `&temporal.RetryPolicy{...}` (pointer)

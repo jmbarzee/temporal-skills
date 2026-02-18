@@ -98,7 +98,6 @@ Update handler bodies execute when the update is received. Handlers have access 
 ```
 activity_def ::= 'activity' IDENT params ['->' return_type] ':' NEWLINE
                  INDENT
-                 [options_stmt]
                  statement*
                  DEDENT
 ```
@@ -152,23 +151,55 @@ statement ::= heartbeat_stmt
 ### Activity Call
 
 ```
-activity_call ::= 'activity' IDENT args ['->' result] [NEWLINE options_block]
+activity_call ::= 'activity' IDENT args ['->' result] [NEWLINE options_line]
 
 args ::= '(' [arg_list] ')'
 arg_list ::= expr (',' expr)*
 result ::= IDENT | '(' IDENT (',' IDENT)* ')'
 
-options_block ::= INDENT 'options' '(' option_list ')' NEWLINE DEDENT
-option_list ::= option (',' option)*
-option ::= IDENT ':' expr
+options_line ::= INDENT 'options' ':' NEWLINE INDENT option_entry+ DEDENT NEWLINE DEDENT
 ```
 
-**Note:** When using options blocks, the `options(...)` line must be indented on the line following the activity call. Options blocks require arrow syntax (`activity Foo() -> result`) not assignment syntax (`result = activity Foo()`).
+**Note:** When using options blocks, the `options:` block must be indented on the line following the activity call.
+
+### Options Block
+
+```
+options_block ::= 'options' ':' NEWLINE INDENT option_entry+ DEDENT
+option_entry  ::= IDENT ':' value NEWLINE
+                | IDENT ':' NEWLINE INDENT option_entry+ DEDENT
+
+value ::= STRING | DURATION | NUMBER | IDENT
+
+DURATION ::= NUMBER ('ms' | 's' | 'm' | 'h' | 'd')
+NUMBER ::= [0-9]+ ['.' [0-9]+]
+```
+
+Options blocks use indentation-based nesting (same as the rest of TWF). Each key-value pair goes on its own line. Nested blocks (like `retry_policy`) use deeper indentation.
+
+**Allowed keys per context:**
+
+Activity call options: `task_queue`, `schedule_to_close_timeout`, `schedule_to_start_timeout`, `start_to_close_timeout`, `heartbeat_timeout`, `request_eager_execution`, `retry_policy`, `priority`
+
+Workflow call options: `task_queue`, `workflow_execution_timeout`, `workflow_run_timeout`, `workflow_task_timeout`, `parent_close_policy`, `workflow_id_reuse_policy`, `cron_schedule`, `retry_policy`, `priority`
+
+Retry policy keys: `initial_interval`, `backoff_coefficient`, `maximum_interval`, `maximum_attempts`, `non_retryable_error_types`
+
+**Example:**
+```
+activity ChargePayment(order) -> payment
+    options:
+        task_queue: "payment-workers"
+        start_to_close_timeout: 60s
+        retry_policy:
+            maximum_attempts: 3
+            initial_interval: 1s
+```
 
 ### Workflow Call
 
 ```
-workflow_call ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] [NEWLINE options_block]
+workflow_call ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] [NEWLINE options_line]
 ```
 
 Modifiers:
@@ -503,7 +534,7 @@ field ::= IDENT ':' expr
 - `and`, `or`, `not` - Logical operators
 
 **Configuration:**
-- `options` - Options block for calls/definitions
+- `options` - Options block for activity/workflow calls
 
 ### Symbols
 
@@ -523,9 +554,12 @@ Identifiers start with a letter or underscore, followed by any combination of le
 ### Literals
 
 ```
-NUMBER ::= [0-9]+(['.'[0-9]+])
+NUMBER ::= [0-9]+ ['.' [0-9]+]
+DURATION ::= NUMBER ('ms' | 's' | 'm' | 'h' | 'd')
 STRING ::= '"' [^"]* '"'
 ```
+
+`NUMBER` and `DURATION` tokens are recognized everywhere. In raw expressions, digits that start a line or follow operators are consumed by the raw text scanner.
 
 ### Comments
 
@@ -616,6 +650,9 @@ Common error types:
 - Invalid await targets (e.g., awaiting a query)
 - Condition with result binding (conditions cannot have `-> result`)
 - `set`/`unset` on undefined condition
+- Unknown option key in `options:` block
+- Wrong value type for option key (e.g., number where duration expected)
+- Invalid enum value for option key
 
 ## Examples
 
@@ -636,6 +673,12 @@ workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
 
 activity_def ::= 'activity' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT statement* DEDENT
+
+options_block ::= 'options' ':' NEWLINE INDENT option_entry+ DEDENT
+option_entry  ::= IDENT ':' value NEWLINE
+                | IDENT ':' NEWLINE INDENT option_entry+ DEDENT
+value ::= STRING | DURATION | NUMBER | IDENT
+DURATION ::= NUMBER ('ms' | 's' | 'm' | 'h' | 'd')
 
 state_block ::= 'state' ':' NEWLINE INDENT state_stmt* DEDENT
 state_stmt ::= condition_decl | raw_stmt

@@ -30,6 +30,8 @@ func marshalDefinition(def Definition) (json.RawMessage, error) {
 		return json.Marshal(d)
 	case *ActivityDef:
 		return json.Marshal(d)
+	case *WorkerDef:
+		return json.Marshal(d)
 	default:
 		return json.Marshal(def)
 	}
@@ -220,6 +222,51 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 		aj.Body = append(aj.Body, data)
 	}
 	return json.Marshal(aj)
+}
+
+// WorkerRefJSON is the JSON representation of a worker reference.
+type WorkerRefJSON struct {
+	Name   string `json:"name"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+}
+
+// WorkerDefJSON is the JSON representation of WorkerDef.
+type WorkerDefJSON struct {
+	Type       string          `json:"type"`
+	Line       int             `json:"line"`
+	Column     int             `json:"column"`
+	Name       string          `json:"name"`
+	Namespace  string          `json:"namespace"`
+	TaskQueue  string          `json:"taskQueue"`
+	Workflows  []WorkerRefJSON `json:"workflows,omitempty"`
+	Activities []WorkerRefJSON `json:"activities,omitempty"`
+}
+
+func (w *WorkerDef) MarshalJSON() ([]byte, error) {
+	wj := WorkerDefJSON{
+		Type:      "workerDef",
+		Line:      w.Line,
+		Column:    w.Column,
+		Name:      w.Name,
+		Namespace: w.Namespace,
+		TaskQueue: w.TaskQueue,
+	}
+	for _, ref := range w.Workflows {
+		wj.Workflows = append(wj.Workflows, WorkerRefJSON{
+			Name:   ref.Name,
+			Line:   ref.Line,
+			Column: ref.Column,
+		})
+	}
+	for _, ref := range w.Activities {
+		wj.Activities = append(wj.Activities, WorkerRefJSON{
+			Name:   ref.Name,
+			Line:   ref.Line,
+			Column: ref.Column,
+		})
+	}
+	return json.Marshal(wj)
 }
 
 // Declaration JSON types

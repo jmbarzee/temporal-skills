@@ -43,7 +43,7 @@ func (p *Parser) addError(err *ParseError) {
 // keyword at column 1 (top-level boundary) or EOF.
 func (p *Parser) recoverTopLevel() {
 	for p.current.Type != token.EOF {
-		if (p.current.Type == token.WORKFLOW || p.current.Type == token.ACTIVITY) && p.current.Column == 1 {
+		if (p.current.Type == token.WORKFLOW || p.current.Type == token.ACTIVITY || p.current.Type == token.WORKER) && p.current.Column == 1 {
 			return
 		}
 		p.advance()

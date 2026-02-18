@@ -8,9 +8,10 @@ import (
 
 // ResolveError represents a resolution error with position info.
 type ResolveError struct {
-	Msg    string
-	Line   int
-	Column int
+	Msg      string
+	Line     int
+	Column   int
+	Severity string // "error" (default) or "warning"
 }
 
 func (e *ResolveError) Error() string {
@@ -22,6 +23,7 @@ func (e *ResolveError) Error() string {
 func Resolve(file *ast.File) []*ResolveError {
 	workflows := make(map[string]*ast.WorkflowDef)
 	activities := make(map[string]*ast.ActivityDef)
+	workers := make(map[string]*ast.WorkerDef)
 	var errs []*ResolveError
 
 	// Pass 1: Collect all definitions.
@@ -45,6 +47,15 @@ func Resolve(file *ast.File) []*ResolveError {
 				})
 			}
 			activities[d.Name] = d
+		case *ast.WorkerDef:
+			if _, exists := workers[d.Name]; exists {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("duplicate worker definition: %s", d.Name),
+					Line:   d.Line,
+					Column: d.Column,
+				})
+			}
+			workers[d.Name] = d
 		}
 	}
 
@@ -113,7 +124,130 @@ func Resolve(file *ast.File) []*ResolveError {
 		errs = append(errs, ctx.errs...)
 	}
 
+	// Pass 3: Worker validation.
+	errs = append(errs, resolveWorkers(workers, workflows, activities)...)
+
 	return errs
+}
+
+// resolveWorkers validates worker definitions.
+func resolveWorkers(workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef) []*ResolveError {
+	var errs []*ResolveError
+
+	// Track which workflows/activities are covered by at least one worker.
+	coveredWorkflows := make(map[string]bool)
+	coveredActivities := make(map[string]bool)
+
+	// Track task queue type sets for coherence checking.
+	// key: task queue name, value: list of workers on that queue
+	type queueInfo struct {
+		workerName string
+		workflows  map[string]bool
+		activities map[string]bool
+	}
+	queueWorkers := make(map[string][]queueInfo)
+
+	for _, w := range workers {
+		// Check workflow references.
+		for _, ref := range w.Workflows {
+			if _, ok := workflows[ref.Name]; !ok {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("worker %s references undefined workflow: %s", w.Name, ref.Name),
+					Line:   ref.Line,
+					Column: ref.Column,
+				})
+			} else {
+				coveredWorkflows[ref.Name] = true
+			}
+		}
+
+		// Check activity references.
+		for _, ref := range w.Activities {
+			if _, ok := activities[ref.Name]; !ok {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("worker %s references undefined activity: %s", w.Name, ref.Name),
+					Line:   ref.Line,
+					Column: ref.Column,
+				})
+			} else {
+				coveredActivities[ref.Name] = true
+			}
+		}
+
+		// Build queue info for coherence checking.
+		wfSet := make(map[string]bool)
+		for _, ref := range w.Workflows {
+			wfSet[ref.Name] = true
+		}
+		actSet := make(map[string]bool)
+		for _, ref := range w.Activities {
+			actSet[ref.Name] = true
+		}
+		queueWorkers[w.TaskQueue] = append(queueWorkers[w.TaskQueue], queueInfo{
+			workerName: w.Name,
+			workflows:  wfSet,
+			activities: actSet,
+		})
+	}
+
+	// Coverage warnings: defined workflows/activities not on any worker.
+	// Only emit if there are workers defined (otherwise it's not relevant).
+	if len(workers) > 0 {
+		for name, wf := range workflows {
+			if !coveredWorkflows[name] {
+				errs = append(errs, &ResolveError{
+					Msg:      fmt.Sprintf("workflow %s is not registered on any worker", name),
+					Line:     wf.Line,
+					Column:   wf.Column,
+					Severity: "warning",
+				})
+			}
+		}
+		for name, act := range activities {
+			if !coveredActivities[name] {
+				errs = append(errs, &ResolveError{
+					Msg:      fmt.Sprintf("activity %s is not registered on any worker", name),
+					Line:     act.Line,
+					Column:   act.Column,
+					Severity: "warning",
+				})
+			}
+		}
+	}
+
+	// Task queue coherence: workers on same queue should have same type sets.
+	for queue, infos := range queueWorkers {
+		if len(infos) < 2 {
+			continue
+		}
+		first := infos[0]
+		for _, other := range infos[1:] {
+			if sameStringSet(first.workflows, other.workflows) && sameStringSet(first.activities, other.activities) {
+				errs = append(errs, &ResolveError{
+					Msg:      fmt.Sprintf("workers %s and %s on task queue %q have identical type sets (redundant)", first.workerName, other.workerName, queue),
+					Severity: "warning",
+				})
+			} else if !sameStringSet(first.workflows, other.workflows) || !sameStringSet(first.activities, other.activities) {
+				errs = append(errs, &ResolveError{
+					Msg: fmt.Sprintf("workers %s and %s on task queue %q have different type sets", first.workerName, other.workerName, queue),
+				})
+			}
+		}
+	}
+
+	return errs
+}
+
+func sameStringSet(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
 }
 
 type resolveCtx struct {

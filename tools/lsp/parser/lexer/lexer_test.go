@@ -417,7 +417,7 @@ func TestOptionsBlockTokenStream(t *testing.T) {
 		{token.COLON, ":"},
 		{token.NEWLINE, ""},
 		{token.INDENT, ""},
-		{token.IDENT, "task_queue"},
+		{token.TASK_QUEUE, "task_queue"},
 		{token.COLON, ":"},
 		{token.STRING, "workers"},
 		{token.NEWLINE, ""},

@@ -253,6 +253,137 @@ workflow Child(y: int) -> (int):
 	}
 }
 
+func TestWorkerResolution(t *testing.T) {
+	input := `workflow ProcessOrder(orderId: string) -> (Result):
+    activity ChargePayment(orderId) -> payment
+    return Result{payment: payment}
+
+activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    activity ChargePayment
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
+func TestWorkerUndefinedWorkflow(t *testing.T) {
+	input := `activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+worker badWorker:
+    namespace orders
+    task_queue orderQueue
+    workflow NonExistent
+    activity ChargePayment
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "undefined workflow: NonExistent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about undefined workflow NonExistent")
+	}
+}
+
+func TestWorkerUndefinedActivity(t *testing.T) {
+	input := `workflow ProcessOrder(orderId: string) -> (Result):
+    return Result{}
+
+worker badWorker:
+    namespace orders
+    task_queue orderQueue
+    workflow ProcessOrder
+    activity NonExistent
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "undefined activity: NonExistent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about undefined activity NonExistent")
+	}
+}
+
+func TestDuplicateWorker(t *testing.T) {
+	input := `workflow Foo(x: int) -> (Result):
+    return x
+
+worker myWorker:
+    namespace ns
+    task_queue q
+    workflow Foo
+
+worker myWorker:
+    namespace ns
+    task_queue q
+    workflow Foo
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "duplicate worker definition: myWorker") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about duplicate worker definition")
+	}
+}
+
+func TestTaskQueueCoherence(t *testing.T) {
+	input := `workflow A(x: int) -> (int):
+    return x
+
+workflow B(x: int) -> (int):
+    return x
+
+activity C(x: int) -> (int):
+    return x
+
+worker worker1:
+    namespace ns
+    task_queue sharedQueue
+    workflow A
+    activity C
+
+worker worker2:
+    namespace ns
+    task_queue sharedQueue
+    workflow B
+    activity C
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "different type sets") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about different type sets on same task queue")
+	}
+}
+
 func TestHandlerBodyResolution(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
     signal Cancel(reason: string):

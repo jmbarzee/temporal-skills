@@ -6,7 +6,7 @@ type Node interface {
 	NodeColumn() int
 }
 
-// Definition is a top-level definition (workflow or activity).
+// Definition is a top-level definition (workflow, activity, or worker).
 type Definition interface {
 	Node
 	defNode()
@@ -59,6 +59,23 @@ type ActivityDef struct {
 }
 
 func (*ActivityDef) defNode() {}
+
+// WorkerRef is a reference to a workflow or activity name inside a worker block.
+type WorkerRef struct {
+	Pos
+	Name string
+}
+
+type WorkerDef struct {
+	Pos
+	Name       string
+	Namespace  string
+	TaskQueue  string
+	Workflows  []WorkerRef
+	Activities []WorkerRef
+}
+
+func (*WorkerDef) defNode() {}
 
 // ---------------------------------------------------------------------------
 // Workflow-level declarations (embedded in WorkflowDef)

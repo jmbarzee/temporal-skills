@@ -445,3 +445,34 @@ on_shutdown_signal:
     # Finish in-progress tasks
     # Then exit
 ```
+
+---
+
+## Worker Blocks in TWF
+
+TWF supports `worker` blocks that declare deployment topology directly in the design file. A worker connects workflows and activities to a task queue and namespace:
+
+```twf
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    workflow CancelOrder
+    activity ChargePayment
+    activity SendNotification
+```
+
+### Purpose
+
+Worker blocks let the resolver validate deployment topology at design time:
+
+- **Undefined references** — Catch typos (e.g., referencing a workflow that doesn't exist)
+- **Coverage gaps** — Warn when a defined workflow/activity isn't registered on any worker
+- **Task queue coherence** — Error when workers on the same queue register different type sets
+
+### Rules
+
+- Each worker must have exactly one `namespace` and one `task_queue`
+- Worker names use lowerCamelCase; workflow/activity names keep UpperCamelCase
+- Entries can appear in any order within the worker block
+- Multiple workers can reference the same task queue (but must register the same type sets)

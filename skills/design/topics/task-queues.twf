@@ -105,3 +105,49 @@ activity IOBoundWork(job: Job) -> (IOResult):
 
 activity DefaultProcess(job: Job) -> (ProcessResult):
     return process(job)
+
+# --- Worker definitions ---
+# Workers declare which workflows/activities poll a given task queue.
+
+worker highPriorityWorker:
+    namespace orders
+    task_queue highPriority
+    activity ProcessOrder
+
+worker standardWorker:
+    namespace orders
+    task_queue standard
+    activity ProcessOrder
+
+worker tenantWorker:
+    namespace tenants
+    task_queue tenantDefault
+    workflow TenantWorkflow
+    activity ProcessTenantData
+
+worker gpuWorker:
+    namespace media
+    task_queue gpuWorkers
+    activity TranscodeVideo
+
+worker standardMediaWorker:
+    namespace media
+    task_queue standardWorkers
+    activity ProcessImage
+
+worker globalWorker:
+    namespace global
+    task_queue globalDefault
+    workflow GlobalWorkflow
+    activity ProcessLocally
+
+worker routingWorker:
+    namespace jobs
+    task_queue jobDefault
+    workflow PriorityOrderWorkflow
+    workflow MediaWorkflow
+    workflow ComplexRoutingWorkflow
+    activity QuickValidation
+    activity HeavyCompute
+    activity IOBoundWork
+    activity DefaultProcess

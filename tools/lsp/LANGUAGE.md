@@ -8,7 +8,7 @@ A TWF file consists of zero or more top-level definitions:
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def
+definition ::= workflow_def | activity_def | worker_def
 ```
 
 ## Workflow Definitions
@@ -105,6 +105,44 @@ activity_def ::= 'activity' IDENT params ['->' return_type] ':' NEWLINE
 Return type is optional; if present, must be parenthesized (e.g., `-> (Result)`).
 
 Activities have access to a restricted statement set (no temporal primitives like timers or child workflows). Activities may use the `heartbeat()` primitive to report progress during long-running operations.
+
+## Worker Definitions
+
+Workers connect workflows and activities to a task queue and namespace, defining deployment topology:
+
+```
+worker_def ::= 'worker' IDENT ':' NEWLINE
+               INDENT
+               worker_entry*
+               DEDENT
+
+worker_entry ::= 'namespace' IDENT NEWLINE
+               | 'task_queue' IDENT NEWLINE
+               | 'workflow' IDENT NEWLINE
+               | 'activity' IDENT NEWLINE
+```
+
+Each worker must have exactly one `namespace` and one `task_queue` entry. Entries can appear in any order. Worker names use lowerCamelCase convention.
+
+**Example:**
+```
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    workflow CancelOrder
+    activity ChargePayment
+    activity SendNotification
+```
+
+### Resolution
+
+The resolver validates worker definitions:
+- Worker references to undefined workflows or activities produce errors
+- Duplicate worker names produce errors
+- Defined workflows/activities not registered on any worker produce warnings
+- Workers on the same task queue with different type sets produce errors
+- Workers on the same task queue with identical type sets produce warnings (redundant)
 
 ## Statements
 
@@ -533,6 +571,11 @@ field ::= IDENT ':' expr
 **Operators:**
 - `and`, `or`, `not` - Logical operators
 
+**Worker topology:**
+- `worker` - Worker definition
+- `namespace` - Worker namespace declaration
+- `task_queue` - Worker task queue declaration
+
 **Configuration:**
 - `options` - Options block for activity/workflow calls
 
@@ -650,6 +693,10 @@ Common error types:
 - Invalid await targets (e.g., awaiting a query)
 - Condition with result binding (conditions cannot have `-> result`)
 - `set`/`unset` on undefined condition
+- Worker references undefined workflow or activity
+- Duplicate worker definitions
+- Workers on same task queue with different type sets
+- Workflow/activity not registered on any worker (warning)
 - Unknown option key in `options:` block
 - Wrong value type for option key (e.g., number where duration expected)
 - Invalid enum value for option key
@@ -662,7 +709,7 @@ See the `topics/` directory for complete working examples of all language featur
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def
+definition ::= workflow_def | activity_def | worker_def
 
 workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT
@@ -673,6 +720,13 @@ workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
 
 activity_def ::= 'activity' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT statement* DEDENT
+
+worker_def ::= 'worker' IDENT ':' NEWLINE
+               INDENT worker_entry* DEDENT
+worker_entry ::= 'namespace' IDENT NEWLINE
+               | 'task_queue' IDENT NEWLINE
+               | 'workflow' IDENT NEWLINE
+               | 'activity' IDENT NEWLINE
 
 options_block ::= 'options' ':' NEWLINE INDENT option_entry+ DEDENT
 option_entry  ::= IDENT ':' value NEWLINE

@@ -1392,3 +1392,159 @@ func TestCloseRequiresReason(t *testing.T) {
 
 // REMOVED: TestWatchWithMultipleHints - watch keyword and hint statements are no longer supported.
 // REMOVED: TestMultipleWatchCases - watch keyword is no longer supported.
+
+func TestWorkerDef(t *testing.T) {
+	input := `workflow ProcessOrder(orderId: string) -> (Result):
+    return Result{}
+
+activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    activity ChargePayment
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(file.Definitions) != 3 {
+		t.Fatalf("expected 3 definitions, got %d", len(file.Definitions))
+	}
+	w, ok := file.Definitions[2].(*ast.WorkerDef)
+	if !ok {
+		t.Fatalf("expected WorkerDef, got %T", file.Definitions[2])
+	}
+	if w.Name != "orderWorker" {
+		t.Errorf("expected name 'orderWorker', got %q", w.Name)
+	}
+	if w.Namespace != "orders" {
+		t.Errorf("expected namespace 'orders', got %q", w.Namespace)
+	}
+	if w.TaskQueue != "orderProcessing" {
+		t.Errorf("expected task queue 'orderProcessing', got %q", w.TaskQueue)
+	}
+	if len(w.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow ref, got %d", len(w.Workflows))
+	}
+	if w.Workflows[0].Name != "ProcessOrder" {
+		t.Errorf("expected workflow ref 'ProcessOrder', got %q", w.Workflows[0].Name)
+	}
+	if len(w.Activities) != 1 {
+		t.Fatalf("expected 1 activity ref, got %d", len(w.Activities))
+	}
+	if w.Activities[0].Name != "ChargePayment" {
+		t.Errorf("expected activity ref 'ChargePayment', got %q", w.Activities[0].Name)
+	}
+}
+
+func TestWorkerDefMultipleWorkflows(t *testing.T) {
+	input := `workflow A(x: int) -> (int):
+    return x
+
+workflow B(x: int) -> (int):
+    return x
+
+activity C(x: int) -> (int):
+    return x
+
+activity D(x: int) -> (int):
+    return x
+
+worker multiWorker:
+    namespace multi
+    task_queue multiQueue
+    workflow A
+    workflow B
+    activity C
+    activity D
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	w := file.Definitions[4].(*ast.WorkerDef)
+	if len(w.Workflows) != 2 {
+		t.Fatalf("expected 2 workflow refs, got %d", len(w.Workflows))
+	}
+	if len(w.Activities) != 2 {
+		t.Fatalf("expected 2 activity refs, got %d", len(w.Activities))
+	}
+}
+
+func TestWorkerDefMissingNamespace(t *testing.T) {
+	input := `worker badWorker:
+    task_queue someQueue
+    workflow Foo
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for missing namespace, got nil")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T: %v", err, err)
+	}
+	if !strings.Contains(pe.Msg, "missing required namespace") {
+		t.Errorf("unexpected error: %q", pe.Msg)
+	}
+}
+
+func TestWorkerDefMissingTaskQueue(t *testing.T) {
+	input := `worker badWorker:
+    namespace orders
+    workflow Foo
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for missing task_queue, got nil")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T: %v", err, err)
+	}
+	if !strings.Contains(pe.Msg, "missing required task_queue") {
+		t.Errorf("unexpected error: %q", pe.Msg)
+	}
+}
+
+func TestWorkerDefDuplicateNamespace(t *testing.T) {
+	input := `worker badWorker:
+    namespace orders
+    namespace shipping
+    task_queue someQueue
+`
+	_, err := ParseFile(input)
+	if err == nil {
+		t.Fatal("expected error for duplicate namespace, got nil")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T: %v", err, err)
+	}
+	if !strings.Contains(pe.Msg, "duplicate namespace") {
+		t.Errorf("unexpected error: %q", pe.Msg)
+	}
+}
+
+func TestWorkerDefEmptyBody(t *testing.T) {
+	input := `worker emptyWorker:
+    namespace orders
+    task_queue someQueue
+`
+	// Worker with namespace and task_queue but no workflow/activity refs should parse OK
+	// (it's valid syntax, resolver can warn about it if needed)
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	w := file.Definitions[0].(*ast.WorkerDef)
+	if len(w.Workflows) != 0 {
+		t.Errorf("expected 0 workflow refs, got %d", len(w.Workflows))
+	}
+	if len(w.Activities) != 0 {
+		t.Errorf("expected 0 activity refs, got %d", len(w.Activities))
+	}
+}

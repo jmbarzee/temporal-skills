@@ -256,3 +256,40 @@ activity Compute(value: int, flag: bool) -> (Result):
 
 activity ComplexOptions(input: Input) -> (Result):
     return Result{input: input}
+
+# ===== WORKER DEFINITIONS =====
+
+worker specWorker:
+    namespace specTests
+    task_queue specQueue
+    workflow SpecCompliance
+    workflow EdgeCases
+    workflow MinimalWorkflow
+    workflow NoReturnWorkflow
+    workflow CommentTest
+    workflow NestedAwaitExample
+    workflow SubWorkflow
+    workflow BackgroundTask
+    workflow FireAndForget
+    workflow ExternalTask
+    activity ValidateInput
+    activity FetchData
+    activity ProcessData
+    activity ProcessItem
+    activity Task1
+    activity Task2
+    activity MinimalActivity
+    activity DoSomething
+    activity Process
+    activity LongTask1
+    activity LongTask2
+    activity LogEvent
+    activity Approve
+    activity Reject
+    activity TimeoutAction1
+    activity TimeoutAction2
+    activity HandleTimeout
+    activity HandleDefault
+    activity TestNested
+    activity Compute
+    activity ComplexOptions

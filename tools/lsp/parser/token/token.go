@@ -15,6 +15,11 @@ const (
 	// Keywords -- top-level defs
 	WORKFLOW
 	ACTIVITY
+	WORKER
+
+	// Keywords -- worker-level declarations
+	NAMESPACE
+	TASK_QUEUE
 
 	// Keywords -- workflow-level declarations
 	SIGNAL
@@ -84,6 +89,9 @@ var tokenNames = map[TokenType]string{
 	DEDENT:          "DEDENT",
 	WORKFLOW:        "WORKFLOW",
 	ACTIVITY:        "ACTIVITY",
+	WORKER:          "WORKER",
+	NAMESPACE:       "NAMESPACE",
+	TASK_QUEUE:      "TASK_QUEUE",
 	SIGNAL:          "SIGNAL",
 	QUERY:           "QUERY",
 	UPDATE:          "UPDATE",
@@ -149,6 +157,9 @@ func (t Token) String() string {
 var keywords = map[string]TokenType{
 	"workflow":        WORKFLOW,
 	"activity":        ACTIVITY,
+	"worker":          WORKER,
+	"namespace":       NAMESPACE,
+	"task_queue":      TASK_QUEUE,
 	"signal":          SIGNAL,
 	"query":           QUERY,
 	"update":          UPDATE,

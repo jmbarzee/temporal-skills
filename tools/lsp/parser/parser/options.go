@@ -122,11 +122,17 @@ func (p *Parser) parseOptionEntries(schema map[string]*optionSchema) ([]*ast.Opt
 func (p *Parser) parseOptionEntry(schema map[string]*optionSchema) (*ast.OptionEntry, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 
-	keyTok, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
+	var key string
+	switch p.current.Type {
+	case token.IDENT:
+		key = p.current.Literal
+		p.advance()
+	case token.TASK_QUEUE:
+		key = "task_queue"
+		p.advance()
+	default:
+		return nil, p.errorf("expected option key, got %s", p.current.Type)
 	}
-	key := keyTok.Literal
 
 	// Look up schema for this key.
 	var sch *optionSchema

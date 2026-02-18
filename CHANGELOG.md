@@ -1,5 +1,54 @@
 # TWF Language Changelog
 
+## v0.5.0 - Worker Blocks
+
+New top-level `worker` definition that connects workflows and activities to a task queue and namespace, enabling deployment topology validation at design time.
+
+### New syntax: `worker`
+
+```twf
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    workflow CancelOrder
+    activity ChargePayment
+    activity SendNotification
+```
+
+### New tokens
+
+- `worker` — top-level definition keyword
+- `namespace` — worker namespace declaration
+- `task_queue` — worker task queue declaration
+
+### AST
+
+- New `WorkerDef` and `WorkerRef` AST nodes
+- `WorkerDef` includes `Name`, `Namespace`, `TaskQueue`, `Workflows`, and `Activities` fields
+- JSON output uses type `"workerDef"` with `workflows` and `activities` arrays
+
+### Resolver validation
+
+- Worker references to undefined workflows/activities produce errors
+- Duplicate worker names produce errors
+- Defined workflows/activities not registered on any worker produce warnings
+- Workers on the same task queue with different type sets produce errors
+- Workers on the same task queue with identical type sets produce warnings (redundant)
+
+### Semantic tokens
+
+- `worker` keyword colored as `type` (same as `workflow`/`activity`)
+- `namespace` and `task_queue` keywords colored as `property` (muted, like `options`)
+- Worker name after `worker` keyword colored as `function` with declaration modifier
+- Namespace/queue values colored as `variable`
+
+### Options parser fix
+
+The `task_queue` keyword is now accepted as a valid option key in `options:` blocks (previously it tokenized as IDENT, now it tokenizes as TASK_QUEUE).
+
+---
+
 ## v0.4.0 - Options Restricted to Calls Only
 
 **Breaking change** — options blocks are no longer allowed on activity or workflow definitions. Options are now only valid on call sites (`activity Name(args)` and `workflow Name(args)` statements).

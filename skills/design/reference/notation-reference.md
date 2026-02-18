@@ -34,5 +34,8 @@
 | `signal Name(params):` | Signal handler (in workflow, before body) |
 | `query Name(params) -> (Type):` | Query handler (in workflow, before body) |
 | `update Name(params) -> (Type):` | Update handler (in workflow, before body) |
+| `worker name:` | Worker definition (task queue + registered types) |
+| `namespace name` | Worker namespace declaration (inside worker block) |
+| `task_queue name` | Worker task queue declaration (inside worker block) |
 
 Full grammar: [`LANGUAGE.md`](../lsp/LANGUAGE.md).

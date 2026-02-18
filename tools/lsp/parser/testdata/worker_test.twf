@@ -1,0 +1,24 @@
+# Worker block test data
+
+workflow ProcessOrder(orderId: string) -> (OrderResult):
+    activity ChargePayment(orderId) -> payment
+    activity SendNotification(orderId)
+    close complete(OrderResult{payment: payment})
+
+workflow CancelOrder(orderId: string) -> (CancelResult):
+    activity SendNotification(orderId)
+    close complete(CancelResult{})
+
+activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+activity SendNotification(orderId: string):
+    notify(orderId)
+
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    workflow CancelOrder
+    activity ChargePayment
+    activity SendNotification

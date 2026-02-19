@@ -418,6 +418,13 @@ class WorkflowVisualizerPanel {
               );
             }
             break;
+          case "openFile":
+            // Open a file in the editor when the file filter narrows to a single file
+            if (message.file) {
+              const uri = vscode.Uri.file(message.file);
+              vscode.window.showTextDocument(uri, { preserveFocus: false });
+            }
+            break;
         }
       },
       null,

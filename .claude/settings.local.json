@@ -37,7 +37,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(for:*)",
       "Bash(do echo \"=== $f ===\")",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npm run build:webview:*)",
+      "Bash(npm run compile:*)"
     ]
   }
 }

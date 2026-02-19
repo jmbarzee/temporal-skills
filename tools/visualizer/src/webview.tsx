@@ -1,7 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { WorkflowCanvas } from './components/WorkflowCanvas'
-import { RefocusContext } from './components/blocks/useRefocus'
 import type { TWFFile } from './types/ast'
 import './styles/index.css'
 
@@ -43,6 +42,11 @@ function WebviewApp() {
     vscode.postMessage({ type: 'refocus' })
   }, [])
 
+  // Open a file in the editor when the file filter narrows to one
+  const openFile = React.useCallback((file: string) => {
+    vscode.postMessage({ type: 'openFile', file })
+  }, [])
+
   if (error) {
     return (
       <div className="error-container">
@@ -61,9 +65,9 @@ function WebviewApp() {
   }
 
   return (
-    <RefocusContext.Provider value={requestRefocus}>
-      <WorkflowCanvas ast={ast} />
-    </RefocusContext.Provider>
+    <div onClick={requestRefocus}>
+      <WorkflowCanvas ast={ast} onOpenFile={openFile} />
+    </div>
   )
 }
 

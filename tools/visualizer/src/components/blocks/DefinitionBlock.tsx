@@ -2,7 +2,7 @@ import React from 'react'
 import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
-import { useRefocus } from './useRefocus'
+import { useToggle } from './useToggle'
 import { HandlerContext } from '../WorkflowCanvas'
 import './blocks.css'
 
@@ -11,34 +11,20 @@ interface DefinitionBlockProps {
 }
 
 export function DefinitionBlock({ definition }: DefinitionBlockProps) {
-  const [expanded, setExpanded] = React.useState(false)
-  const refocus = useRefocus()
-
-  const handleToggle = () => {
-    setExpanded(!expanded)
-    refocus()
-  }
-
   if (definition.type === 'workflowDef') {
-    return <WorkflowDefBlock def={definition} expanded={expanded} onToggle={handleToggle} />
+    return <WorkflowDefBlock def={definition} />
   } else {
-    return <ActivityDefBlock def={definition} expanded={expanded} onToggle={handleToggle} />
+    return <ActivityDefBlock def={definition} />
   }
 }
 
-interface WorkflowDefBlockProps {
-  def: WorkflowDef
-  expanded: boolean
-  onToggle: () => void
-}
-
-function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
+function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
   const signature = formatWorkflowSignature(def)
-  const [stateExpanded, setStateExpanded] = React.useState(false)
-  const [signalsExpanded, setSignalsExpanded] = React.useState(false)
-  const [queriesExpanded, setQueriesExpanded] = React.useState(false)
-  const [updatesExpanded, setUpdatesExpanded] = React.useState(false)
-  const refocus = useRefocus()
+  const [expanded, toggle] = useToggle()
+  const [stateExpanded, toggleState] = useToggle()
+  const [signalsExpanded, toggleSignals] = useToggle()
+  const [queriesExpanded, toggleQueries] = useToggle()
+  const [updatesExpanded, toggleUpdates] = useToggle()
 
   const hasState = def.state && ((def.state.conditions && def.state.conditions.length > 0) || (def.state.rawStmts && def.state.rawStmts.length > 0))
   const hasSignals = def.signals && def.signals.length > 0
@@ -46,10 +32,6 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
   const hasUpdates = def.updates && def.updates.length > 0
 
   const stateItemCount = (def.state?.conditions?.length || 0) + (def.state?.rawStmts?.length || 0)
-  const toggleState = () => { setStateExpanded(!stateExpanded); refocus() }
-  const toggleSignals = () => { setSignalsExpanded(!signalsExpanded); refocus() }
-  const toggleQueries = () => { setQueriesExpanded(!queriesExpanded); refocus() }
-  const toggleUpdates = () => { setUpdatesExpanded(!updatesExpanded); refocus() }
 
   // Build handler context for this workflow
   const handlerContext = React.useMemo<HandlerContext>(() => {
@@ -67,7 +49,7 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
   return (
     <HandlerContext.Provider value={handlerContext}>
       <div className={`block block-workflow ${expanded ? 'expanded' : 'collapsed'}`}>
-        <div className="block-header" onClick={onToggle}>
+        <div className="block-header" onClick={toggle}>
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
           <span className="block-icon"><InterlockingGearsIcon /></span>
           <span className="block-keyword">workflow</span>
@@ -180,20 +162,14 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
 
 // Signal declaration with expandable handler body
 function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
-  const [expanded, setExpanded] = React.useState(false)
-  const refocus = useRefocus()
   const hasBody = decl.body && decl.body.length > 0
-
-  const handleToggle = () => { 
-    if (hasBody) { setExpanded(!expanded) }
-    refocus()
-  }
+  const [expanded, toggle] = useToggle(false, hasBody)
 
   const signature = `${decl.name}(${decl.params})`
 
   return (
     <div className={`declaration declaration-signal ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
-      <div className="declaration-header" onClick={handleToggle}>
+      <div className="declaration-header" onClick={toggle}>
         {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">↪</span>
@@ -213,21 +189,15 @@ function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
 
 // Query declaration with expandable handler body
 function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
-  const [expanded, setExpanded] = React.useState(false)
-  const refocus = useRefocus()
   const hasBody = decl.body && decl.body.length > 0
-
-  const handleToggle = () => { 
-    if (hasBody) { setExpanded(!expanded) }
-    refocus()
-  }
+  const [expanded, toggle] = useToggle(false, hasBody)
 
   let signature = `${decl.name}(${decl.params})`
   if (decl.returnType) signature += ` → ${decl.returnType}`
 
   return (
     <div className={`declaration declaration-query ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
-      <div className="declaration-header" onClick={handleToggle}>
+      <div className="declaration-header" onClick={toggle}>
         {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">↩</span>
@@ -247,21 +217,15 @@ function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
 
 // Update declaration with expandable handler body
 function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
-  const [expanded, setExpanded] = React.useState(false)
-  const refocus = useRefocus()
   const hasBody = decl.body && decl.body.length > 0
-
-  const handleToggle = () => { 
-    if (hasBody) { setExpanded(!expanded) }
-    refocus()
-  }
+  const [expanded, toggle] = useToggle(false, hasBody)
 
   let signature = `${decl.name}(${decl.params})`
   if (decl.returnType) signature += ` → ${decl.returnType}`
 
   return (
     <div className={`declaration declaration-update ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
-      <div className="declaration-header" onClick={handleToggle}>
+      <div className="declaration-header" onClick={toggle}>
         {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
         {!hasBody && <span className="block-toggle-placeholder" />}
         <span className="declaration-icon">⇄</span>
@@ -279,18 +243,13 @@ function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
   )
 }
 
-interface ActivityDefBlockProps {
-  def: ActivityDef
-  expanded: boolean
-  onToggle: () => void
-}
-
-function ActivityDefBlock({ def, expanded, onToggle }: ActivityDefBlockProps) {
+function ActivityDefBlock({ def }: { def: ActivityDef }) {
+  const [expanded, toggle] = useToggle()
   const signature = formatActivitySignature(def)
 
   return (
     <div className={`block block-activity-def ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={onToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon"><SingleGearIcon /></span>
         <span className="block-keyword">activity</span>

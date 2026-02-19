@@ -5,6 +5,7 @@ import { SearchIcon, SingleGearIcon } from './icons/GearIcons'
 
 interface WorkflowCanvasProps {
   ast: TWFFile
+  onOpenFile?: (file: string) => void
 }
 
 export interface DefinitionContext {
@@ -30,7 +31,7 @@ export const HandlerContext = React.createContext<HandlerContext>({
   updates: new Map(),
 })
 
-export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
+export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
   // --- Header state ---
   const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(new Set())
   const [searchActive, setSearchActive] = React.useState(false)
@@ -86,6 +87,13 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
       return next
     })
   }
+
+  // When file filter narrows to exactly one file, open it in the editor
+  React.useEffect(() => {
+    if (selectedFiles.size === 1 && onOpenFile) {
+      onOpenFile(selectedFiles.values().next().value!)
+    }
+  }, [selectedFiles, onOpenFile])
 
   // Toggle search bar
   const toggleSearch = () => {

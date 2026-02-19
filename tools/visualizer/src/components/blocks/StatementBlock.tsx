@@ -20,7 +20,7 @@ import type {
 } from '../../types/ast'
 import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
-import { useRefocus } from './useRefocus'
+import { useToggle } from './useToggle'
 import './blocks.css'
 
 interface StatementBlockProps {
@@ -70,22 +70,16 @@ export function StatementBlock({ statement }: StatementBlockProps) {
 
 // Activity Call - expandable to show activity definition body directly
 function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
-  const [expanded, setExpanded] = React.useState(false)
   const context = React.useContext(DefinitionContext)
   const activityDef = context.activities.get(stmt.name)
-  const refocus = useRefocus()
   const isDefined = !!activityDef
+  const [expanded, toggle] = useToggle(false, isDefined)
 
   const signature = formatActivityCallSignature(stmt)
 
-  const handleToggle = () => {
-    if (isDefined) { setExpanded(!expanded) }
-    refocus()
-  }
-
   return (
     <div className={`block block-activity ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         {isDefined ? (
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         ) : (
@@ -114,14 +108,13 @@ function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
 
 // Workflow Call - expandable to show workflow definition body directly
 function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
-  const [expanded, setExpanded] = React.useState(false)
-  const [signalsExpanded, setSignalsExpanded] = React.useState(false)
-  const [queriesExpanded, setQueriesExpanded] = React.useState(false)
-  const [updatesExpanded, setUpdatesExpanded] = React.useState(false)
   const context = React.useContext(DefinitionContext)
   const workflowDef = context.workflows.get(stmt.name)
-  const refocus = useRefocus()
   const isDefined = !!workflowDef
+  const [expanded, toggle] = useToggle(false, isDefined)
+  const [signalsExpanded, toggleSignals] = useToggle()
+  const [queriesExpanded, toggleQueries] = useToggle()
+  const [updatesExpanded, toggleUpdates] = useToggle()
 
   const modePrefix = stmt.mode === 'detach' ? 'detach ' : ''
   const signature = formatWorkflowCallSignature(stmt)
@@ -130,17 +123,9 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const hasQueries = workflowDef?.queries && workflowDef.queries.length > 0
   const hasUpdates = workflowDef?.updates && workflowDef.updates.length > 0
 
-  const handleToggle = () => {
-    if (isDefined) { setExpanded(!expanded) }
-    refocus()
-  }
-  const toggleSignals = () => { setSignalsExpanded(!signalsExpanded); refocus() }
-  const toggleQueries = () => { setQueriesExpanded(!queriesExpanded); refocus() }
-  const toggleUpdates = () => { setUpdatesExpanded(!updatesExpanded); refocus() }
-
   return (
     <div className={`block block-workflow-call block-mode-${stmt.mode} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         {isDefined ? (
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         ) : (
@@ -240,21 +225,15 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
 
 // Single await statement - await timer/signal/update/activity/workflow
 function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
-  const [expanded, setExpanded] = React.useState(false)
   const context = React.useContext(DefinitionContext)
   const handlers = React.useContext(HandlerContext)
-  const refocus = useRefocus()
 
   const { icon, keyword, signature, blockClass, expandableDef, isUnresolved } = getAwaitStmtDisplay(stmt, context, handlers)
-
-  const handleToggle = () => {
-    if (expandableDef) { setExpanded(!expanded) }
-    refocus()
-  }
+  const [expanded, toggle] = useToggle(false, !!expandableDef)
 
   return (
     <div className={`block ${blockClass} ${expanded ? 'expanded' : 'collapsed'} ${isUnresolved ? 'block-unresolved' : ''}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         {expandableDef ? (
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         ) : (
@@ -327,14 +306,11 @@ function getAwaitStmtDisplay(
 
 // Await All - expandable to show body (waits for all operations to complete)
 function AwaitAllBlockComponent({ stmt }: { stmt: AwaitAllBlock }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
-
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
+  const [expanded, toggle] = useToggle(true)
 
   return (
     <div className={`block block-await-all ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon">⫴</span>
         <span className="block-keyword">await all</span>
@@ -354,15 +330,12 @@ function AwaitAllBlockComponent({ stmt }: { stmt: AwaitAllBlock }) {
 
 // Await One - expandable, shows cases where first to complete wins
 function AwaitOneBlockComponent({ stmt }: { stmt: AwaitOneBlock }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
+  const [expanded, toggle] = useToggle(true)
   const caseWord = stmt.cases.length === 1 ? 'case' : 'cases'
-
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
 
   return (
     <div className={`block block-await-one ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon-placeholder" />
         <span className="block-keyword">await one</span>
@@ -382,27 +355,21 @@ function AwaitOneBlockComponent({ stmt }: { stmt: AwaitOneBlock }) {
 
 // Render await one cases with unified tag design
 function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
-  const [expanded, setExpanded] = React.useState(false)
   const context = React.useContext(DefinitionContext)
   const handlers = React.useContext(HandlerContext)
-  const refocus = useRefocus()
   const hasBody = awaitCase.body && awaitCase.body.length > 0
-  const isExpandable = hasBody || awaitCase.awaitAll
+  const isExpandable = hasBody || !!awaitCase.awaitAll
+  const [expanded, toggle] = useToggle(false, isExpandable)
 
   // Determine display based on case kind
   const { contentClass, icon, keyword, signature, isUnresolved } = getAwaitOneCaseDisplay(awaitCase, context, handlers)
-
-  const handleToggle = () => { 
-    if (isExpandable) { setExpanded(!expanded) }
-    refocus()
-  }
 
   return (
     <div className={`tagged-composite ${expanded ? 'expanded' : ''} ${isUnresolved ? 'tagged-unresolved' : ''}`}>
       <div className="tagged-tag">
         <span className="tagged-tag-label">option</span>
       </div>
-      <div className={`tagged-content ${contentClass} ${isExpandable ? 'expandable' : ''}`} onClick={handleToggle}>
+      <div className={`tagged-content ${contentClass} ${isExpandable ? 'expandable' : ''}`} onClick={toggle}>
         {isExpandable && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
         {!isExpandable && <span className="block-toggle-placeholder" />}
         <span className="tagged-icon">{icon}</span>
@@ -472,14 +439,11 @@ function getAwaitOneCaseDisplay(
 
 // Switch - expandable
 function SwitchBlockComponent({ stmt }: { stmt: SwitchBlock }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
-
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
+  const [expanded, toggle] = useToggle(true)
 
   return (
     <div className={`block block-switch ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon-placeholder" />
         <span className="block-keyword">switch</span>
@@ -512,14 +476,11 @@ function SwitchBlockComponent({ stmt }: { stmt: SwitchBlock }) {
 }
 
 function SwitchCaseBlock({ switchCase }: { switchCase: SwitchBlock['cases'][0] }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
-
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
+  const [expanded, toggle] = useToggle(true)
 
   return (
     <div className={`block block-switch-case ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon-placeholder" />
         <span className="block-keyword">case</span>
@@ -539,15 +500,12 @@ function SwitchCaseBlock({ switchCase }: { switchCase: SwitchBlock['cases'][0] }
 
 // If - expandable
 function IfBlock({ stmt }: { stmt: IfStmt }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
+  const [expanded, toggle] = useToggle(true)
   const hasElse = stmt.elseBody && stmt.elseBody.length > 0
-
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
 
   return (
     <div className={`block block-if ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon-placeholder" />
         <span className="block-keyword">if</span>
@@ -577,9 +535,8 @@ function IfBlock({ stmt }: { stmt: IfStmt }) {
 
 // For - expandable
 function ForBlock({ stmt }: { stmt: ForStmt }) {
-  const [expanded, setExpanded] = React.useState(true)
-  const refocus = useRefocus()
-  
+  const [expanded, toggle] = useToggle(true)
+
   let label = ''
   if (stmt.variant === 'iteration') {
     label = `${stmt.variable} in ${stmt.iterable}`
@@ -589,11 +546,9 @@ function ForBlock({ stmt }: { stmt: ForStmt }) {
     label = '∞'
   }
 
-  const handleToggle = () => { setExpanded(!expanded); refocus() }
-
   return (
     <div className={`block block-for ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="block-header" onClick={handleToggle}>
+      <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         <span className="block-icon">↻</span>
         <span className="block-keyword">for</span>

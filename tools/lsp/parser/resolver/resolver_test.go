@@ -262,10 +262,13 @@ activity ChargePayment(orderId: string) -> (Payment):
     return charge(orderId)
 
 worker orderWorker:
-    namespace orders
-    task_queue orderProcessing
     workflow ProcessOrder
     activity ChargePayment
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orderProcessing"
 `
 	file := mustParse(t, input)
 	errs := Resolve(file)
@@ -281,8 +284,6 @@ func TestWorkerUndefinedWorkflow(t *testing.T) {
     return charge(orderId)
 
 worker badWorker:
-    namespace orders
-    task_queue orderQueue
     workflow NonExistent
     activity ChargePayment
 `
@@ -304,8 +305,6 @@ func TestWorkerUndefinedActivity(t *testing.T) {
     return Result{}
 
 worker badWorker:
-    namespace orders
-    task_queue orderQueue
     workflow ProcessOrder
     activity NonExistent
 `
@@ -327,13 +326,9 @@ func TestDuplicateWorker(t *testing.T) {
     return x
 
 worker myWorker:
-    namespace ns
-    task_queue q
     workflow Foo
 
 worker myWorker:
-    namespace ns
-    task_queue q
     workflow Foo
 `
 	file := mustParse(t, input)
@@ -349,6 +344,106 @@ worker myWorker:
 	}
 }
 
+func TestDuplicateNamespace(t *testing.T) {
+	input := `worker w:
+    workflow Foo
+
+workflow Foo(x: int) -> (int):
+    return x
+
+namespace myNs:
+    worker w
+        options:
+            task_queue: "q"
+
+namespace myNs:
+    worker w
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "duplicate namespace definition: myNs") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about duplicate namespace definition")
+	}
+}
+
+func TestNamespaceUndefinedWorker(t *testing.T) {
+	input := `namespace orders:
+    worker nonExistent
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "undefined worker: nonExistent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about undefined worker nonExistent")
+	}
+}
+
+func TestWorkerMissingTaskQueue(t *testing.T) {
+	input := `workflow Foo(x: int) -> (int):
+    return x
+
+worker w:
+    workflow Foo
+
+namespace orders:
+    worker w
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "missing required task_queue") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected error about missing task_queue option")
+	}
+}
+
+func TestWorkerNotInstantiated(t *testing.T) {
+	input := `workflow Foo(x: int) -> (int):
+    return x
+
+worker usedWorker:
+    workflow Foo
+
+worker unusedWorker:
+    workflow Foo
+
+namespace orders:
+    worker usedWorker
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	var found bool
+	for _, e := range errs {
+		if strings.Contains(e.Msg, "worker unusedWorker is not instantiated") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected warning about worker not instantiated in any namespace")
+	}
+}
+
 func TestTaskQueueCoherence(t *testing.T) {
 	input := `workflow A(x: int) -> (int):
     return x
@@ -360,16 +455,20 @@ activity C(x: int) -> (int):
     return x
 
 worker worker1:
-    namespace ns
-    task_queue sharedQueue
     workflow A
     activity C
 
 worker worker2:
-    namespace ns
-    task_queue sharedQueue
     workflow B
     activity C
+
+namespace ns:
+    worker worker1
+        options:
+            task_queue: "sharedQueue"
+    worker worker2
+        options:
+            task_queue: "sharedQueue"
 `
 	file := mustParse(t, input)
 	errs := Resolve(file)
@@ -381,6 +480,32 @@ worker worker2:
 	}
 	if !found {
 		t.Error("expected error about different type sets on same task queue")
+	}
+}
+
+func TestNamespaceResolution(t *testing.T) {
+	input := `workflow ProcessOrder(orderId: string) -> (Result):
+    activity ChargePayment(orderId) -> payment
+    return Result{payment: payment}
+
+activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+worker orderWorker:
+    workflow ProcessOrder
+    activity ChargePayment
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orderProcessing"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
 	}
 }
 

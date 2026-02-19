@@ -8,7 +8,7 @@ A TWF file consists of zero or more top-level definitions:
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def | worker_def
+definition ::= workflow_def | activity_def | worker_def | namespace_def
 ```
 
 ## Workflow Definitions
@@ -108,7 +108,7 @@ Activities have access to a restricted statement set (no temporal primitives lik
 
 ## Worker Definitions
 
-Workers connect workflows and activities to a task queue and namespace, defining deployment topology:
+Workers are reusable type sets that group workflows and activities:
 
 ```
 worker_def ::= 'worker' IDENT ':' NEWLINE
@@ -116,33 +116,87 @@ worker_def ::= 'worker' IDENT ':' NEWLINE
                worker_entry*
                DEDENT
 
-worker_entry ::= 'namespace' IDENT NEWLINE
-               | 'task_queue' IDENT NEWLINE
-               | 'workflow' IDENT NEWLINE
+worker_entry ::= 'workflow' IDENT NEWLINE
                | 'activity' IDENT NEWLINE
 ```
 
-Each worker must have exactly one `namespace` and one `task_queue` entry. Entries can appear in any order. Worker names use lowerCamelCase convention.
+Worker names use lowerCamelCase convention. Workers contain only workflow and activity references — deployment configuration (task_queue, etc.) is specified when the worker is instantiated in a namespace block.
 
 **Example:**
 ```
-worker orderWorker:
-    namespace orders
-    task_queue orderProcessing
+worker orderTypes:
     workflow ProcessOrder
     workflow CancelOrder
     activity ChargePayment
     activity SendNotification
 ```
 
+## Namespace Definitions
+
+Namespaces instantiate workers with deployment options, defining the deployment topology:
+
+```
+namespace_def ::= 'namespace' IDENT ':' NEWLINE
+                  INDENT
+                  namespace_entry*
+                  DEDENT
+
+namespace_entry ::= 'worker' IDENT NEWLINE [options_line]
+```
+
+Each worker instantiation inside a namespace requires a `task_queue` option. Additional worker configuration options are available.
+
+**Example:**
+```
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "orderProcessing"
+            max_concurrent_activity_executions: 50
+```
+
+The same worker type set can be instantiated in multiple namespaces with different options:
+
+```
+namespace staging:
+    worker orderTypes
+        options:
+            task_queue: "staging-orders"
+```
+
+### Worker Options
+
+Worker instantiation options (all snake_case):
+
+| Key | Type |
+|-----|------|
+| `task_queue` | string (required) |
+| `worker_activity_rate_limit` | number |
+| `task_queue_activity_rate_limit` | number |
+| `worker_local_activity_rate_limit` | number |
+| `max_concurrent_activity_executions` | number |
+| `max_concurrent_workflow_task_executions` | number |
+| `max_concurrent_local_activity_executions` | number |
+| `max_concurrent_workflow_task_pollers` | number |
+| `max_concurrent_activity_task_pollers` | number |
+| `max_cached_workflows` | number |
+| `sticky_schedule_to_start_timeout` | duration |
+| `heartbeat_throttle_interval` | duration |
+| `worker_identity` | string |
+| `worker_shutdown_timeout` | duration |
+| `local_activity_only_mode` | bool |
+
 ### Resolution
 
-The resolver validates worker definitions:
+The resolver validates workers and namespaces:
 - Worker references to undefined workflows or activities produce errors
-- Duplicate worker names produce errors
-- Defined workflows/activities not registered on any worker produce warnings
-- Workers on the same task queue with different type sets produce errors
+- Duplicate worker or namespace names produce errors
+- Namespace references to undefined workers produce errors
+- Worker instantiations missing `task_queue` option produce errors
+- Workers on the same task queue (within a namespace) with different type sets produce errors
 - Workers on the same task queue with identical type sets produce warnings (redundant)
+- Defined workflows/activities not on any instantiated worker produce warnings (when namespaces exist)
+- Defined workers not instantiated in any namespace produce warnings (when namespaces exist)
 
 ## Statements
 
@@ -572,9 +626,9 @@ field ::= IDENT ':' expr
 - `and`, `or`, `not` - Logical operators
 
 **Worker topology:**
-- `worker` - Worker definition
-- `namespace` - Worker namespace declaration
-- `task_queue` - Worker task queue declaration
+- `worker` - Worker type set definition (at top level) or worker instantiation (in namespace block)
+- `namespace` - Namespace definition (deployment topology)
+- `task_queue` - Task queue option key (in options blocks)
 
 **Configuration:**
 - `options` - Options block for activity/workflow calls
@@ -694,9 +748,12 @@ Common error types:
 - Condition with result binding (conditions cannot have `-> result`)
 - `set`/`unset` on undefined condition
 - Worker references undefined workflow or activity
-- Duplicate worker definitions
+- Duplicate worker or namespace definitions
+- Namespace references undefined worker
+- Worker instantiation missing `task_queue` option
 - Workers on same task queue with different type sets
-- Workflow/activity not registered on any worker (warning)
+- Workflow/activity not registered on any instantiated worker (warning)
+- Worker not instantiated in any namespace (warning)
 - Unknown option key in `options:` block
 - Wrong value type for option key (e.g., number where duration expected)
 - Invalid enum value for option key
@@ -709,7 +766,7 @@ See the `topics/` directory for complete working examples of all language featur
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def | worker_def
+definition ::= workflow_def | activity_def | worker_def | namespace_def
 
 workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT
@@ -723,10 +780,12 @@ activity_def ::= 'activity' IDENT params ['->' return_type] ':'
 
 worker_def ::= 'worker' IDENT ':' NEWLINE
                INDENT worker_entry* DEDENT
-worker_entry ::= 'namespace' IDENT NEWLINE
-               | 'task_queue' IDENT NEWLINE
-               | 'workflow' IDENT NEWLINE
+worker_entry ::= 'workflow' IDENT NEWLINE
                | 'activity' IDENT NEWLINE
+
+namespace_def ::= 'namespace' IDENT ':' NEWLINE
+                  INDENT namespace_entry* DEDENT
+namespace_entry ::= 'worker' IDENT NEWLINE [options_line]
 
 options_block ::= 'options' ':' NEWLINE INDENT option_entry+ DEDENT
 option_entry  ::= IDENT ':' value NEWLINE

@@ -44,9 +44,10 @@ var (
 
 func init() {
 	topLevelParsers = map[token.TokenType]defParser{
-		token.WORKFLOW: parseWorkflowDef,
-		token.ACTIVITY: parseActivityDef,
-		token.WORKER:   parseWorkerDef,
+		token.WORKFLOW:  parseWorkflowDef,
+		token.ACTIVITY:  parseActivityDef,
+		token.WORKER:    parseWorkerDef,
+		token.NAMESPACE: parseNamespaceDef,
 	}
 
 	workflowStmtParsers = map[token.TokenType]stmtParser{

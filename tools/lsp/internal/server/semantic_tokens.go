@@ -122,15 +122,15 @@ func isStructural(tt token.TokenType) bool {
 func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int, inOptions bool) (tokenType uint32, modifiers uint32, shouldEmit bool) {
 	switch tok.Type {
 	// Category 1: Temporal primitive keywords → semType
-	case token.WORKFLOW, token.ACTIVITY, token.WORKER,
+	case token.WORKFLOW, token.ACTIVITY, token.WORKER, token.NAMESPACE,
 		token.SIGNAL, token.QUERY, token.UPDATE,
 		token.TIMER,
 		token.PROMISE, token.STATE, token.CONDITION, token.SET, token.UNSET,
 		token.CLOSE, token.COMPLETE, token.FAIL, token.CONTINUE_AS_NEW:
 		return semType, 0, true
 
-	// OPTIONS / worker-level config keywords: muted (property).
-	case token.OPTIONS, token.NAMESPACE, token.TASK_QUEUE:
+	// OPTIONS / config keywords: muted (property).
+	case token.OPTIONS, token.TASK_QUEUE:
 		return semProperty, 0, true
 
 	// Category 3: Control flow keywords — no semantic token emitted.
@@ -186,7 +186,14 @@ func classifyIdent(prevType token.TokenType, indentLevel int) (tokenType uint32,
 		if indentLevel == 0 {
 			return semFunction, modDeclaration, true
 		}
+		// Worker reference inside namespace block
 		return semFunction, 0, true
+
+	case token.NAMESPACE:
+		if indentLevel == 0 {
+			return semFunction, modDeclaration, true
+		}
+		return semVariable, 0, true
 
 	case token.SIGNAL, token.QUERY, token.UPDATE:
 		if indentLevel == 1 {
@@ -195,7 +202,7 @@ func classifyIdent(prevType token.TokenType, indentLevel int) (tokenType uint32,
 		}
 		return semFunction, 0, true
 
-	case token.NAMESPACE, token.TASK_QUEUE:
+	case token.TASK_QUEUE:
 		return semVariable, 0, true
 
 	default:

@@ -1,4 +1,4 @@
-# Worker block test data
+# Worker and namespace test data
 
 workflow ProcessOrder(orderId: string) -> (OrderResult):
     activity ChargePayment(orderId) -> payment
@@ -16,9 +16,12 @@ activity SendNotification(orderId: string):
     notify(orderId)
 
 worker orderWorker:
-    namespace orders
-    task_queue orderProcessing
     workflow ProcessOrder
     workflow CancelOrder
     activity ChargePayment
     activity SendNotification
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orderProcessing"

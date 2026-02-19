@@ -260,8 +260,6 @@ activity ComplexOptions(input: Input) -> (Result):
 # ===== WORKER DEFINITIONS =====
 
 worker specWorker:
-    namespace specTests
-    task_queue specQueue
     workflow SpecCompliance
     workflow EdgeCases
     workflow MinimalWorkflow
@@ -293,3 +291,10 @@ worker specWorker:
     activity TestNested
     activity Compute
     activity ComplexOptions
+
+# ===== NAMESPACE DEFINITIONS =====
+
+namespace specTests:
+    worker specWorker
+        options:
+            task_queue: "specQueue"

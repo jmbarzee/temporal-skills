@@ -11,6 +11,7 @@ type OptionsContext int
 const (
 	OptionsContextActivity OptionsContext = iota
 	OptionsContextWorkflow
+	OptionsContextWorker
 )
 
 // optionSchema describes the expected value type for an option key.
@@ -44,6 +45,24 @@ var activityOptionSchema = map[string]*optionSchema{
 	"priority":                      {valueType: "nested", nested: prioritySchema},
 }
 
+var workerOptionSchema = map[string]*optionSchema{
+	"task_queue":                                {valueType: "string"},
+	"worker_activity_rate_limit":                {valueType: "number"},
+	"task_queue_activity_rate_limit":            {valueType: "number"},
+	"worker_local_activity_rate_limit":          {valueType: "number"},
+	"max_concurrent_activity_executions":        {valueType: "number"},
+	"max_concurrent_workflow_task_executions":   {valueType: "number"},
+	"max_concurrent_local_activity_executions":  {valueType: "number"},
+	"max_concurrent_workflow_task_pollers":      {valueType: "number"},
+	"max_concurrent_activity_task_pollers":      {valueType: "number"},
+	"max_cached_workflows":                      {valueType: "number"},
+	"sticky_schedule_to_start_timeout":          {valueType: "duration"},
+	"heartbeat_throttle_interval":               {valueType: "duration"},
+	"worker_identity":                           {valueType: "string"},
+	"worker_shutdown_timeout":                   {valueType: "duration"},
+	"local_activity_only_mode":                  {valueType: "bool"},
+}
+
 var workflowOptionSchema = map[string]*optionSchema{
 	"task_queue":                    {valueType: "string"},
 	"workflow_execution_timeout":    {valueType: "duration"},
@@ -62,6 +81,8 @@ func schemaForContext(ctx OptionsContext) map[string]*optionSchema {
 		return activityOptionSchema
 	case OptionsContextWorkflow:
 		return workflowOptionSchema
+	case OptionsContextWorker:
+		return workerOptionSchema
 	default:
 		return nil
 	}

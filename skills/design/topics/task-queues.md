@@ -448,31 +448,56 @@ on_shutdown_signal:
 
 ---
 
-## Worker Blocks in TWF
+## Worker and Namespace Blocks in TWF
 
-TWF supports `worker` blocks that declare deployment topology directly in the design file. A worker connects workflows and activities to a task queue and namespace:
+TWF uses a two-tier model for declaring deployment topology: **worker type sets** group workflows and activities, and **namespace blocks** instantiate workers with deployment options.
+
+### Worker Type Sets
+
+Workers are reusable type sets that list which workflows and activities belong together:
 
 ```twf
-worker orderWorker:
-    namespace orders
-    task_queue orderProcessing
+worker orderTypes:
     workflow ProcessOrder
     workflow CancelOrder
     activity ChargePayment
     activity SendNotification
 ```
 
+### Namespace Blocks
+
+Namespaces instantiate workers with deployment options (task queue, concurrency limits, etc.):
+
+```twf
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "orderProcessing"
+            max_concurrent_activity_executions: 50
+```
+
+The same worker type set can be reused across namespaces:
+
+```twf
+namespace staging:
+    worker orderTypes
+        options:
+            task_queue: "staging-orders"
+```
+
 ### Purpose
 
-Worker blocks let the resolver validate deployment topology at design time:
+Worker and namespace blocks let the resolver validate deployment topology at design time:
 
-- **Undefined references** — Catch typos (e.g., referencing a workflow that doesn't exist)
-- **Coverage gaps** — Warn when a defined workflow/activity isn't registered on any worker
-- **Task queue coherence** — Error when workers on the same queue register different type sets
+- **Undefined references** — Catch typos (e.g., referencing a workflow or worker that doesn't exist)
+- **Coverage gaps** — Warn when a defined workflow/activity isn't registered on any instantiated worker
+- **Task queue coherence** — Error when different workers on the same queue register different type sets
+- **Missing configuration** — Error when a worker instantiation is missing the required `task_queue` option
 
 ### Rules
 
-- Each worker must have exactly one `namespace` and one `task_queue`
+- Workers contain only `workflow` and `activity` entries (type set only, no deployment config)
+- Each worker instantiation in a namespace requires a `task_queue` option
 - Worker names use lowerCamelCase; workflow/activity names keep UpperCamelCase
-- Entries can appear in any order within the worker block
-- Multiple workers can reference the same task queue (but must register the same type sets)
+- Multiple workers can be instantiated on the same task queue (but must register the same type sets)
+- Workers not instantiated in any namespace produce warnings

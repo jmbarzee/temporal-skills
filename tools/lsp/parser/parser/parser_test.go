@@ -1401,8 +1401,6 @@ activity ChargePayment(orderId: string) -> (Payment):
     return charge(orderId)
 
 worker orderWorker:
-    namespace orders
-    task_queue orderProcessing
     workflow ProcessOrder
     activity ChargePayment
 `
@@ -1419,12 +1417,6 @@ worker orderWorker:
 	}
 	if w.Name != "orderWorker" {
 		t.Errorf("expected name 'orderWorker', got %q", w.Name)
-	}
-	if w.Namespace != "orders" {
-		t.Errorf("expected namespace 'orders', got %q", w.Namespace)
-	}
-	if w.TaskQueue != "orderProcessing" {
-		t.Errorf("expected task queue 'orderProcessing', got %q", w.TaskQueue)
 	}
 	if len(w.Workflows) != 1 {
 		t.Fatalf("expected 1 workflow ref, got %d", len(w.Workflows))
@@ -1454,8 +1446,6 @@ activity D(x: int) -> (int):
     return x
 
 worker multiWorker:
-    namespace multi
-    task_queue multiQueue
     workflow A
     workflow B
     activity C
@@ -1474,68 +1464,11 @@ worker multiWorker:
 	}
 }
 
-func TestWorkerDefMissingNamespace(t *testing.T) {
-	input := `worker badWorker:
-    task_queue someQueue
-    workflow Foo
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for missing namespace, got nil")
-	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected ParseError, got %T: %v", err, err)
-	}
-	if !strings.Contains(pe.Msg, "missing required namespace") {
-		t.Errorf("unexpected error: %q", pe.Msg)
-	}
-}
-
-func TestWorkerDefMissingTaskQueue(t *testing.T) {
-	input := `worker badWorker:
-    namespace orders
-    workflow Foo
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for missing task_queue, got nil")
-	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected ParseError, got %T: %v", err, err)
-	}
-	if !strings.Contains(pe.Msg, "missing required task_queue") {
-		t.Errorf("unexpected error: %q", pe.Msg)
-	}
-}
-
-func TestWorkerDefDuplicateNamespace(t *testing.T) {
-	input := `worker badWorker:
-    namespace orders
-    namespace shipping
-    task_queue someQueue
-`
-	_, err := ParseFile(input)
-	if err == nil {
-		t.Fatal("expected error for duplicate namespace, got nil")
-	}
-	pe, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected ParseError, got %T: %v", err, err)
-	}
-	if !strings.Contains(pe.Msg, "duplicate namespace") {
-		t.Errorf("unexpected error: %q", pe.Msg)
-	}
-}
-
 func TestWorkerDefEmptyBody(t *testing.T) {
 	input := `worker emptyWorker:
-    namespace orders
-    task_queue someQueue
+    # just a comment
 `
-	// Worker with namespace and task_queue but no workflow/activity refs should parse OK
-	// (it's valid syntax, resolver can warn about it if needed)
+	// Worker with no workflow/activity refs should parse OK
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1546,5 +1479,140 @@ func TestWorkerDefEmptyBody(t *testing.T) {
 	}
 	if len(w.Activities) != 0 {
 		t.Errorf("expected 0 activity refs, got %d", len(w.Activities))
+	}
+}
+
+func TestNamespaceDef(t *testing.T) {
+	input := `worker orderTypes:
+    workflow ProcessOrder
+    activity ChargePayment
+
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "orderProcessing"
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(file.Definitions) != 2 {
+		t.Fatalf("expected 2 definitions, got %d", len(file.Definitions))
+	}
+	ns, ok := file.Definitions[1].(*ast.NamespaceDef)
+	if !ok {
+		t.Fatalf("expected NamespaceDef, got %T", file.Definitions[1])
+	}
+	if ns.Name != "orders" {
+		t.Errorf("expected name 'orders', got %q", ns.Name)
+	}
+	if len(ns.Workers) != 1 {
+		t.Fatalf("expected 1 worker instantiation, got %d", len(ns.Workers))
+	}
+	if ns.Workers[0].WorkerName != "orderTypes" {
+		t.Errorf("expected worker ref 'orderTypes', got %q", ns.Workers[0].WorkerName)
+	}
+	if ns.Workers[0].Options == nil {
+		t.Fatal("expected options on worker instantiation")
+	}
+	if len(ns.Workers[0].Options.Entries) != 1 {
+		t.Fatalf("expected 1 option entry, got %d", len(ns.Workers[0].Options.Entries))
+	}
+	if ns.Workers[0].Options.Entries[0].Key != "task_queue" {
+		t.Errorf("expected option key 'task_queue', got %q", ns.Workers[0].Options.Entries[0].Key)
+	}
+	if ns.Workers[0].Options.Entries[0].Value != "orderProcessing" {
+		t.Errorf("expected option value 'orderProcessing', got %q", ns.Workers[0].Options.Entries[0].Value)
+	}
+}
+
+func TestNamespaceDefMultipleWorkers(t *testing.T) {
+	input := `worker orderTypes:
+    workflow ProcessOrder
+
+worker paymentTypes:
+    activity ChargePayment
+
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "order-queue"
+    worker paymentTypes
+        options:
+            task_queue: "payment-queue"
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ns := file.Definitions[2].(*ast.NamespaceDef)
+	if len(ns.Workers) != 2 {
+		t.Fatalf("expected 2 worker instantiations, got %d", len(ns.Workers))
+	}
+	if ns.Workers[0].WorkerName != "orderTypes" {
+		t.Errorf("expected first worker 'orderTypes', got %q", ns.Workers[0].WorkerName)
+	}
+	if ns.Workers[1].WorkerName != "paymentTypes" {
+		t.Errorf("expected second worker 'paymentTypes', got %q", ns.Workers[1].WorkerName)
+	}
+}
+
+func TestNamespaceDefWorkerWithMultipleOptions(t *testing.T) {
+	input := `worker orderTypes:
+    workflow ProcessOrder
+
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "order-queue"
+            max_concurrent_activity_executions: 50
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ns := file.Definitions[1].(*ast.NamespaceDef)
+	if ns.Workers[0].Options == nil {
+		t.Fatal("expected options")
+	}
+	if len(ns.Workers[0].Options.Entries) != 2 {
+		t.Fatalf("expected 2 option entries, got %d", len(ns.Workers[0].Options.Entries))
+	}
+	if ns.Workers[0].Options.Entries[1].Key != "max_concurrent_activity_executions" {
+		t.Errorf("expected key 'max_concurrent_activity_executions', got %q", ns.Workers[0].Options.Entries[1].Key)
+	}
+}
+
+func TestNamespaceDefNoEntries(t *testing.T) {
+	input := `namespace empty:
+    # empty namespace
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ns := file.Definitions[0].(*ast.NamespaceDef)
+	if len(ns.Workers) != 0 {
+		t.Errorf("expected 0 workers, got %d", len(ns.Workers))
+	}
+}
+
+func TestNamespaceDefWorkerWithoutOptions(t *testing.T) {
+	input := `worker orderTypes:
+    workflow ProcessOrder
+
+namespace orders:
+    worker orderTypes
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ns := file.Definitions[1].(*ast.NamespaceDef)
+	if len(ns.Workers) != 1 {
+		t.Fatalf("expected 1 worker, got %d", len(ns.Workers))
+	}
+	if ns.Workers[0].Options != nil {
+		t.Errorf("expected no options, got %v", ns.Workers[0].Options)
 	}
 }

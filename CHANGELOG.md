@@ -1,5 +1,69 @@
 # TWF Language Changelog
 
+## v0.6.0 - Namespace Blocks & Worker Refactor
+
+**Breaking change** — Workers are now reusable type sets. Deployment configuration (namespace, task_queue) has been moved to namespace blocks.
+
+### What changed
+
+Workers no longer contain `namespace` or `task_queue` entries. Instead, workers are pure type sets (workflows + activities), and a new `namespace` top-level definition instantiates workers with deployment options.
+
+### Before (v0.5.0)
+
+```twf
+worker orderWorker:
+    namespace orders
+    task_queue orderProcessing
+    workflow ProcessOrder
+    activity ChargePayment
+```
+
+### After (v0.6.0)
+
+```twf
+worker orderWorker:
+    workflow ProcessOrder
+    activity ChargePayment
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orderProcessing"
+```
+
+### Benefits
+
+- **Reusable type sets** — Same worker definition can be instantiated in multiple namespaces (e.g., production vs staging)
+- **Richer deployment config** — Worker instantiation options include concurrency limits, rate limits, and other Temporal worker settings
+- **Clearer separation** — Type grouping (worker) is separate from deployment topology (namespace)
+
+### AST
+
+- `WorkerDef` no longer has `Namespace` or `TaskQueue` fields — only `Name`, `Workflows`, and `Activities`
+- New `NamespaceDef` node with `Name` and `Workers` (list of `NamespaceWorker`)
+- `NamespaceWorker` has `WorkerName` and optional `Options` block
+- JSON output: `workerDef` no longer includes `namespace`/`taskQueue`; new `namespaceDef` type added
+
+### Resolver validation
+
+- Worker type set refs to undefined workflows/activities produce errors
+- Namespace refs to undefined workers produce errors
+- Worker instantiation missing `task_queue` option produces error
+- Workers on same task queue with different type sets produce errors
+- Workers not instantiated in any namespace produce warnings
+- Workflows/activities not on any instantiated worker produce warnings
+
+### Worker instantiation options
+
+Worker options (all snake_case): `task_queue`, `worker_activity_rate_limit`, `task_queue_activity_rate_limit`, `worker_local_activity_rate_limit`, `max_concurrent_activity_executions`, `max_concurrent_workflow_task_executions`, `max_concurrent_local_activity_executions`, `max_concurrent_workflow_task_pollers`, `max_concurrent_activity_task_pollers`, `max_cached_workflows`, `sticky_schedule_to_start_timeout`, `heartbeat_throttle_interval`, `worker_identity`, `worker_shutdown_timeout`, `local_activity_only_mode`
+
+### Semantic tokens
+
+- `namespace` keyword now colored as `type` (same as `workflow`/`activity`/`worker`) instead of `property`
+- Namespace name colored as `function` with declaration modifier (same as worker/workflow/activity names)
+
+---
+
 ## v0.5.0 - Worker Blocks
 
 New top-level `worker` definition that connects workflows and activities to a task queue and namespace, enabling deployment topology validation at design time.

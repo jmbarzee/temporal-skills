@@ -5,11 +5,11 @@ import (
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/token"
 )
 
-// parseWorkerDef parses:
-// WORKER IDENT COLON NEWLINE INDENT worker_entries DEDENT
-func parseWorkerDef(p *Parser) (ast.Definition, error) {
+// parseNamespaceDef parses:
+// NAMESPACE IDENT COLON NEWLINE INDENT namespace_entries DEDENT
+func parseNamespaceDef(p *Parser) (ast.Definition, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume WORKER
+	p.advance() // consume NAMESPACE
 
 	name, err := p.expect(token.IDENT)
 	if err != nil {
@@ -26,7 +26,7 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
-	worker := &ast.WorkerDef{
+	ns := &ast.NamespaceDef{
 		Pos:  pos,
 		Name: name.Literal,
 	}
@@ -43,38 +43,28 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 			}
 			continue
 
-		case token.WORKFLOW:
-			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-			p.advance() // consume WORKFLOW
-			wfName, err := p.expect(token.IDENT)
+		case token.WORKER:
+			workerPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+			p.advance() // consume WORKER
+			workerName, err := p.expect(token.IDENT)
 			if err != nil {
 				return nil, err
 			}
-			worker.Workflows = append(worker.Workflows, ast.WorkerRef{
-				Pos:  refPos,
-				Name: wfName.Literal,
-			})
 			if p.current.Type == token.NEWLINE {
 				p.advance()
 			}
-
-		case token.ACTIVITY:
-			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-			p.advance() // consume ACTIVITY
-			actName, err := p.expect(token.IDENT)
+			opts, err := p.parseOptionalOptionsLine(OptionsContextWorker)
 			if err != nil {
 				return nil, err
 			}
-			worker.Activities = append(worker.Activities, ast.WorkerRef{
-				Pos:  refPos,
-				Name: actName.Literal,
+			ns.Workers = append(ns.Workers, ast.NamespaceWorker{
+				Pos:        workerPos,
+				WorkerName: workerName.Literal,
+				Options:    opts,
 			})
-			if p.current.Type == token.NEWLINE {
-				p.advance()
-			}
 
 		default:
-			return nil, p.errorf("unexpected %s in worker block", p.current.Type)
+			return nil, p.errorf("unexpected %s in namespace block", p.current.Type)
 		}
 	}
 
@@ -82,5 +72,5 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 		p.advance()
 	}
 
-	return worker, nil
+	return ns, nil
 }

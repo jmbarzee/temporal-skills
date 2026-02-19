@@ -6,7 +6,7 @@ type Node interface {
 	NodeColumn() int
 }
 
-// Definition is a top-level definition (workflow, activity, or worker).
+// Definition is a top-level definition (workflow, activity, worker, or namespace).
 type Definition interface {
 	Node
 	defNode()
@@ -69,13 +69,27 @@ type WorkerRef struct {
 type WorkerDef struct {
 	Pos
 	Name       string
-	Namespace  string
-	TaskQueue  string
 	Workflows  []WorkerRef
 	Activities []WorkerRef
 }
 
 func (*WorkerDef) defNode() {}
+
+// NamespaceWorker is a worker instantiation inside a namespace block.
+type NamespaceWorker struct {
+	Pos
+	WorkerName string
+	Options    *OptionsBlock
+}
+
+// NamespaceDef is a namespace definition that instantiates workers with options.
+type NamespaceDef struct {
+	Pos
+	Name    string
+	Workers []NamespaceWorker
+}
+
+func (*NamespaceDef) defNode() {}
 
 // ---------------------------------------------------------------------------
 // Workflow-level declarations (embedded in WorkflowDef)

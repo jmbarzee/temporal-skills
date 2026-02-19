@@ -24,6 +24,7 @@ func Resolve(file *ast.File) []*ResolveError {
 	workflows := make(map[string]*ast.WorkflowDef)
 	activities := make(map[string]*ast.ActivityDef)
 	workers := make(map[string]*ast.WorkerDef)
+	namespaces := make(map[string]*ast.NamespaceDef)
 	var errs []*ResolveError
 
 	// Pass 1: Collect all definitions.
@@ -56,6 +57,15 @@ func Resolve(file *ast.File) []*ResolveError {
 				})
 			}
 			workers[d.Name] = d
+		case *ast.NamespaceDef:
+			if _, exists := namespaces[d.Name]; exists {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("duplicate namespace definition: %s", d.Name),
+					Line:   d.Line,
+					Column: d.Column,
+				})
+			}
+			namespaces[d.Name] = d
 		}
 	}
 
@@ -124,31 +134,18 @@ func Resolve(file *ast.File) []*ResolveError {
 		errs = append(errs, ctx.errs...)
 	}
 
-	// Pass 3: Worker validation.
-	errs = append(errs, resolveWorkers(workers, workflows, activities)...)
+	// Pass 3: Worker and namespace validation.
+	errs = append(errs, resolveWorkersAndNamespaces(namespaces, workers, workflows, activities)...)
 
 	return errs
 }
 
-// resolveWorkers validates worker definitions.
-func resolveWorkers(workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef) []*ResolveError {
+// resolveWorkersAndNamespaces validates worker type sets and namespace instantiations.
+func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef) []*ResolveError {
 	var errs []*ResolveError
 
-	// Track which workflows/activities are covered by at least one worker.
-	coveredWorkflows := make(map[string]bool)
-	coveredActivities := make(map[string]bool)
-
-	// Track task queue type sets for coherence checking.
-	// key: task queue name, value: list of workers on that queue
-	type queueInfo struct {
-		workerName string
-		workflows  map[string]bool
-		activities map[string]bool
-	}
-	queueWorkers := make(map[string][]queueInfo)
-
+	// 1. Worker type set validation: refs must point to defined workflows/activities.
 	for _, w := range workers {
-		// Check workflow references.
 		for _, ref := range w.Workflows {
 			if _, ok := workflows[ref.Name]; !ok {
 				errs = append(errs, &ResolveError{
@@ -156,12 +153,8 @@ func resolveWorkers(workers map[string]*ast.WorkerDef, workflows map[string]*ast
 					Line:   ref.Line,
 					Column: ref.Column,
 				})
-			} else {
-				coveredWorkflows[ref.Name] = true
 			}
 		}
-
-		// Check activity references.
 		for _, ref := range w.Activities {
 			if _, ok := activities[ref.Name]; !ok {
 				errs = append(errs, &ResolveError{
@@ -169,34 +162,57 @@ func resolveWorkers(workers map[string]*ast.WorkerDef, workflows map[string]*ast
 					Line:   ref.Line,
 					Column: ref.Column,
 				})
-			} else {
-				coveredActivities[ref.Name] = true
+			}
+		}
+	}
+
+	// 2. Namespace validation: worker instantiations must ref defined workers,
+	//    and each instantiation must have a task_queue option.
+	for _, ns := range namespaces {
+		for _, nw := range ns.Workers {
+			if _, ok := workers[nw.WorkerName]; !ok {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("namespace %s references undefined worker: %s", ns.Name, nw.WorkerName),
+					Line:   nw.Line,
+					Column: nw.Column,
+				})
+			}
+			tq := extractTaskQueue(nw.Options)
+			if tq == "" {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("worker %s in namespace %s missing required task_queue option", nw.WorkerName, ns.Name),
+					Line:   nw.Line,
+					Column: nw.Column,
+				})
+			}
+		}
+	}
+
+	// 3. Coverage warnings (only when namespaces exist).
+	if len(namespaces) > 0 {
+		// Track which workflows/activities are covered by instantiated workers.
+		coveredWorkflows := make(map[string]bool)
+		coveredActivities := make(map[string]bool)
+		instantiatedWorkers := make(map[string]bool)
+
+		for _, ns := range namespaces {
+			for _, nw := range ns.Workers {
+				instantiatedWorkers[nw.WorkerName] = true
+				if w, ok := workers[nw.WorkerName]; ok {
+					for _, ref := range w.Workflows {
+						coveredWorkflows[ref.Name] = true
+					}
+					for _, ref := range w.Activities {
+						coveredActivities[ref.Name] = true
+					}
+				}
 			}
 		}
 
-		// Build queue info for coherence checking.
-		wfSet := make(map[string]bool)
-		for _, ref := range w.Workflows {
-			wfSet[ref.Name] = true
-		}
-		actSet := make(map[string]bool)
-		for _, ref := range w.Activities {
-			actSet[ref.Name] = true
-		}
-		queueWorkers[w.TaskQueue] = append(queueWorkers[w.TaskQueue], queueInfo{
-			workerName: w.Name,
-			workflows:  wfSet,
-			activities: actSet,
-		})
-	}
-
-	// Coverage warnings: defined workflows/activities not on any worker.
-	// Only emit if there are workers defined (otherwise it's not relevant).
-	if len(workers) > 0 {
 		for name, wf := range workflows {
 			if !coveredWorkflows[name] {
 				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("workflow %s is not registered on any worker", name),
+					Msg:      fmt.Sprintf("workflow %s is not registered on any instantiated worker", name),
 					Line:     wf.Line,
 					Column:   wf.Column,
 					Severity: "warning",
@@ -206,36 +222,90 @@ func resolveWorkers(workers map[string]*ast.WorkerDef, workflows map[string]*ast
 		for name, act := range activities {
 			if !coveredActivities[name] {
 				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("activity %s is not registered on any worker", name),
+					Msg:      fmt.Sprintf("activity %s is not registered on any instantiated worker", name),
 					Line:     act.Line,
 					Column:   act.Column,
 					Severity: "warning",
 				})
 			}
 		}
-	}
-
-	// Task queue coherence: workers on same queue should have same type sets.
-	for queue, infos := range queueWorkers {
-		if len(infos) < 2 {
-			continue
-		}
-		first := infos[0]
-		for _, other := range infos[1:] {
-			if sameStringSet(first.workflows, other.workflows) && sameStringSet(first.activities, other.activities) {
+		for name, w := range workers {
+			if !instantiatedWorkers[name] {
 				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("workers %s and %s on task queue %q have identical type sets (redundant)", first.workerName, other.workerName, queue),
+					Msg:      fmt.Sprintf("worker %s is not instantiated in any namespace", name),
+					Line:     w.Line,
+					Column:   w.Column,
 					Severity: "warning",
-				})
-			} else if !sameStringSet(first.workflows, other.workflows) || !sameStringSet(first.activities, other.activities) {
-				errs = append(errs, &ResolveError{
-					Msg: fmt.Sprintf("workers %s and %s on task queue %q have different type sets", first.workerName, other.workerName, queue),
 				})
 			}
 		}
 	}
 
+	// 4. Task queue coherence (per namespace): different worker type sets on same queue → error.
+	type queueInfo struct {
+		workerName string
+		workflows  map[string]bool
+		activities map[string]bool
+	}
+	for _, ns := range namespaces {
+		queueWorkers := make(map[string][]queueInfo)
+		for _, nw := range ns.Workers {
+			tq := extractTaskQueue(nw.Options)
+			if tq == "" {
+				continue
+			}
+			w, ok := workers[nw.WorkerName]
+			if !ok {
+				continue
+			}
+			wfSet := make(map[string]bool)
+			for _, ref := range w.Workflows {
+				wfSet[ref.Name] = true
+			}
+			actSet := make(map[string]bool)
+			for _, ref := range w.Activities {
+				actSet[ref.Name] = true
+			}
+			queueWorkers[tq] = append(queueWorkers[tq], queueInfo{
+				workerName: nw.WorkerName,
+				workflows:  wfSet,
+				activities: actSet,
+			})
+		}
+		for queue, infos := range queueWorkers {
+			if len(infos) < 2 {
+				continue
+			}
+			first := infos[0]
+			for _, other := range infos[1:] {
+				if sameStringSet(first.workflows, other.workflows) && sameStringSet(first.activities, other.activities) {
+					errs = append(errs, &ResolveError{
+						Msg:      fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have identical type sets (redundant)", first.workerName, other.workerName, queue, ns.Name),
+						Severity: "warning",
+					})
+				} else {
+					errs = append(errs, &ResolveError{
+						Msg: fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have different type sets", first.workerName, other.workerName, queue, ns.Name),
+					})
+				}
+			}
+		}
+	}
+
 	return errs
+}
+
+// extractTaskQueue walks an OptionsBlock to find the task_queue key.
+func extractTaskQueue(opts *ast.OptionsBlock) string {
+	if opts == nil {
+		return ""
+	}
+	for _, e := range opts.Entries {
+		if e.Key == "task_queue" {
+			return e.Value
+		}
+	}
+	return ""
 }
 
 func sameStringSet(a, b map[string]bool) bool {

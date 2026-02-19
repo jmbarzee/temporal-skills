@@ -32,6 +32,8 @@ func marshalDefinition(def Definition) (json.RawMessage, error) {
 		return json.Marshal(d)
 	case *WorkerDef:
 		return json.Marshal(d)
+	case *NamespaceDef:
+		return json.Marshal(d)
 	default:
 		return json.Marshal(def)
 	}
@@ -239,20 +241,16 @@ type WorkerDefJSON struct {
 	Line       int             `json:"line"`
 	Column     int             `json:"column"`
 	Name       string          `json:"name"`
-	Namespace  string          `json:"namespace"`
-	TaskQueue  string          `json:"taskQueue"`
 	Workflows  []WorkerRefJSON `json:"workflows,omitempty"`
 	Activities []WorkerRefJSON `json:"activities,omitempty"`
 }
 
 func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 	wj := WorkerDefJSON{
-		Type:      "workerDef",
-		Line:      w.Line,
-		Column:    w.Column,
-		Name:      w.Name,
-		Namespace: w.Namespace,
-		TaskQueue: w.TaskQueue,
+		Type:   "workerDef",
+		Line:   w.Line,
+		Column: w.Column,
+		Name:   w.Name,
 	}
 	for _, ref := range w.Workflows {
 		wj.Workflows = append(wj.Workflows, WorkerRefJSON{
@@ -269,6 +267,41 @@ func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 		})
 	}
 	return json.Marshal(wj)
+}
+
+// NamespaceWorkerJSON is the JSON representation of a worker instantiation in a namespace.
+type NamespaceWorkerJSON struct {
+	WorkerName string            `json:"workerName"`
+	Line       int               `json:"line"`
+	Column     int               `json:"column"`
+	Options    *OptionsBlockJSON `json:"options,omitempty"`
+}
+
+// NamespaceDefJSON is the JSON representation of NamespaceDef.
+type NamespaceDefJSON struct {
+	Type    string                `json:"type"`
+	Line    int                   `json:"line"`
+	Column  int                   `json:"column"`
+	Name    string                `json:"name"`
+	Workers []NamespaceWorkerJSON `json:"workers,omitempty"`
+}
+
+func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
+	nj := NamespaceDefJSON{
+		Type:   "namespaceDef",
+		Line:   n.Line,
+		Column: n.Column,
+		Name:   n.Name,
+	}
+	for _, w := range n.Workers {
+		nj.Workers = append(nj.Workers, NamespaceWorkerJSON{
+			WorkerName: w.WorkerName,
+			Line:       w.Line,
+			Column:     w.Column,
+			Options:    marshalOptionsBlock(w.Options),
+		})
+	}
+	return json.Marshal(nj)
 }
 
 // Declaration JSON types

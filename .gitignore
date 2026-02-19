@@ -11,5 +11,8 @@ packages/vscode/skills/
 # Publish tokens (contains secrets)
 .env.publish
 
+# Visualizer build artifacts
+tools/visualizer/dist/
+
 # Built Go binaries
 tools/lsp/twf

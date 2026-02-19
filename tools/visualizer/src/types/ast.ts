@@ -45,7 +45,7 @@ export interface StateBlock {
   rawStmts?: RawStmt[]
 }
 
-export interface ConditionDecl {
+export interface ConditionDecl extends Position {
   name: string
 }
 
@@ -157,7 +157,7 @@ export interface AwaitAllBlock extends Position {
 // await one case: signal, update, timer, activity, workflow, nested await all, or ident
 export type AwaitOneCaseKind = 'signal' | 'update' | 'timer' | 'activity' | 'workflow' | 'await_all' | 'ident'
 
-export interface AwaitOneCase {
+export interface AwaitOneCase extends Position {
   kind: AwaitOneCaseKind
   // Signal case
   signal?: string
@@ -192,7 +192,7 @@ export interface AwaitOneBlock extends Position {
   cases: AwaitOneCase[]
 }
 
-export interface SwitchCase {
+export interface SwitchCase extends Position {
   value: string
   body: Statement[]
 }

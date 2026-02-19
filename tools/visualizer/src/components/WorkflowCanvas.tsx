@@ -19,12 +19,12 @@ export interface HandlerContext {
   updates: Map<string, UpdateDecl>
 }
 
-export const DefinitionContextProvider = React.createContext<DefinitionContext>({
+export const DefinitionContext = React.createContext<DefinitionContext>({
   workflows: new Map(),
   activities: new Map(),
 })
 
-export const HandlerContextProvider = React.createContext<HandlerContext>({
+export const HandlerContext = React.createContext<HandlerContext>({
   signals: new Map(),
   queries: new Map(),
   updates: new Map(),
@@ -147,7 +147,7 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
   const noFilesSelected = selectedFiles.size === 0
 
   return (
-    <DefinitionContextProvider.Provider value={context}>
+    <DefinitionContext.Provider value={context}>
       <div className="workflow-canvas">
         {/* === Filter Header === */}
         <div className="canvas-header">
@@ -243,7 +243,7 @@ export function WorkflowCanvas({ ast }: WorkflowCanvasProps) {
           ))
         )}
       </div>
-    </DefinitionContextProvider.Provider>
+    </DefinitionContext.Provider>
   )
 }
 

@@ -18,7 +18,7 @@ import type {
   SetStmt,
   UnsetStmt,
 } from '../../types/ast'
-import { DefinitionContextProvider, HandlerContextProvider } from '../WorkflowCanvas'
+import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useRefocus } from './useRefocus'
 import './blocks.css'
@@ -71,7 +71,7 @@ export function StatementBlock({ statement }: StatementBlockProps) {
 // Activity Call - expandable to show activity definition body directly
 function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
   const [expanded, setExpanded] = React.useState(false)
-  const context = React.useContext(DefinitionContextProvider)
+  const context = React.useContext(DefinitionContext)
   const activityDef = context.activities.get(stmt.name)
   const refocus = useRefocus()
   const isDefined = !!activityDef
@@ -100,8 +100,8 @@ function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
       {expanded && isDefined && (
         <div className="block-body">
           {(activityDef.body || []).length > 0 ? (
-            (activityDef.body || []).map((s, i) => (
-              <StatementBlock key={i} statement={s} />
+            (activityDef.body || []).map((s) => (
+              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))
           ) : (
             <div className="block-empty-body">No implementation defined</div>
@@ -118,7 +118,7 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const [signalsExpanded, setSignalsExpanded] = React.useState(false)
   const [queriesExpanded, setQueriesExpanded] = React.useState(false)
   const [updatesExpanded, setUpdatesExpanded] = React.useState(false)
-  const context = React.useContext(DefinitionContextProvider)
+  const context = React.useContext(DefinitionContext)
   const workflowDef = context.workflows.get(stmt.name)
   const refocus = useRefocus()
   const isDefined = !!workflowDef
@@ -165,8 +165,8 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
               </div>
               {signalsExpanded && (
                 <div className="block-declarations">
-                  {workflowDef.signals!.map((s, i) => (
-                    <div key={i} className="declaration declaration-signal">
+                  {workflowDef.signals!.map((s) => (
+                    <div key={`${s.line}:${s.column}`} className="declaration declaration-signal">
                       <span className="declaration-icon">↪</span>
                       <span className="declaration-keyword">signal</span>
                       <span className="declaration-name">{s.name}</span>
@@ -188,8 +188,8 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
               </div>
               {queriesExpanded && (
                 <div className="block-declarations">
-                  {workflowDef.queries!.map((q, i) => (
-                    <div key={i} className="declaration declaration-query">
+                  {workflowDef.queries!.map((q) => (
+                    <div key={`${q.line}:${q.column}`} className="declaration declaration-query">
                       <span className="declaration-icon">↩</span>
                       <span className="declaration-keyword">query</span>
                       <span className="declaration-name">{q.name}</span>
@@ -212,8 +212,8 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
               </div>
               {updatesExpanded && (
                 <div className="block-declarations">
-                  {workflowDef.updates!.map((u, i) => (
-                    <div key={i} className="declaration declaration-update">
+                  {workflowDef.updates!.map((u) => (
+                    <div key={`${u.line}:${u.column}`} className="declaration declaration-update">
                       <span className="declaration-icon">⇄</span>
                       <span className="declaration-keyword">update</span>
                       <span className="declaration-name">{u.name}</span>
@@ -228,8 +228,8 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
           
           {/* Body statements */}
           <div className="block-statements">
-            {(workflowDef.body || []).map((s, i) => (
-              <StatementBlock key={i} statement={s} />
+            {(workflowDef.body || []).map((s) => (
+              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))}
           </div>
         </div>
@@ -241,8 +241,8 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
 // Single await statement - await timer/signal/update/activity/workflow
 function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   const [expanded, setExpanded] = React.useState(false)
-  const context = React.useContext(DefinitionContextProvider)
-  const handlers = React.useContext(HandlerContextProvider)
+  const context = React.useContext(DefinitionContext)
+  const handlers = React.useContext(HandlerContext)
   const refocus = useRefocus()
 
   const { icon, keyword, signature, blockClass, expandableDef, isUnresolved } = getAwaitStmtDisplay(stmt, context, handlers)
@@ -269,8 +269,8 @@ function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
       {expanded && expandableDef && (
         <div className="block-body">
           {(expandableDef.body || []).length > 0 ? (
-            (expandableDef.body || []).map((s, i) => (
-              <StatementBlock key={i} statement={s} />
+            (expandableDef.body || []).map((s) => (
+              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))
           ) : (
             <div className="block-empty-body">No implementation defined</div>
@@ -343,8 +343,8 @@ function AwaitAllBlockComponent({ stmt }: { stmt: AwaitAllBlock }) {
       
       {expanded && (
         <div className="block-body">
-          {(stmt.body || []).map((s, i) => (
-            <StatementBlock key={i} statement={s} />
+          {(stmt.body || []).map((s) => (
+            <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
           ))}
         </div>
       )}
@@ -371,8 +371,8 @@ function AwaitOneBlockComponent({ stmt }: { stmt: AwaitOneBlock }) {
       
       {expanded && (
         <div className="block-body">
-          {stmt.cases.map((c, i) => (
-            <AwaitOneCaseBlock key={i} awaitCase={c} />
+          {stmt.cases.map((c) => (
+            <AwaitOneCaseBlock key={`${c.line}:${c.column}`} awaitCase={c} />
           ))}
         </div>
       )}
@@ -383,8 +383,8 @@ function AwaitOneBlockComponent({ stmt }: { stmt: AwaitOneBlock }) {
 // Render await one cases with unified tag design
 function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
   const [expanded, setExpanded] = React.useState(false)
-  const context = React.useContext(DefinitionContextProvider)
-  const handlers = React.useContext(HandlerContextProvider)
+  const context = React.useContext(DefinitionContext)
+  const handlers = React.useContext(HandlerContext)
   const refocus = useRefocus()
   const hasBody = awaitCase.body && awaitCase.body.length > 0
   const isExpandable = hasBody || awaitCase.awaitAll
@@ -417,8 +417,8 @@ function AwaitOneCaseBlock({ awaitCase }: { awaitCase: AwaitOneCase }) {
             <AwaitAllBlockComponent stmt={awaitCase.awaitAll} />
           )}
           {/* Then show the body */}
-          {hasBody && awaitCase.body.map((s, i) => (
-            <StatementBlock key={i} statement={s} />
+          {hasBody && awaitCase.body.map((s) => (
+            <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
           ))}
         </div>
       )}
@@ -488,8 +488,8 @@ function SwitchBlockComponent({ stmt }: { stmt: SwitchBlock }) {
       
       {expanded && (
         <div className="block-body">
-          {stmt.cases.map((c, i) => (
-            <SwitchCaseBlock key={i} switchCase={c} />
+          {stmt.cases.map((c) => (
+            <SwitchCaseBlock key={`${c.line}:${c.column}`} switchCase={c} />
           ))}
           {stmt.default && stmt.default.length > 0 && (
             <div className="block block-switch-default">
@@ -499,8 +499,8 @@ function SwitchBlockComponent({ stmt }: { stmt: SwitchBlock }) {
                 <span className="block-keyword">default</span>
               </div>
               <div className="block-body">
-                {stmt.default.map((s, i) => (
-                  <StatementBlock key={i} statement={s} />
+                {stmt.default.map((s) => (
+                  <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
                 ))}
               </div>
             </div>
@@ -528,8 +528,8 @@ function SwitchCaseBlock({ switchCase }: { switchCase: SwitchBlock['cases'][0] }
       
       {expanded && switchCase.body && switchCase.body.length > 0 && (
         <div className="block-body">
-          {switchCase.body.map((s, i) => (
-            <StatementBlock key={i} statement={s} />
+          {switchCase.body.map((s) => (
+            <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
           ))}
         </div>
       )}
@@ -557,15 +557,15 @@ function IfBlock({ stmt }: { stmt: IfStmt }) {
       {expanded && (
         <div className="block-body">
           <div className="block-branch block-then">
-            {(stmt.body || []).map((s, i) => (
-              <StatementBlock key={i} statement={s} />
+            {(stmt.body || []).map((s) => (
+              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))}
           </div>
           {hasElse && (
             <div className="block-branch block-else">
               <div className="branch-label">else:</div>
-              {(stmt.elseBody || []).map((s, i) => (
-                <StatementBlock key={i} statement={s} />
+              {(stmt.elseBody || []).map((s) => (
+                <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
               ))}
             </div>
           )}
@@ -602,8 +602,8 @@ function ForBlock({ stmt }: { stmt: ForStmt }) {
       
       {expanded && (
         <div className="block-body">
-          {(stmt.body || []).map((s, i) => (
-            <StatementBlock key={i} statement={s} />
+          {(stmt.body || []).map((s) => (
+            <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
           ))}
         </div>
       )}

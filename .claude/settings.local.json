@@ -36,7 +36,8 @@
       "WebFetch(domain:solafide.ca)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(for:*)",
-      "Bash(do echo \"=== $f ===\")"
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(npm run build:*)"
     ]
   }
 }

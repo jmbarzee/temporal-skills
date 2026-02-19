@@ -99,7 +99,9 @@ type StateBlockJSON struct {
 
 // ConditionDeclJSON is the JSON representation of a condition declaration.
 type ConditionDeclJSON struct {
-	Name string `json:"name"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Name   string `json:"name"`
 }
 
 func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
@@ -118,7 +120,7 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 	if w.State != nil {
 		sj := &StateBlockJSON{}
 		for _, c := range w.State.Conditions {
-			sj.Conditions = append(sj.Conditions, &ConditionDeclJSON{Name: c.Name})
+			sj.Conditions = append(sj.Conditions, &ConditionDeclJSON{Line: c.Line, Column: c.Column, Name: c.Name})
 		}
 		for _, r := range w.State.RawStmts {
 			sj.RawStmts = append(sj.RawStmts, rawStmtJSON{
@@ -381,6 +383,8 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				awaitAllData = data
 			}
 			cases = append(cases, awaitOneCaseJSON{
+				Line:              c.Line,
+				Column:            c.Column,
 				Kind:              c.CaseKind(),
 				Signal:            c.Signal,
 				SignalParams:      c.SignalParams,
@@ -419,8 +423,10 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				caseBody = append(caseBody, data)
 			}
 			cases = append(cases, switchCaseJSON{
-				Value: c.Value,
-				Body:  caseBody,
+				Line:   c.Line,
+				Column: c.Column,
+				Value:  c.Value,
+				Body:   caseBody,
 			})
 		}
 		var defaultBody []json.RawMessage
@@ -637,6 +643,8 @@ type awaitAllBlockJSON struct {
 }
 
 type awaitOneCaseJSON struct {
+	Line              int               `json:"line"`
+	Column            int               `json:"column"`
 	Kind              string            `json:"kind"`
 	Signal            string            `json:"signal,omitempty"`
 	SignalParams      string            `json:"signalParams,omitempty"`
@@ -665,8 +673,10 @@ type awaitOneBlockJSON struct {
 }
 
 type switchCaseJSON struct {
-	Value string            `json:"value"`
-	Body  []json.RawMessage `json:"body"`
+	Line   int               `json:"line"`
+	Column int               `json:"column"`
+	Value  string            `json:"value"`
+	Body   []json.RawMessage `json:"body"`
 }
 
 type switchBlockJSON struct {

@@ -382,16 +382,6 @@
   border-style: dashed;
 }
 
-/* Timer - Yellow */
-.block-timer {
-  background: var(--block-timer-bg);
-  border: 1px solid var(--block-timer-border);
-}
-
-.block-timer>.block-header {
-  color: var(--block-timer-text);
-}
-
 /* === Tagged Composite: Unified "hint" and "option" design === */
 /* A grey tag on the left, content block on the right that can expand */
 
@@ -592,26 +582,6 @@
   color: var(--block-await-text);
 }
 
-/* Signal - Red (matches declaration color) */
-.block-signal {
-  background: var(--block-signal-bg);
-  border: 1px solid var(--block-signal-border);
-}
-
-.block-signal>.block-header {
-  color: var(--block-signal-text);
-}
-
-/* Update - Orange (matches declaration color) */
-.block-update {
-  background: var(--block-update-bg);
-  border: 1px solid var(--block-update-border);
-}
-
-.block-update>.block-header {
-  color: var(--block-update-text);
-}
-
 /* Control Flow - Gray/Slate */
 .block-await-all,
 .block-await-one,
@@ -677,20 +647,6 @@
 .block-close .close-reason {
   font-weight: 500;
   margin-right: 4px;
-}
-
-.block-close .close-value {
-  opacity: 0.8;
-}
-
-/* Continue as new - Orange */
-.block-continue-as-new {
-  background: var(--block-continue-new-bg);
-  border: 1px solid var(--block-continue-new-border);
-}
-
-.block-continue-as-new>.block-header {
-  color: var(--block-continue-new-text);
 }
 
 /* Raw code - Light gray */

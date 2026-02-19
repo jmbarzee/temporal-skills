@@ -1,9 +1,9 @@
 import React from 'react'
-import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, StateBlock } from '../../types/ast'
+import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useRefocus } from './useRefocus'
-import { HandlerContextProvider, HandlerContext } from '../WorkflowCanvas'
+import { HandlerContext } from '../WorkflowCanvas'
 import './blocks.css'
 
 interface DefinitionBlockProps {
@@ -65,7 +65,7 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
   }, [def])
 
   return (
-    <HandlerContextProvider.Provider value={handlerContext}>
+    <HandlerContext.Provider value={handlerContext}>
       <div className={`block block-workflow ${expanded ? 'expanded' : 'collapsed'}`}>
         <div className="block-header" onClick={onToggle}>
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
@@ -87,8 +87,8 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
               </div>
               {stateExpanded && (
                 <div className="block-declarations">
-                  {(def.state!.conditions || []).map((c, i) => (
-                    <div key={`cond-${i}`} className="declaration declaration-condition">
+                  {(def.state!.conditions || []).map((c) => (
+                    <div key={`${c.line}:${c.column}`} className="declaration declaration-condition">
                       <div className="declaration-header">
                         <span className="block-toggle-placeholder" />
                         <span className="declaration-icon">◉</span>
@@ -97,8 +97,8 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
                       </div>
                     </div>
                   ))}
-                  {(def.state!.rawStmts || []).map((r, i) => (
-                    <div key={`raw-${i}`} className="declaration declaration-raw-state">
+                  {(def.state!.rawStmts || []).map((r) => (
+                    <div key={`${r.line}:${r.column}`} className="declaration declaration-raw-state">
                       <div className="declaration-header">
                         <span className="block-toggle-placeholder" />
                         <span className="declaration-icon">≡</span>
@@ -121,8 +121,8 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
               </div>
               {signalsExpanded && (
                 <div className="block-declarations">
-                  {def.signals!.map((s, i) => (
-                    <SignalDeclBlock key={i} decl={s} />
+                  {def.signals!.map((s) => (
+                    <SignalDeclBlock key={`${s.line}:${s.column}`} decl={s} />
                   ))}
                 </div>
               )}
@@ -139,8 +139,8 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
               </div>
               {queriesExpanded && (
                 <div className="block-declarations">
-                  {def.queries!.map((q, i) => (
-                    <QueryDeclBlock key={i} decl={q} />
+                  {def.queries!.map((q) => (
+                    <QueryDeclBlock key={`${q.line}:${q.column}`} decl={q} />
                   ))}
                 </div>
               )}
@@ -157,8 +157,8 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
               </div>
               {updatesExpanded && (
                 <div className="block-declarations">
-                  {def.updates!.map((u, i) => (
-                    <UpdateDeclBlock key={i} decl={u} />
+                  {def.updates!.map((u) => (
+                    <UpdateDeclBlock key={`${u.line}:${u.column}`} decl={u} />
                   ))}
                 </div>
               )}
@@ -167,14 +167,14 @@ function WorkflowDefBlock({ def, expanded, onToggle }: WorkflowDefBlockProps) {
           
           {/* Body statements */}
           <div className="block-statements">
-            {(def.body || []).map((stmt, i) => (
-              <StatementBlock key={i} statement={stmt} />
+            {(def.body || []).map((stmt) => (
+              <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
             ))}
           </div>
         </div>
       )}
       </div>
-    </HandlerContextProvider.Provider>
+    </HandlerContext.Provider>
   )
 }
 
@@ -202,8 +202,8 @@ function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">
-          {decl.body!.map((stmt, i) => (
-            <StatementBlock key={i} statement={stmt} />
+          {decl.body!.map((stmt) => (
+            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
           ))}
         </div>
       )}
@@ -236,8 +236,8 @@ function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">
-          {decl.body!.map((stmt, i) => (
-            <StatementBlock key={i} statement={stmt} />
+          {decl.body!.map((stmt) => (
+            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
           ))}
         </div>
       )}
@@ -270,8 +270,8 @@ function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
       </div>
       {expanded && hasBody && (
         <div className="declaration-body">
-          {decl.body!.map((stmt, i) => (
-            <StatementBlock key={i} statement={stmt} />
+          {decl.body!.map((stmt) => (
+            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
           ))}
         </div>
       )}
@@ -299,8 +299,8 @@ function ActivityDefBlock({ def, expanded, onToggle }: ActivityDefBlockProps) {
       
       {expanded && (
         <div className="block-body">
-          {(def.body || []).map((stmt, i) => (
-            <StatementBlock key={i} statement={stmt} />
+          {(def.body || []).map((stmt) => (
+            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
           ))}
         </div>
       )}

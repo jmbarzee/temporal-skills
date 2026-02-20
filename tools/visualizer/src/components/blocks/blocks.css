@@ -468,12 +468,6 @@
   color: var(--block-signal-text);
 }
 
-.tagged-query {
-  background: var(--block-query-bg);
-  border: 1px solid var(--block-query-border);
-  color: var(--block-query-text);
-}
-
 .tagged-update {
   background: var(--block-update-bg);
   border: 1px solid var(--block-update-border);
@@ -633,6 +627,15 @@
 
 .block-close>.block-header {
   color: var(--block-return-text);
+}
+
+.block-close.close-continue-as-new {
+  background: var(--block-continue-new-bg);
+  border-color: var(--block-continue-new-border);
+}
+
+.block-close.close-continue-as-new>.block-header {
+  color: var(--block-continue-new-text);
 }
 
 .block-close.close-failed {

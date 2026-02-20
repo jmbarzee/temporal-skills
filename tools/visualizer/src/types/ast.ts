@@ -60,6 +60,9 @@ export interface ActivityDef extends Position {
   sourceFile?: string
 }
 
+// Handler declaration union (signal, query, update)
+export type HandlerDecl = SignalDecl | QueryDecl | UpdateDecl
+
 // Declaration types (with handler bodies)
 export interface SignalDecl extends Position {
   type: 'signalDecl'

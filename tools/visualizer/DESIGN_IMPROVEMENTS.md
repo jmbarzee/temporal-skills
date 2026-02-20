@@ -2,21 +2,15 @@
 
 Architecture and design issues to address before expanding visualizer complexity.
 
-## 1. Extract shared block rendering primitives
+## ~~1. Extract shared block rendering primitives~~ (Partial — A done, B+C dropped)
 
-**Problem:** Every expandable block reimplements the same pattern — `useState(false)`, `useRefocus()`, toggle handler, and identical JSX structure (toggle + icon + keyword + signature). This appears in 15+ components across `StatementBlock.tsx` and `DefinitionBlock.tsx`. Adding universal behavior (keyboard nav, animation, source location links) requires touching every component.
+- A. ~~`useToggle` hook~~ — Done. Extracted to `useToggle.ts`, applied to all 21 toggle sites.
+- B. `<BlockHeader>` — Dropped. 4 distinct header CSS structures with different child class names; a unified component would need 6-7 props to replace 4 lines of self-documenting JSX.
+- C. `<ExpandableBlock>` — Dropped. Body rendering varies too much across components.
 
-**Changes:**
-- A. Create a `useToggle` hook that encapsulates `useState` + `useRefocus` + toggle handler
-- B. Create a `<BlockHeader>` component for the shared toggle/icon/keyword/signature layout
-- C. Create an `<ExpandableBlock>` wrapper that composes the above
+## ~~2. Unify handler declaration components~~ (Done)
 
-## 2. Unify handler declaration components
-
-**Problem:** `SignalDeclBlock`, `QueryDeclBlock`, and `UpdateDeclBlock` in `DefinitionBlock.tsx` are ~95% identical. They differ only in icon, CSS class, and whether `returnType` is shown.
-
-**Changes:**
-- D. Replace the three components with a single `<HandlerDeclBlock>` parameterized by handler type
+- D. ~~Replace the three components with a single `<HandlerDeclBlock>` parameterized by handler type~~ — Done. Config map + `'returnType' in decl` check.
 
 ## 3. Extract shared workflow content rendering
 
@@ -39,30 +33,20 @@ Architecture and design issues to address before expanding visualizer complexity
 **Changes:**
 - G. Split into separate files by concern (e.g. calls, control-flow, await, leaf statements). The top-level `StatementBlock` dispatcher stays as the entry point.
 
-## 6. Fix context naming
+## ~~6. Fix context naming~~ (Done)
 
-**Problem:** `DefinitionContextProvider` and `HandlerContextProvider` are `React.createContext()` values, not provider components. Using `.Provider` on them reads as `DefinitionContextProvider.Provider`.
+Contexts already named `DefinitionContext` / `HandlerContext`.
 
-**Changes:**
-- H. Rename to `DefinitionContext` / `HandlerContext` (the context values), optionally export wrapper provider components
+## ~~7. Use stable keys for statement lists~~ (Done)
 
-## 7. Use stable keys for statement lists
+All statement lists use `key={`${stmt.line}:${stmt.column}`}`.
 
-**Problem:** All statement lists use `key={i}` (array index). This causes incorrect state preservation if statements are reordered. The AST provides `Position` (line, column) on every statement.
+## ~~8. Clean up dead CSS~~ (Done)
 
-**Changes:**
-- I. Switch to `key={`${stmt.line}:${stmt.column}`}` for statement lists
-
-## 8. Clean up dead CSS
-
-**Problem:** Several CSS classes are defined but never applied in JSX:
-- `.block-timer` (standalone) — timer blocks use `.block-await-stmt-timer`
-- `.block-signal`, `.block-update` (standalone) — same pattern
-- `.block-continue-as-new` — `CloseBlock` uses `close-continue-as-new`
-- `.close-value` — not referenced in any component
-
-**Changes:**
-- J. Audit and remove unused CSS classes
+Audited and cleaned up:
+- **Dead CSS removed:** `.tagged-query` (blocks.css), `.app`/`.toolbar`/`.file-upload` (index.css)
+- **Missing CSS added:** `.block-close.close-continue-as-new` rule (CSS variables existed but had no rule)
+- **Phantom JSX classes removed:** `.close-completed`, `.close-args`, `.block-statements`, `.block-then`, `.block-else`, `.has-body`
 
 ## Change Dependencies
 

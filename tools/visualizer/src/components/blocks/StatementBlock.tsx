@@ -212,7 +212,7 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
           )}
           
           {/* Body statements */}
-          <div className="block-statements">
+          <div>
             {(workflowDef.body || []).map((s) => (
               <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))}
@@ -514,13 +514,13 @@ function IfBlock({ stmt }: { stmt: IfStmt }) {
       
       {expanded && (
         <div className="block-body">
-          <div className="block-branch block-then">
+          <div className="block-branch">
             {(stmt.body || []).map((s) => (
               <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))}
           </div>
           {hasElse && (
-            <div className="block-branch block-else">
+            <div className="block-branch">
               <div className="branch-label">else:</div>
               {(stmt.elseBody || []).map((s) => (
                 <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
@@ -586,7 +586,7 @@ function CloseBlock({ stmt }: { stmt: CloseStmt }) {
   const isContinueAsNew = stmt.reason === 'continue_as_new'
   const isFailed = stmt.reason === 'fail'
   const icon = isContinueAsNew ? '⟳' : isFailed ? '✕' : '✓'
-  const statusClass = isContinueAsNew ? 'close-continue-as-new' : isFailed ? 'close-failed' : 'close-completed'
+  const statusClass = isContinueAsNew ? 'close-continue-as-new' : isFailed ? 'close-failed' : ''
 
   return (
     <div className={`block block-close ${statusClass} collapsed`}>
@@ -596,7 +596,7 @@ function CloseBlock({ stmt }: { stmt: CloseStmt }) {
         <span className="block-keyword">close</span>
         <span className="block-signature">
           <span className="close-reason">{stmt.reason}</span>
-          {stmt.args && <span className="close-args">({stmt.args})</span>}
+          {stmt.args && <span>({stmt.args})</span>}
         </span>
       </div>
     </div>

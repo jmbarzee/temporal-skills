@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
+import type { Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, HandlerDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useToggle } from './useToggle'
@@ -104,7 +104,7 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
               {signalsExpanded && (
                 <div className="block-declarations">
                   {def.signals!.map((s) => (
-                    <SignalDeclBlock key={`${s.line}:${s.column}`} decl={s} />
+                    <HandlerDeclBlock key={`${s.line}:${s.column}`} decl={s} />
                   ))}
                 </div>
               )}
@@ -122,7 +122,7 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
               {queriesExpanded && (
                 <div className="block-declarations">
                   {def.queries!.map((q) => (
-                    <QueryDeclBlock key={`${q.line}:${q.column}`} decl={q} />
+                    <HandlerDeclBlock key={`${q.line}:${q.column}`} decl={q} />
                   ))}
                 </div>
               )}
@@ -140,7 +140,7 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
               {updatesExpanded && (
                 <div className="block-declarations">
                   {def.updates!.map((u) => (
-                    <UpdateDeclBlock key={`${u.line}:${u.column}`} decl={u} />
+                    <HandlerDeclBlock key={`${u.line}:${u.column}`} decl={u} />
                   ))}
                 </div>
               )}
@@ -148,7 +148,7 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
           )}
           
           {/* Body statements */}
-          <div className="block-statements">
+          <div>
             {(def.body || []).map((stmt) => (
               <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
             ))}
@@ -160,76 +160,28 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
   )
 }
 
-// Signal declaration with expandable handler body
-function SignalDeclBlock({ decl }: { decl: SignalDecl }) {
+// Config for unified handler declaration component
+const handlerConfig = {
+  signalDecl: { icon: '↪', keyword: 'signal', cssClass: 'declaration-signal' },
+  queryDecl:  { icon: '↩', keyword: 'query',  cssClass: 'declaration-query' },
+  updateDecl: { icon: '⇄', keyword: 'update', cssClass: 'declaration-update' },
+} as const
+
+function HandlerDeclBlock({ decl }: { decl: HandlerDecl }) {
   const hasBody = decl.body && decl.body.length > 0
   const [expanded, toggle] = useToggle(false, hasBody)
-
-  const signature = `${decl.name}(${decl.params})`
-
-  return (
-    <div className={`declaration declaration-signal ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
-      <div className="declaration-header" onClick={toggle}>
-        {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
-        {!hasBody && <span className="block-toggle-placeholder" />}
-        <span className="declaration-icon">↪</span>
-        <span className="declaration-keyword">signal</span>
-        <span className="declaration-name">{signature}</span>
-      </div>
-      {expanded && hasBody && (
-        <div className="declaration-body">
-          {decl.body!.map((stmt) => (
-            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Query declaration with expandable handler body
-function QueryDeclBlock({ decl }: { decl: QueryDecl }) {
-  const hasBody = decl.body && decl.body.length > 0
-  const [expanded, toggle] = useToggle(false, hasBody)
+  const { icon, keyword, cssClass } = handlerConfig[decl.type]
 
   let signature = `${decl.name}(${decl.params})`
-  if (decl.returnType) signature += ` → ${decl.returnType}`
+  if ('returnType' in decl && decl.returnType) signature += ` → ${decl.returnType}`
 
   return (
-    <div className={`declaration declaration-query ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
+    <div className={`declaration ${cssClass} ${expanded ? 'expanded' : ''}`}>
       <div className="declaration-header" onClick={toggle}>
         {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
         {!hasBody && <span className="block-toggle-placeholder" />}
-        <span className="declaration-icon">↩</span>
-        <span className="declaration-keyword">query</span>
-        <span className="declaration-name">{signature}</span>
-      </div>
-      {expanded && hasBody && (
-        <div className="declaration-body">
-          {decl.body!.map((stmt) => (
-            <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Update declaration with expandable handler body
-function UpdateDeclBlock({ decl }: { decl: UpdateDecl }) {
-  const hasBody = decl.body && decl.body.length > 0
-  const [expanded, toggle] = useToggle(false, hasBody)
-
-  let signature = `${decl.name}(${decl.params})`
-  if (decl.returnType) signature += ` → ${decl.returnType}`
-
-  return (
-    <div className={`declaration declaration-update ${expanded ? 'expanded' : ''} ${hasBody ? 'has-body' : ''}`}>
-      <div className="declaration-header" onClick={toggle}>
-        {hasBody && <span className="block-toggle">{expanded ? '▼' : '▶'}</span>}
-        {!hasBody && <span className="block-toggle-placeholder" />}
-        <span className="declaration-icon">⇄</span>
-        <span className="declaration-keyword">update</span>
+        <span className="declaration-icon">{icon}</span>
+        <span className="declaration-keyword">{keyword}</span>
         <span className="declaration-name">{signature}</span>
       </div>
       {expanded && hasBody && (

@@ -297,15 +297,6 @@
   font-weight: 600;
 }
 
-.declaration-params {
-  opacity: 0.85;
-}
-
-.declaration-return {
-  opacity: 0.85;
-  margin-left: 4px;
-}
-
 /* Declaration body - for expandable handler bodies */
 .declaration-body {
   position: relative;

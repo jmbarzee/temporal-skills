@@ -12,12 +12,9 @@ Architecture and design issues to address before expanding visualizer complexity
 
 - D. ~~Replace the three components with a single `<HandlerDeclBlock>` parameterized by handler type~~ — Done. Config map + `'returnType' in decl` check.
 
-## 3. Extract shared workflow content rendering
+## ~~3. Extract shared workflow content rendering~~ (Done)
 
-**Problem:** `WorkflowCallBlock` (StatementBlock.tsx:116-239) re-implements the signal/query/update/body rendering from `WorkflowDefBlock` (DefinitionBlock.tsx:35-179). Changes to handler display must be applied in two places.
-
-**Changes:**
-- E. Extract a `<WorkflowContent>` component for the handler groups + body, used by both `WorkflowDefBlock` and `WorkflowCallBlock`
+- E. ~~Extract a `<WorkflowContent>` component for the handler groups + body, used by both `WorkflowDefBlock` and `WorkflowCallBlock`~~ — Done. New `WorkflowContent.tsx` with `HandlerDeclBlock` + `WorkflowContent`.
 
 ## 4. Unify await display helpers
 

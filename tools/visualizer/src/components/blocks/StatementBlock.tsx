@@ -19,6 +19,7 @@ import type {
   UnsetStmt,
 } from '../../types/ast'
 import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
+import { WorkflowContent } from './WorkflowContent'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useToggle } from './useToggle'
 import './blocks.css'
@@ -112,16 +113,9 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   const workflowDef = context.workflows.get(stmt.name)
   const isDefined = !!workflowDef
   const [expanded, toggle] = useToggle(false, isDefined)
-  const [signalsExpanded, toggleSignals] = useToggle()
-  const [queriesExpanded, toggleQueries] = useToggle()
-  const [updatesExpanded, toggleUpdates] = useToggle()
 
   const modePrefix = stmt.mode === 'detach' ? 'detach ' : ''
   const signature = formatWorkflowCallSignature(stmt)
-
-  const hasSignals = workflowDef?.signals && workflowDef.signals.length > 0
-  const hasQueries = workflowDef?.queries && workflowDef.queries.length > 0
-  const hasUpdates = workflowDef?.updates && workflowDef.updates.length > 0
 
   return (
     <div className={`block block-workflow-call block-mode-${stmt.mode} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
@@ -136,87 +130,10 @@ function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
         <span className="block-signature">{signature}</span>
         {!isDefined && <span className="block-unresolved-badge">?</span>}
       </div>
-      
+
       {expanded && isDefined && (
         <div className="block-body">
-          {/* Signals - data flowing IN to workflow */}
-          {hasSignals && (
-            <div className="block-declarations-group">
-              <div className="declarations-header" onClick={toggleSignals}>
-                <span className="block-toggle">{signalsExpanded ? '▼' : '▶'}</span>
-                <span className="declarations-icon declaration-signal">↪</span>
-                <span className="declarations-label">signals</span>
-                <span className="declarations-count">({workflowDef.signals!.length})</span>
-              </div>
-              {signalsExpanded && (
-                <div className="block-declarations">
-                  {workflowDef.signals!.map((s) => (
-                    <div key={`${s.line}:${s.column}`} className="declaration declaration-signal">
-                      <span className="declaration-icon">↪</span>
-                      <span className="declaration-keyword">signal</span>
-                      <span className="declaration-name">{s.name}</span>
-                      <span className="declaration-params">({s.params})</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {/* Queries - data flowing OUT of workflow */}
-          {hasQueries && (
-            <div className="block-declarations-group">
-              <div className="declarations-header" onClick={toggleQueries}>
-                <span className="block-toggle">{queriesExpanded ? '▼' : '▶'}</span>
-                <span className="declarations-icon declaration-query">↩</span>
-                <span className="declarations-label">queries</span>
-                <span className="declarations-count">({workflowDef.queries!.length})</span>
-              </div>
-              {queriesExpanded && (
-                <div className="block-declarations">
-                  {workflowDef.queries!.map((q) => (
-                    <div key={`${q.line}:${q.column}`} className="declaration declaration-query">
-                      <span className="declaration-icon">↩</span>
-                      <span className="declaration-keyword">query</span>
-                      <span className="declaration-name">{q.name}</span>
-                      <span className="declaration-params">({q.params})</span>
-                      {q.returnType && <span className="declaration-return">→ {q.returnType}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {/* Updates - data flowing BOTH ways */}
-          {hasUpdates && (
-            <div className="block-declarations-group">
-              <div className="declarations-header" onClick={toggleUpdates}>
-                <span className="block-toggle">{updatesExpanded ? '▼' : '▶'}</span>
-                <span className="declarations-icon declaration-update">⇄</span>
-                <span className="declarations-label">updates</span>
-                <span className="declarations-count">({workflowDef.updates!.length})</span>
-              </div>
-              {updatesExpanded && (
-                <div className="block-declarations">
-                  {workflowDef.updates!.map((u) => (
-                    <div key={`${u.line}:${u.column}`} className="declaration declaration-update">
-                      <span className="declaration-icon">⇄</span>
-                      <span className="declaration-keyword">update</span>
-                      <span className="declaration-name">{u.name}</span>
-                      <span className="declaration-params">({u.params})</span>
-                      {u.returnType && <span className="declaration-return">→ {u.returnType}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Body statements */}
-          <div>
-            {(workflowDef.body || []).map((s) => (
-              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
-            ))}
-          </div>
+          <WorkflowContent def={workflowDef} />
         </div>
       )}
     </div>

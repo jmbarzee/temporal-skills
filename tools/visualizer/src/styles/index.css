@@ -243,44 +243,99 @@ body {
   }
 }
 
-/* --- Activities Toggle --- */
-.header-activities-toggle {
+/* --- Definition Type Toggles --- */
+.header-types-section {
+  padding: 8px 14px;
+}
+
+.header-types-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.header-type-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
   font-family: var(--font-sans);
   font-size: 13px;
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
   white-space: nowrap;
 }
 
-.header-activities-toggle:hover {
+.header-type-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.header-type-label {
+  line-height: 1;
+}
+
+/* Workflow type toggle */
+.header-type-tag.header-type-workflowDef:hover {
+  border-color: var(--color-workflow);
+  color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.06);
+}
+
+.header-type-tag.header-type-workflowDef.active {
+  border-color: var(--color-workflow);
+  background: rgba(139, 126, 200, 0.12);
+  color: var(--color-workflow);
+  font-weight: 500;
+}
+
+/* Activity type toggle */
+.header-type-tag.header-type-activityDef:hover {
   border-color: var(--color-activity, #7CB9E8);
   color: var(--color-activity, #7CB9E8);
   background: rgba(124, 185, 232, 0.06);
 }
 
-.header-activities-toggle.active {
+.header-type-tag.header-type-activityDef.active {
   border-color: var(--color-activity, #7CB9E8);
   background: rgba(124, 185, 232, 0.12);
   color: var(--color-activity, #7CB9E8);
   font-weight: 500;
 }
 
-.vscode-dark .header-activities-toggle:hover,
-.vscode-dark .header-activities-toggle.active {
+/* Worker type toggle */
+.header-type-tag.header-type-workerDef:hover {
+  border-color: #94A3B8;
+  color: #64748B;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.header-type-tag.header-type-workerDef.active {
+  border-color: #94A3B8;
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748B;
+  font-weight: 500;
+}
+
+.vscode-dark .header-type-tag.header-type-workflowDef:hover,
+.vscode-dark .header-type-tag.header-type-workflowDef.active {
+  background: rgba(168, 155, 216, 0.15);
+}
+
+.vscode-dark .header-type-tag.header-type-activityDef:hover,
+.vscode-dark .header-type-tag.header-type-activityDef.active {
   background: rgba(124, 185, 232, 0.15);
 }
 
-.header-activities-label {
-  line-height: 1;
+.vscode-dark .header-type-tag.header-type-workerDef:hover,
+.vscode-dark .header-type-tag.header-type-workerDef.active {
+  color: #94A3B8;
+  background: rgba(148, 163, 184, 0.15);
 }
 
 /* No workflows message */

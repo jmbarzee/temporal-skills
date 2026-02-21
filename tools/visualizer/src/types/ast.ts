@@ -22,7 +22,7 @@ export interface TWFFile {
 }
 
 // Definition types
-export type Definition = WorkflowDef | ActivityDef
+export type Definition = WorkflowDef | ActivityDef | WorkerDef
 
 export interface WorkflowDef extends Position {
   type: 'workflowDef'
@@ -54,6 +54,22 @@ export interface ActivityDef extends Position {
   params: string
   returnType?: string
   body: Statement[]
+  // Source file path (added by extension)
+  sourceFile?: string
+}
+
+// Worker reference (a named ref to a workflow, activity, or nexus service)
+export interface WorkerRef extends Position {
+  name: string
+}
+
+// Worker definition - groups workflows, activities, and nexus services
+export interface WorkerDef extends Position {
+  type: 'workerDef'
+  name: string
+  workflows: WorkerRef[]
+  activities: WorkerRef[]
+  services: WorkerRef[]
   // Source file path (added by extension)
   sourceFile?: string
 }
@@ -328,4 +344,8 @@ export function isWorkflowDef(def: Definition): def is WorkflowDef {
 
 export function isActivityDef(def: Definition): def is ActivityDef {
   return def.type === 'activityDef'
+}
+
+export function isWorkerDef(def: Definition): def is WorkerDef {
+  return def.type === 'workerDef'
 }

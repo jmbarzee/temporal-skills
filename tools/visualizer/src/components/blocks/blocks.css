@@ -35,13 +35,17 @@
   --block-query-border: #C4B5FD;
   --block-query-text: #5B21B6;
 
-  --block-control-bg: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%);
+  --block-control-bg: linear-gradient(135deg, #F8FAFC 0%, #F4F6F9 100%);
   --block-control-border: #CBD5E1;
   --block-control-text: #334155;
 
-  --block-case-bg: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+  --block-case-bg: linear-gradient(135deg, #F8FAFC 0%, #F4F6F9 100%);
   --block-case-border: #E2E8F0;
   --block-case-text: #475569;
+
+  --block-worker-bg: linear-gradient(135deg, #E8ECF1 0%, #DCE1E8 100%);
+  --block-worker-border: #94A3B8;
+  --block-worker-text: #1E293B;
 
   --block-return-bg: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
   --block-return-border: #6EE7B7;
@@ -120,13 +124,17 @@
   --block-query-border: #9F8BDB;
   --block-query-text: #C8B8F0;
 
-  --block-control-bg: linear-gradient(135deg, #252830 0%, #2D3138 100%);
+  --block-control-bg: linear-gradient(135deg, #1A1D22 0%, #1E2228 100%);
   --block-control-border: #4A5568;
   --block-control-text: #CBD5E1;
 
-  --block-case-bg: linear-gradient(135deg, #1E2024 0%, #252830 100%);
+  --block-case-bg: linear-gradient(135deg, #1A1D22 0%, #1E2228 100%);
   --block-case-border: #3D4550;
   --block-case-text: #A0AEC0;
+
+  --block-worker-bg: linear-gradient(135deg, #2A2E35 0%, #323740 100%);
+  --block-worker-border: #64748B;
+  --block-worker-text: #E2E8F0;
 
   --block-return-bg: linear-gradient(135deg, #1E3028 0%, #243830 100%);
   --block-return-border: #48BB78;
@@ -365,6 +373,93 @@
 
 .block-activity-def>.block-header {
   color: var(--block-activity-text);
+}
+
+/* Worker Definition - Foundational Grey */
+.block-worker-def {
+  background: var(--block-worker-bg);
+  border: 2px solid var(--block-worker-border);
+}
+
+.block-worker-def>.block-header {
+  color: var(--block-worker-text);
+}
+
+/* Worker ref sections */
+.worker-ref-section {
+  margin: 8px 0 4px;
+}
+
+.worker-ref-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  padding: 2px 0 4px;
+  color: var(--block-worker-text);
+}
+
+/* Worker ref items - expandable like call blocks */
+.worker-ref {
+  position: relative;
+  margin: 4px 0;
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  transition: box-shadow 0.15s;
+}
+
+.worker-ref-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.15s;
+}
+
+.worker-ref-header:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.worker-ref-name {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* Worker ref type colors */
+.worker-ref-workflow {
+  background: var(--block-workflow-call-bg);
+  border: 1px solid var(--block-workflow-call-border);
+  color: var(--block-workflow-call-text);
+}
+
+.worker-ref-activity {
+  background: var(--block-activity-bg);
+  border: 1px solid var(--block-activity-border);
+  color: var(--block-activity-text);
+}
+
+.worker-ref-service {
+  background: var(--block-nexus-bg);
+  border: 1px solid var(--block-nexus-border);
+  color: var(--block-nexus-text);
+}
+
+.worker-ref.worker-ref-unresolved {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+.worker-ref.expanded {
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.worker-ref.expanded>.worker-ref-header {
+  border-radius: 6px 6px 0 0;
 }
 
 /* Workflow Call - Purple (lighter) */

@@ -16,3 +16,6 @@ tools/visualizer/dist/
 
 # Built Go binaries
 tools/lsp/twf
+
+# Claude settings
+.claude/settings.local.json

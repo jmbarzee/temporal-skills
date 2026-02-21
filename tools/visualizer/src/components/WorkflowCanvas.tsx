@@ -1,7 +1,7 @@
 import React from 'react'
-import type { TWFFile, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
+import type { TWFFile, Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
-import { SearchIcon, SingleGearIcon } from './icons/GearIcons'
+import { SearchIcon } from './icons/GearIcons'
 
 interface WorkflowCanvasProps {
   ast: TWFFile
@@ -31,12 +31,30 @@ export const HandlerContext = React.createContext<HandlerContext>({
   updates: new Map(),
 })
 
+// Definition type toggle configuration
+interface DefTypeConfig {
+  type: string
+  label: string
+  icon: string
+  defaultOn: boolean
+}
+
+const DEF_TYPE_CONFIGS: DefTypeConfig[] = [
+  { type: 'workflowDef', label: 'Workflows', icon: '⚙⚙', defaultOn: true },
+  { type: 'activityDef', label: 'Activities', icon: '⚙', defaultOn: false },
+  { type: 'workerDef', label: 'Workers', icon: '⧉', defaultOn: false },
+]
+
+const DEFAULT_VISIBLE_TYPES = new Set(
+  DEF_TYPE_CONFIGS.filter(c => c.defaultOn).map(c => c.type)
+)
+
 export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
   // --- Header state ---
   const [selectedFiles, setSelectedFiles] = React.useState<Set<string>>(new Set())
   const [searchActive, setSearchActive] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
-  const [showActivities, setShowActivities] = React.useState(false)
+  const [visibleTypes, setVisibleTypes] = React.useState<Set<string>>(DEFAULT_VISIBLE_TYPES)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
 
   // Build lookup maps for definitions (all files for expansion support)
@@ -107,14 +125,26 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
     }
   }
 
+  // Toggle a definition type in visibility
+  const toggleType = (type: string) => {
+    setVisibleTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+  }
+
   // Filter definitions for display
   const visibleDefinitions = React.useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase()
 
-    return ast.definitions.filter((def): def is WorkflowDef | ActivityDef => {
-      // Type filter: workflows always, activities only when toggled
-      if (def.type === 'activityDef' && !showActivities) return false
-      if (def.type !== 'workflowDef' && def.type !== 'activityDef') return false
+    return ast.definitions.filter((def): def is Definition => {
+      // Type filter
+      if (!visibleTypes.has(def.type)) return false
 
       // File filter: if any files are selected, only show from those files
       // If none selected (all toggled off), show all
@@ -129,7 +159,7 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
 
       return true
     })
-  }, [ast.definitions, selectedFiles, showActivities, searchQuery])
+  }, [ast.definitions, selectedFiles, visibleTypes, searchQuery])
 
   // Partition errors into "shown files" vs "hidden files" based on file filter
   const errors = ast.errors || []
@@ -188,14 +218,34 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
             </>
           )}
 
-          {/* Controls Section — always show */}
+          {/* Definition Type Toggles */}
+          <div className="header-types-section">
+            <div className="header-types-row">
+              {DEF_TYPE_CONFIGS.map(cfg => {
+                const isActive = visibleTypes.has(cfg.type)
+                return (
+                  <button
+                    key={cfg.type}
+                    className={`header-type-tag ${isActive ? 'active' : ''} header-type-${cfg.type}`}
+                    onClick={() => toggleType(cfg.type)}
+                    title={isActive ? `Hide ${cfg.label.toLowerCase()}` : `Show ${cfg.label.toLowerCase()}`}
+                  >
+                    <span className="header-type-icon">{cfg.icon}</span>
+                    <span className="header-type-label">{cfg.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="header-divider" />
+
+          {/* Controls Section — search */}
           <div className="header-controls-section">
-            {/* Search (left side) */}
             <div className={`header-search ${searchActive ? 'active' : ''}`}>
               <button
                 className="header-search-toggle"
                 onClick={toggleSearch}
-                title="Search workflows"
+                title="Search definitions"
               >
                 <SearchIcon size={14} />
               </button>
@@ -213,16 +263,6 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
                 />
               )}
             </div>
-
-            {/* Activities toggle (right side) */}
-            <button
-              className={`header-activities-toggle ${showActivities ? 'active' : ''}`}
-              onClick={() => setShowActivities(!showActivities)}
-              title={showActivities ? 'Hide activities' : 'Show activities'}
-            >
-              <SingleGearIcon size={13} />
-              <span className="header-activities-label">Activities</span>
-            </button>
           </div>
         </div>
 
@@ -240,9 +280,7 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
             <p>
               {searchQuery
                 ? 'No matching definitions found'
-                : showActivities
-                  ? 'No workflows or activities defined'
-                  : 'No workflows defined in the selected files'}
+                : 'No definitions found for the selected types and files'}
             </p>
           </div>
         ) : (

@@ -7,8 +7,8 @@ import (
 
 func renameHandler(store *DocumentStore) protocol.TextDocumentRenameFunc {
 	return func(context *glsp.Context, params *protocol.RenameParams) (*protocol.WorkspaceEdit, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 
@@ -47,8 +47,8 @@ func renameHandler(store *DocumentStore) protocol.TextDocumentRenameFunc {
 
 func prepareRenameHandler(store *DocumentStore) protocol.TextDocumentPrepareRenameFunc {
 	return func(context *glsp.Context, params *protocol.PrepareRenameParams) (any, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

@@ -11,8 +11,8 @@ import (
 
 func hoverHandler(store *DocumentStore) protocol.TextDocumentHoverFunc {
 	return func(context *glsp.Context, params *protocol.HoverParams) (*protocol.Hover, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

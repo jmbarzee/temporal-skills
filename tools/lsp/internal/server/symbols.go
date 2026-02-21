@@ -8,8 +8,8 @@ import (
 
 func documentSymbolHandler(store *DocumentStore) protocol.TextDocumentDocumentSymbolFunc {
 	return func(context *glsp.Context, params *protocol.DocumentSymbolParams) (any, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

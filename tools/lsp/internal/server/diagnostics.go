@@ -37,38 +37,13 @@ func publishDiagnostics(context *glsp.Context, doc *Document) error {
 	var diags []protocol.Diagnostic
 
 	for _, pe := range doc.ParseErrs {
-		diags = append(diags, protocol.Diagnostic{
-			Range:    posToRange(pe.Line, pe.Column),
-			Severity: ptrTo(protocol.DiagnosticSeverityError),
-			Source:   ptrTo("twf"),
-			Message:  pe.Msg,
-		})
+		diags = appendDiag(diags, pe.Line, pe.Column, "", pe.Msg)
 	}
-
 	for _, re := range doc.ResolveErrs {
-		sev := protocol.DiagnosticSeverityError
-		if re.Severity == "warning" {
-			sev = protocol.DiagnosticSeverityWarning
-		}
-		diags = append(diags, protocol.Diagnostic{
-			Range:    posToRange(re.Line, re.Column),
-			Severity: ptrTo(sev),
-			Source:   ptrTo("twf"),
-			Message:  re.Msg,
-		})
+		diags = appendDiag(diags, re.Line, re.Column, re.Severity, re.Msg)
 	}
-
 	for _, ve := range doc.ValidateErrs {
-		sev := protocol.DiagnosticSeverityError
-		if ve.Severity == "warning" {
-			sev = protocol.DiagnosticSeverityWarning
-		}
-		diags = append(diags, protocol.Diagnostic{
-			Range:    posToRange(ve.Line, ve.Column),
-			Severity: ptrTo(sev),
-			Source:   ptrTo("twf"),
-			Message:  ve.Msg,
-		})
+		diags = appendDiag(diags, ve.Line, ve.Column, ve.Severity, ve.Msg)
 	}
 
 	if diags == nil {
@@ -80,6 +55,19 @@ func publishDiagnostics(context *glsp.Context, doc *Document) error {
 		Diagnostics: diags,
 	})
 	return nil
+}
+
+func appendDiag(diags []protocol.Diagnostic, line, column int, severity, msg string) []protocol.Diagnostic {
+	sev := protocol.DiagnosticSeverityError
+	if severity == "warning" {
+		sev = protocol.DiagnosticSeverityWarning
+	}
+	return append(diags, protocol.Diagnostic{
+		Range:    posToRange(line, column),
+		Severity: ptrTo(sev),
+		Source:   ptrTo("twf"),
+		Message:  msg,
+	})
 }
 
 // lineRange converts 1-based start/end lines to an LSP 0-based range spanning those lines.

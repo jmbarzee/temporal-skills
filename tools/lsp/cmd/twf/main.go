@@ -109,22 +109,19 @@ func parseFiles(args []string) (*ast.File, []string, int) {
 
 	// Add parse errors
 	for _, e := range parseErrs {
-		msg := fmt.Sprintf("parse error at %d:%d: %s", e.Line, e.Column, e.Msg)
-		allErrs = append(allErrs, msg)
+		allErrs = append(allErrs, e.Error())
 	}
 
 	// Resolve (even if there were parse errors, resolve what we got)
 	resolveErrs := resolver.Resolve(file)
 	for _, e := range resolveErrs {
-		msg := fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
-		allErrs = append(allErrs, msg)
+		allErrs = append(allErrs, e.Error())
 	}
 
 	// Validate deployment/routing
 	validateErrs := validator.Validate(file)
 	for _, e := range validateErrs {
-		msg := fmt.Sprintf("validation error at %d:%d: %s", e.Line, e.Column, e.Msg)
-		allErrs = append(allErrs, msg)
+		allErrs = append(allErrs, e.Error())
 	}
 
 	// Determine exit code

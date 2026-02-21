@@ -8,8 +8,8 @@ import (
 
 func referencesHandler(store *DocumentStore) protocol.TextDocumentReferencesFunc {
 	return func(context *glsp.Context, params *protocol.ReferenceParams) ([]protocol.Location, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

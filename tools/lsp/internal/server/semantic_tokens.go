@@ -30,8 +30,8 @@ const (
 
 func semanticTokensHandler(store *DocumentStore) protocol.TextDocumentSemanticTokensFullFunc {
 	return func(context *glsp.Context, params *protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok {
 			return nil, nil
 		}
 

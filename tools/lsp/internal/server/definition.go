@@ -8,8 +8,8 @@ import (
 
 func definitionHandler(store *DocumentStore) protocol.TextDocumentDefinitionFunc {
 	return func(context *glsp.Context, params *protocol.DefinitionParams) (any, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

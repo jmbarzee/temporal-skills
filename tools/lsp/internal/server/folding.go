@@ -8,8 +8,8 @@ import (
 
 func foldingRangeHandler(store *DocumentStore) protocol.TextDocumentFoldingRangeFunc {
 	return func(context *glsp.Context, params *protocol.FoldingRangeParams) ([]protocol.FoldingRange, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 

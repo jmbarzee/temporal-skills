@@ -8,8 +8,8 @@ import (
 
 func completionHandler(store *DocumentStore) protocol.TextDocumentCompletionFunc {
 	return func(context *glsp.Context, params *protocol.CompletionParams) (any, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok {
 			return nil, nil
 		}
 

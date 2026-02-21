@@ -74,10 +74,11 @@ func (s *DocumentStore) Update(uri, content string) *Document {
 }
 
 // Get returns a document by URI.
-func (s *DocumentStore) Get(uri string) *Document {
+func (s *DocumentStore) Get(uri string) (*Document, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.docs[uri]
+	doc, ok := s.docs[uri]
+	return doc, ok
 }
 
 // Close removes a document from the store.

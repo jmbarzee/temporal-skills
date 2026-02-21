@@ -5,14 +5,15 @@ import (
 	"strings"
 
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
+	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/resolver"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 )
 
 func codeActionHandler(store *DocumentStore) protocol.TextDocumentCodeActionFunc {
 	return func(context *glsp.Context, params *protocol.CodeActionParams) (any, error) {
-		doc := store.Get(params.TextDocument.URI)
-		if doc == nil || doc.File == nil {
+		doc, ok := store.Get(params.TextDocument.URI)
+		if !ok || doc.File == nil {
 			return nil, nil
 		}
 
@@ -35,32 +36,22 @@ func codeActionHandler(store *DocumentStore) protocol.TextDocumentCodeActionFunc
 func addMissingDefinitionActions(doc *Document, params *protocol.CodeActionParams) []protocol.CodeAction {
 	var actions []protocol.CodeAction
 
-	// Check for "undefined" errors in the range
+	// Check for undefined activity/workflow errors in the range
 	for _, err := range doc.ResolveErrs {
-		if !strings.Contains(err.Msg, "undefined") {
-			continue
-		}
-
 		errRange := posToRange(err.Line, err.Column)
 		if !rangesOverlap(params.Range, errRange) {
 			continue
 		}
 
-		// Extract the name from error message like "undefined activity: Foo"
 		var name string
 		var kind string
-		if strings.Contains(err.Msg, "undefined activity:") {
-			parts := strings.SplitN(err.Msg, "undefined activity:", 2)
-			if len(parts) == 2 {
-				name = strings.TrimSpace(parts[1])
-				kind = "activity"
-			}
-		} else if strings.Contains(err.Msg, "undefined workflow:") {
-			parts := strings.SplitN(err.Msg, "undefined workflow:", 2)
-			if len(parts) == 2 {
-				name = strings.TrimSpace(parts[1])
-				kind = "workflow"
-			}
+		switch err.Kind {
+		case resolver.ErrUndefinedActivity:
+			name = err.Name
+			kind = "activity"
+		case resolver.ErrUndefinedWorkflow:
+			name = err.Name
+			kind = "workflow"
 		}
 
 		if name != "" && kind != "" {

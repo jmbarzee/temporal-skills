@@ -6,12 +6,43 @@ import (
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 )
 
+// ErrorKind classifies a resolve error for structured handling.
+type ErrorKind int
+
+const (
+	ErrDuplicateWorkflow     ErrorKind = iota + 1
+	ErrDuplicateActivity
+	ErrDuplicateWorker
+	ErrDuplicateNamespace
+	ErrDuplicateNexusService
+	ErrDuplicateEndpoint
+	ErrUndefinedActivity
+	ErrUndefinedWorkflow
+	ErrUndefinedSignal
+	ErrUndefinedUpdate
+	ErrUndefinedCondition
+	ErrUndefinedPromiseOrCondition
+	ErrConditionResultBinding
+	ErrNexusAsyncUndefinedWorkflow
+	ErrNexusUndefinedEndpoint
+	ErrNexusUnresolvedEndpoint   // warning
+	ErrNexusUndefinedService
+	ErrNexusUnresolvedService    // warning
+	ErrNexusNoOperation
+	ErrWorkerUndefinedWorkflow
+	ErrWorkerUndefinedActivity
+	ErrWorkerUndefinedNexusService
+	ErrNamespaceUndefinedWorker
+)
+
 // ResolveError represents a resolution error with position info.
 type ResolveError struct {
 	Msg      string
 	Line     int
 	Column   int
 	Severity string // "error" (default) or "warning"
+	Kind     ErrorKind
+	Name     string // primary entity referenced by this error
 }
 
 func (e *ResolveError) Error() string {
@@ -43,6 +74,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate workflow definition: %s", d.Name),
 					Line:   d.Line,
 					Column: d.Column,
+					Kind:   ErrDuplicateWorkflow,
+					Name:   d.Name,
 				})
 			}
 			workflows[d.Name] = d
@@ -52,6 +85,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate activity definition: %s", d.Name),
 					Line:   d.Line,
 					Column: d.Column,
+					Kind:   ErrDuplicateActivity,
+					Name:   d.Name,
 				})
 			}
 			activities[d.Name] = d
@@ -61,6 +96,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate worker definition: %s", d.Name),
 					Line:   d.Line,
 					Column: d.Column,
+					Kind:   ErrDuplicateWorker,
+					Name:   d.Name,
 				})
 			}
 			workers[d.Name] = d
@@ -70,6 +107,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate namespace definition: %s", d.Name),
 					Line:   d.Line,
 					Column: d.Column,
+					Kind:   ErrDuplicateNamespace,
+					Name:   d.Name,
 				})
 			}
 			namespaces[d.Name] = d
@@ -79,6 +118,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate nexus service definition: %s", d.Name),
 					Line:   d.Line,
 					Column: d.Column,
+					Kind:   ErrDuplicateNexusService,
+					Name:   d.Name,
 				})
 			}
 			nexusServices[d.Name] = d
@@ -95,6 +136,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("duplicate nexus endpoint name %q: defined in namespace %s and namespace %s", ep.EndpointName, existing.namespaceName, ns.Name),
 					Line:   ep.Line,
 					Column: ep.Column,
+					Kind:   ErrDuplicateEndpoint,
+					Name:   ep.EndpointName,
 				})
 			}
 			allEndpoints[ep.EndpointName] = &endpointInfo{namespaceName: ns.Name, endpoint: ep}
@@ -182,6 +225,8 @@ func Resolve(file *ast.File) []*ResolveError {
 						Msg:    fmt.Sprintf("nexus service %s: async operation %s references undefined workflow: %s", svc.Name, op.Name, op.WorkflowName),
 						Line:   op.Line,
 						Column: op.Column,
+						Kind:   ErrNexusAsyncUndefinedWorkflow,
+						Name:   op.WorkflowName,
 					})
 				}
 			} else if op.OpType == ast.NexusOpSync {
@@ -214,6 +259,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("worker %s references undefined workflow: %s", w.Name, ref.Name),
 					Line:   ref.Line,
 					Column: ref.Column,
+					Kind:   ErrWorkerUndefinedWorkflow,
+					Name:   ref.Name,
 				})
 			}
 		}
@@ -226,6 +273,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("worker %s references undefined activity: %s", w.Name, ref.Name),
 					Line:   ref.Line,
 					Column: ref.Column,
+					Kind:   ErrWorkerUndefinedActivity,
+					Name:   ref.Name,
 				})
 			}
 		}
@@ -238,6 +287,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("worker %s references undefined nexus service: %s", w.Name, ref.Name),
 					Line:   ref.Line,
 					Column: ref.Column,
+					Kind:   ErrWorkerUndefinedNexusService,
+					Name:   ref.Name,
 				})
 			}
 		}
@@ -253,6 +304,8 @@ func Resolve(file *ast.File) []*ResolveError {
 					Msg:    fmt.Sprintf("namespace %s references undefined worker: %s", ns.Name, nw.WorkerName),
 					Line:   nw.Line,
 					Column: nw.Column,
+					Kind:   ErrNamespaceUndefinedWorker,
+					Name:   nw.WorkerName,
 				})
 			}
 		}
@@ -290,6 +343,8 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Msg:    fmt.Sprintf("undefined activity: %s", s.Name),
 				Line:   s.Line,
 				Column: s.Column,
+				Kind:   ErrUndefinedActivity,
+				Name:   s.Name,
 			})
 		}
 
@@ -301,6 +356,8 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Msg:    fmt.Sprintf("undefined workflow: %s", s.Name),
 				Line:   s.Line,
 				Column: s.Column,
+				Kind:   ErrUndefinedWorkflow,
+				Name:   s.Name,
 			})
 		}
 
@@ -348,6 +405,8 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
 				Line:   s.Line,
 				Column: s.Column,
+				Kind:   ErrUndefinedCondition,
+				Name:   s.Name,
 			})
 		}
 
@@ -357,6 +416,8 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
 				Line:   s.Line,
 				Column: s.Column,
+				Kind:   ErrUndefinedCondition,
+				Name:   s.Name,
 			})
 		}
 	}
@@ -385,6 +446,8 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, 
 				Msg:    fmt.Sprintf("undefined nexus endpoint: %s", endpoint),
 				Line:   line,
 				Column: column,
+				Kind:   ErrNexusUndefinedEndpoint,
+				Name:   endpoint,
 			})
 		}
 	} else {
@@ -393,6 +456,8 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, 
 			Line:     line,
 			Column:   column,
 			Severity: "warning",
+			Kind:     ErrNexusUnresolvedEndpoint,
+			Name:     endpoint,
 		})
 	}
 
@@ -404,6 +469,8 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, 
 				Msg:    fmt.Sprintf("undefined nexus service: %s", service),
 				Line:   line,
 				Column: column,
+				Kind:   ErrNexusUndefinedService,
+				Name:   service,
 			})
 		} else {
 			res.service = svc
@@ -419,6 +486,8 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, 
 					Msg:    fmt.Sprintf("nexus service %s has no operation %s", service, operation),
 					Line:   line,
 					Column: column,
+					Kind:   ErrNexusNoOperation,
+					Name:   operation,
 				})
 			}
 		}
@@ -428,6 +497,8 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, 
 			Line:     line,
 			Column:   column,
 			Severity: "warning",
+			Kind:     ErrNexusUnresolvedService,
+			Name:     service,
 		})
 	}
 
@@ -458,6 +529,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("undefined signal: %s", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrUndefinedSignal,
+				Name:   t.Name,
 			})
 		}
 	case *ast.UpdateTarget:
@@ -468,6 +541,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("undefined update: %s", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrUndefinedUpdate,
+				Name:   t.Name,
 			})
 		}
 	case *ast.ActivityTarget:
@@ -478,6 +553,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("undefined activity: %s", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrUndefinedActivity,
+				Name:   t.Name,
 			})
 		}
 	case *ast.WorkflowTarget:
@@ -488,6 +565,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("undefined workflow: %s", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrUndefinedWorkflow,
+				Name:   t.Name,
 			})
 		}
 	case *ast.NexusTarget:
@@ -504,6 +583,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("undefined promise or condition: %s", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrUndefinedPromiseOrCondition,
+				Name:   t.Name,
 			})
 		}
 		if isCondition && t.Result != "" {
@@ -511,6 +592,8 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", t.Name),
 				Line:   line,
 				Column: column,
+				Kind:   ErrConditionResultBinding,
+				Name:   t.Name,
 			})
 		}
 	case *ast.TimerTarget:

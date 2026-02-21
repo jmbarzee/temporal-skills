@@ -6,12 +6,35 @@ import (
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 )
 
+// ErrorKind classifies a validation error for structured handling.
+type ErrorKind int
+
+const (
+	ErrEmptyWorkflow          ErrorKind = iota + 1
+	ErrEmptyActivity
+	ErrEmptyWorker
+	ErrEmptyNamespace
+	ErrMissingTaskQueue
+	ErrMissingEndpointTaskQueue
+	ErrUncoveredWorkflow
+	ErrUncoveredActivity
+	ErrUncoveredService
+	ErrUninstantiatedWorker
+	ErrTaskQueueIdentical
+	ErrTaskQueueMismatch
+	ErrExplicitRoutingMismatch
+	ErrImplicitRoutingMismatch
+	ErrEndpointServiceLinkage
+)
+
 // Error represents a validation error with position info.
 type Error struct {
 	Msg      string
 	Line     int
 	Column   int
 	Severity string // "error" (default) or "warning"
+	Kind     ErrorKind
+	Name     string // primary entity referenced by this error
 }
 
 func (e *Error) Error() string {
@@ -99,6 +122,8 @@ func (v *validationCtx) checkEmptyDefinitions() {
 				Line:     wf.Line,
 				Column:   wf.Column,
 				Severity: "warning",
+				Kind:     ErrEmptyWorkflow,
+				Name:     wf.Name,
 			})
 		}
 	}
@@ -109,6 +134,8 @@ func (v *validationCtx) checkEmptyDefinitions() {
 				Line:     act.Line,
 				Column:   act.Column,
 				Severity: "warning",
+				Kind:     ErrEmptyActivity,
+				Name:     act.Name,
 			})
 		}
 	}
@@ -119,6 +146,8 @@ func (v *validationCtx) checkEmptyDefinitions() {
 				Line:     w.Line,
 				Column:   w.Column,
 				Severity: "warning",
+				Kind:     ErrEmptyWorker,
+				Name:     w.Name,
 			})
 		}
 	}
@@ -129,6 +158,8 @@ func (v *validationCtx) checkEmptyDefinitions() {
 				Line:     ns.Line,
 				Column:   ns.Column,
 				Severity: "warning",
+				Kind:     ErrEmptyNamespace,
+				Name:     ns.Name,
 			})
 		}
 	}
@@ -143,6 +174,8 @@ func (v *validationCtx) checkTaskQueueRequirements() {
 					Msg:    fmt.Sprintf("worker %s in namespace %s missing required task_queue option", nw.WorkerName, ns.Name),
 					Line:   nw.Line,
 					Column: nw.Column,
+					Kind:   ErrMissingTaskQueue,
+					Name:   nw.WorkerName,
 				})
 			}
 		}
@@ -153,6 +186,8 @@ func (v *validationCtx) checkTaskQueueRequirements() {
 					Msg:    fmt.Sprintf("nexus endpoint %s in namespace %s missing required task_queue option", ep.EndpointName, ns.Name),
 					Line:   ep.Line,
 					Column: ep.Column,
+					Kind:   ErrMissingEndpointTaskQueue,
+					Name:   ep.EndpointName,
 				})
 			}
 		}
@@ -193,6 +228,8 @@ func (v *validationCtx) checkCoverage() {
 				Line:     wf.Line,
 				Column:   wf.Column,
 				Severity: "warning",
+				Kind:     ErrUncoveredWorkflow,
+				Name:     name,
 			})
 		}
 	}
@@ -203,6 +240,8 @@ func (v *validationCtx) checkCoverage() {
 				Line:     act.Line,
 				Column:   act.Column,
 				Severity: "warning",
+				Kind:     ErrUncoveredActivity,
+				Name:     name,
 			})
 		}
 	}
@@ -213,6 +252,8 @@ func (v *validationCtx) checkCoverage() {
 				Line:     svc.Line,
 				Column:   svc.Column,
 				Severity: "warning",
+				Kind:     ErrUncoveredService,
+				Name:     name,
 			})
 		}
 	}
@@ -223,6 +264,8 @@ func (v *validationCtx) checkCoverage() {
 				Line:     w.Line,
 				Column:   w.Column,
 				Severity: "warning",
+				Kind:     ErrUninstantiatedWorker,
+				Name:     name,
 			})
 		}
 	}
@@ -269,10 +312,14 @@ func (v *validationCtx) checkTaskQueueCoherence() {
 					v.errs = append(v.errs, &Error{
 						Msg:      fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have identical type sets (redundant)", first.workerName, other.workerName, queue, ns.Name),
 						Severity: "warning",
+						Kind:     ErrTaskQueueIdentical,
+						Name:     queue,
 					})
 				} else {
 					v.errs = append(v.errs, &Error{
-						Msg: fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have different type sets", first.workerName, other.workerName, queue, ns.Name),
+						Msg:  fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have different type sets", first.workerName, other.workerName, queue, ns.Name),
+						Kind: ErrTaskQueueMismatch,
+						Name: queue,
 					})
 				}
 			}
@@ -392,6 +439,8 @@ func (v *validationCtx) checkCallRouting(kind, targetName string, opts *ast.Opti
 			Msg:    fmt.Sprintf("%s %s has task_queue %q, but no worker on that queue registers it", kind, targetName, explicitTQ),
 			Line:   line,
 			Column: column,
+			Kind:   ErrExplicitRoutingMismatch,
+			Name:   targetName,
 		})
 		return
 	}
@@ -411,6 +460,8 @@ func (v *validationCtx) checkCallRouting(kind, targetName string, opts *ast.Opti
 				Msg:    fmt.Sprintf("%s %s is not on any worker polling task queue %q (inherited from workflow %s)", kind, targetName, tq, callingWorkflow),
 				Line:   line,
 				Column: column,
+				Kind:   ErrImplicitRoutingMismatch,
+				Name:   targetName,
 			})
 		}
 	}
@@ -522,6 +573,8 @@ func (v *validationCtx) checkEndpointServiceLinkage(endpoint, service string, li
 		Msg:    fmt.Sprintf("nexus endpoint %s routes to task queue %q, but no worker on that queue has service %s", endpoint, tq, service),
 		Line:   line,
 		Column: column,
+		Kind:   ErrEndpointServiceLinkage,
+		Name:   endpoint,
 	})
 }
 

@@ -1,0 +1,94 @@
+import React from 'react'
+import type { ActivityCall, WorkflowCall } from '../../types/ast'
+import { DefinitionContext } from '../WorkflowCanvas'
+import { WorkflowContent } from './WorkflowContent'
+import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
+import { useToggle } from './useToggle'
+import { StatementBlock } from './StatementBlock'
+
+// Activity Call - expandable to show activity definition body directly
+export function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
+  const context = React.useContext(DefinitionContext)
+  const activityDef = context.activities.get(stmt.name)
+  const isDefined = !!activityDef
+  const [expanded, toggle] = useToggle(false, isDefined)
+
+  const signature = formatActivityCallSignature(stmt)
+
+  return (
+    <div className={`block block-activity ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
+      <div className="block-header" onClick={toggle}>
+        {isDefined ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon"><SingleGearIcon /></span>
+        <span className="block-keyword">activity</span>
+        <span className="block-signature">{signature}</span>
+        {!isDefined && <span className="block-unresolved-badge">?</span>}
+      </div>
+
+      {expanded && isDefined && (
+        <div className="block-body">
+          {(activityDef.body || []).length > 0 ? (
+            (activityDef.body || []).map((s) => (
+              <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
+            ))
+          ) : (
+            <div className="block-empty-body">No implementation defined</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Workflow Call - expandable to show workflow definition body directly
+export function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
+  const context = React.useContext(DefinitionContext)
+  const workflowDef = context.workflows.get(stmt.name)
+  const isDefined = !!workflowDef
+  const [expanded, toggle] = useToggle(false, isDefined)
+
+  const modePrefix = stmt.mode === 'detach' ? 'detach ' : ''
+  const signature = formatWorkflowCallSignature(stmt)
+
+  return (
+    <div className={`block block-workflow-call block-mode-${stmt.mode} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'block-unresolved' : ''}`}>
+      <div className="block-header" onClick={toggle}>
+        {isDefined ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon"><InterlockingGearsIcon /></span>
+        <span className="block-keyword">{modePrefix}workflow</span>
+        <span className="block-signature">{signature}</span>
+        {!isDefined && <span className="block-unresolved-badge">?</span>}
+      </div>
+
+      {expanded && isDefined && (
+        <div className="block-body">
+          <WorkflowContent def={workflowDef} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatActivityCallSignature(stmt: ActivityCall): string {
+  let sig = `${stmt.name}(${stmt.args})`
+  if (stmt.result) {
+    sig += ` → ${stmt.result}`
+  }
+  return sig
+}
+
+function formatWorkflowCallSignature(stmt: WorkflowCall): string {
+  let sig = `${stmt.name}(${stmt.args})`
+  if (stmt.result) {
+    sig += ` → ${stmt.result}`
+  }
+  return sig
+}

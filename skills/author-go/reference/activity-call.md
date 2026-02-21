@@ -16,6 +16,31 @@ if err != nil {
 }
 ```
 
+## With inline options
+
+### DSL
+
+```twf
+activity ValidateOrder(order) -> validated
+    options:
+        start_to_close_timeout: 30s
+```
+
+### Go
+
+```go
+actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+    StartToCloseTimeout: 30 * time.Second,
+})
+var validated ValidateResult
+err := workflow.ExecuteActivity(actCtx, ValidateOrder, order).Get(ctx, &validated)
+if err != nil {
+    return Result{}, err
+}
+```
+
+For the full options reference, see [options.md](./options.md).
+
 ## Notes
 
 - No return value: omit the `Get` target variable, still check `err`

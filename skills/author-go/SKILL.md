@@ -86,7 +86,7 @@ General direction is root-down, with build checks between layers:
 
 **Layer 3 — Activity implementations:** See [Activity Implementation Pattern](#activity-implementation-pattern). Produce the thin activity methods and concrete implementations behind the interfaces. Run `go build`.
 
-**Layer 4 — Worker wiring:** Generate the `cmd/` entry point: construct dependencies, wire into activity struct, register workflows and activities, start the worker. Run `go build`.
+**Layer 4 — Worker wiring:** Generate the `cmd/` entry point: construct dependencies, wire into activity struct, register workflows/activities/nexus services, start the worker. Use TWF `worker` and `namespace` blocks (when present) to determine task queues and type registrations. See [worker.md](./reference/worker.md) and [nexus-service-def.md](./reference/nexus-service-def.md). Run `go build`.
 
 **Layer 5 — Final:** Run `go vet` for correctness.
 
@@ -141,6 +141,8 @@ Read only what the current generation step requires.
 |---------------|------------|------|
 | `workflow Name(...)` | Workflow function | [workflow-def.md](./reference/workflow-def.md) |
 | `activity Name(...)` | Activity function | [activity-def.md](./reference/activity-def.md) |
+| `worker Name:` | Worker entry point | [worker.md](./reference/worker.md) |
+| `nexus service Name:` | Nexus service + handlers | [nexus-service-def.md](./reference/nexus-service-def.md) |
 
 ### Calls
 
@@ -148,6 +150,7 @@ Read only what the current generation step requires.
 |---------------|------------|------|
 | `activity Name(args) -> result` | `workflow.ExecuteActivity` | [activity-call.md](./reference/activity-call.md) |
 | `workflow Name(args) -> result` | `workflow.ExecuteChildWorkflow` | [workflow-call.md](./reference/workflow-call.md) |
+| `nexus Endpoint Service.Op(args) -> result` | `NexusClient.ExecuteOperation` | [nexus.md](./reference/nexus.md) |
 
 ### Handlers
 

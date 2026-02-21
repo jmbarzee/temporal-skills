@@ -9,19 +9,19 @@ nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> paymentR
 ## Go
 
 ```go
-// Execute a Nexus operation from within a workflow.
-// The endpoint and operation are typed references — no string-based client construction.
+c := workflow.NewNexusClient("PaymentsEndpoint", "PaymentsService")
 var paymentResult PaymentResult
-err := workflow.ExecuteNexusOperation(ctx, "PaymentsEndpoint", paymentsservice.ProcessPayment, order.Payment, workflow.NexusOperationOptions{})
-if err != nil {
+fut := c.ExecuteOperation(ctx, "ProcessPayment", order.Payment, workflow.NexusOperationOptions{})
+if err := fut.Get(ctx, &paymentResult); err != nil {
     return Result{}, err
 }
 ```
 
 ## Notes
 
-- Endpoints and services are first-class DSL constructs: endpoints are declared inside `namespace` blocks (`nexus endpoint EndpointName`) and services are defined as top-level `nexus service Name:` blocks with typed operations
-- The Go code uses typed operation references (generated from `nexus service` definitions), not string-based clients
-- The calling pattern mirrors child workflows — execute and `.Get()` (or assign inline)
+- `workflow.NewNexusClient(endpoint, service)` creates a typed client scoped to one endpoint + service pair
+- `ExecuteOperation(ctx, operationName, input, options)` starts the operation and returns a `NexusOperationFuture`
+- The calling pattern mirrors child workflows — execute and `.Get()`
+- For nexus options (timeouts), see [options.md](./options.md)
 - For fire-and-forget nexus: see [detach.md](./detach.md)
-- Nexus API is evolving — check the SDK version in `go.mod` for the exact API surface
+- For nexus service definitions and handler registration: see [nexus-service-def.md](./nexus-service-def.md)

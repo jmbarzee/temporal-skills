@@ -76,8 +76,30 @@ var childResult ChildResult
 err := workflow.ExecuteChildWorkflow(childCtx, ChildWorkflow, input.Data).Get(ctx, &childResult)
 ```
 
+## Nexus operation options
+
+### DSL
+
+```twf
+nexus PaymentsEndpoint PaymentsService.ProcessPayment(payment) -> paymentResult
+    options:
+        schedule_to_close_timeout: 1h
+```
+
+### Go
+
+```go
+c := workflow.NewNexusClient("PaymentsEndpoint", "PaymentsService")
+var paymentResult PaymentResult
+fut := c.ExecuteOperation(ctx, "ProcessPayment", payment, workflow.NexusOperationOptions{
+    ScheduleToCloseTimeout: 1 * time.Hour,
+})
+err := fut.Get(ctx, &paymentResult)
+```
+
 ## Notes
 
 - When no `options:` block is specified, set a default `ActivityOptions` with `StartToCloseTimeout` on `ctx` near the top of the workflow function
 - Option keys map: `start_to_close_timeout` → `StartToCloseTimeout`, `schedule_to_close_timeout` → `ScheduleToCloseTimeout`, `heartbeat_timeout` → `HeartbeatTimeout`
 - `retry_policy:` → `&temporal.RetryPolicy{...}` (pointer)
+- `NexusOperationOptions` fields: `ScheduleToCloseTimeout` (primary) and `CancellationType` (experimental). Options are passed inline — no context wrapping like activities

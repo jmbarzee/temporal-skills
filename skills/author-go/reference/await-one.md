@@ -72,6 +72,26 @@ sel.AddFuture(workflow.ExecuteChildWorkflow(ctx, Child, args), func(f workflow.F
 })
 ```
 
+**Nexus case** — `sel.AddFuture(client.ExecuteOperation(...), handler)`. Nexus operations return `NexusOperationFuture`, which satisfies `workflow.Future` — add to selector with `AddFuture`.
+```go
+c := workflow.NewNexusClient("PaymentsEndpoint", "PaymentsService")
+sel.AddFuture(c.ExecuteOperation(ctx, "ProcessPayment", input, workflow.NexusOperationOptions{}), func(f workflow.Future) {
+    var result PaymentResult
+    _ = f.Get(ctx, &result)
+    // case body
+})
+```
+
+**Update case** — register handler separately (see [update-handler.md](./update-handler.md)), share state between the update handler and selector
+```go
+// Update handlers are registered separately (see update-handler.md).
+// To race an update against other events, share state between the update handler and selector:
+sel.AddReceive(updateDoneCh, func(ch workflow.ReceiveChannel, more bool) {
+    ch.Receive(ctx, nil)
+    // react to update completion
+})
+```
+
 **Promise (ident) case** — add the existing future or channel to the selector
 ```go
 // future promise

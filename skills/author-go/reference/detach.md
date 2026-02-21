@@ -27,7 +27,8 @@ detach nexus NotificationsEndpoint NotificationsService.SendConfirmation(order.c
 ### Go
 
 ```go
-workflow.ExecuteNexusOperation(ctx, "NotificationsEndpoint", notificationsservice.SendConfirmation, sendConfirmationInput, workflow.NexusOperationOptions{})
+c := workflow.NewNexusClient("NotificationsEndpoint", "NotificationsService")
+c.ExecuteOperation(ctx, "SendConfirmation", sendConfirmationInput, workflow.NexusOperationOptions{})
 // No .Get() — fire-and-forget
 ```
 

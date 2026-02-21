@@ -439,6 +439,107 @@ func TestInconsistentDedent(t *testing.T) {
 	}
 }
 
+func TestUnclosedArgs(t *testing.T) {
+	input := "(foo bar"
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.ARGS {
+		t.Fatalf("expected ARGS, got %s", tok.Type)
+	}
+	// Should capture everything up to EOF as the content.
+	if tok.Literal != "foo bar" {
+		t.Fatalf("expected literal 'foo bar', got %q", tok.Literal)
+	}
+}
+
+func TestUnclosedString(t *testing.T) {
+	input := `"hello world`
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.STRING {
+		t.Fatalf("expected STRING, got %s", tok.Type)
+	}
+	if tok.Literal != "hello world" {
+		t.Fatalf("expected literal 'hello world', got %q", tok.Literal)
+	}
+}
+
+func TestColumnAccuracy(t *testing.T) {
+	input := "workflow Foo(x) -> (R):\n"
+	l := New(input)
+
+	tests := []struct {
+		typ token.TokenType
+		col int
+	}{
+		{token.WORKFLOW, 1},  // "workflow" starts at col 1
+		{token.IDENT, 10},   // "Foo" starts at col 10
+		{token.ARGS, 13},    // "(x)" starts at col 13
+		{token.ARROW, 17},   // "->" starts at col 17
+		{token.ARGS, 20},    // "(R)" starts at col 20
+		{token.COLON, 23},   // ":" at col 23
+		{token.NEWLINE, 24}, // newline at col 24
+	}
+	for i, tt := range tests {
+		tok := l.NextToken()
+		if tok.Type != tt.typ {
+			t.Fatalf("token[%d]: expected %s, got %s (%q)", i, tt.typ, tok.Type, tok.Literal)
+		}
+		if tok.Column != tt.col {
+			t.Errorf("token[%d] (%s): expected column %d, got %d", i, tt.typ, tt.col, tok.Column)
+		}
+	}
+}
+
+func TestNumberWithNonDurationSuffix(t *testing.T) {
+	// "1x" should be NUMBER "1" followed by IDENT "x", not a duration.
+	input := "1x"
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.NUMBER {
+		t.Fatalf("expected NUMBER, got %s (%q)", tok.Type, tok.Literal)
+	}
+	if tok.Literal != "1" {
+		t.Fatalf("expected literal '1', got %q", tok.Literal)
+	}
+	tok = l.NextToken()
+	if tok.Type != token.IDENT {
+		t.Fatalf("expected IDENT, got %s (%q)", tok.Type, tok.Literal)
+	}
+	if tok.Literal != "x" {
+		t.Fatalf("expected literal 'x', got %q", tok.Literal)
+	}
+}
+
+func TestDotToken(t *testing.T) {
+	input := "Service.Operation"
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.IDENT || tok.Literal != "Service" {
+		t.Fatalf("expected IDENT 'Service', got %s %q", tok.Type, tok.Literal)
+	}
+	tok = l.NextToken()
+	if tok.Type != token.DOT {
+		t.Fatalf("expected DOT, got %s", tok.Type)
+	}
+	tok = l.NextToken()
+	if tok.Type != token.IDENT || tok.Literal != "Operation" {
+		t.Fatalf("expected IDENT 'Operation', got %s %q", tok.Type, tok.Literal)
+	}
+}
+
+func TestMultiLineArgs(t *testing.T) {
+	input := "(foo,\nbar)"
+	l := New(input)
+	tok := l.NextToken()
+	if tok.Type != token.ARGS {
+		t.Fatalf("expected ARGS, got %s", tok.Type)
+	}
+	if tok.Literal != "foo,\nbar" {
+		t.Fatalf("expected literal with newline, got %q", tok.Literal)
+	}
+}
+
 func TestOptionsBlockTokenStream(t *testing.T) {
 	input := "activity Foo(x) -> y\n    options:\n        task_queue: \"workers\"\n        start_to_close: 60s\n"
 	expected := []struct {

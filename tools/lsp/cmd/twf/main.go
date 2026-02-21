@@ -10,6 +10,7 @@ import (
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/parser"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/resolver"
+	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/validator"
 	"github.com/tliron/commonlog"
 	_ "github.com/tliron/commonlog/simple"
 	glspServer "github.com/tliron/glsp/server"
@@ -116,6 +117,13 @@ func parseFiles(args []string) (*ast.File, []string, int) {
 	resolveErrs := resolver.Resolve(file)
 	for _, e := range resolveErrs {
 		msg := fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
+		allErrs = append(allErrs, msg)
+	}
+
+	// Validate deployment/routing
+	validateErrs := validator.Validate(file)
+	for _, e := range validateErrs {
+		msg := fmt.Sprintf("validation error at %d:%d: %s", e.Line, e.Column, e.Msg)
 		allErrs = append(allErrs, msg)
 	}
 

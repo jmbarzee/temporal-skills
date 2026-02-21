@@ -101,28 +101,6 @@ func Resolve(file *ast.File) []*ResolveError {
 		}
 	}
 
-	// Pass 1b: Empty definition warnings.
-	for _, wf := range workflows {
-		if !hasNonCommentStmts(wf.Body) && len(wf.Signals) == 0 && len(wf.Queries) == 0 && len(wf.Updates) == 0 && wf.State == nil {
-			errs = append(errs, &ResolveError{
-				Msg:      fmt.Sprintf("workflow %s has an empty body", wf.Name),
-				Line:     wf.Line,
-				Column:   wf.Column,
-				Severity: "warning",
-			})
-		}
-	}
-	for _, act := range activities {
-		if !hasNonCommentStmts(act.Body) {
-			errs = append(errs, &ResolveError{
-				Msg:      fmt.Sprintf("activity %s has an empty body", act.Name),
-				Line:     act.Line,
-				Column:   act.Column,
-				Severity: "warning",
-			})
-		}
-	}
-
 	// Continue to Pass 2 even if there are duplicate definition errors.
 	// This provides better diagnostics by also reporting undefined references.
 
@@ -164,18 +142,15 @@ func Resolve(file *ast.File) []*ResolveError {
 		}
 
 		ctx := &resolveCtx{
-			workflows:       workflows,
-			activities:      activities,
-			signals:         signals,
-			queries:         queries,
-			updates:         updates,
-			conditions:      conditions,
-			promises:        promises,
-			nexusServices:   nexusServices,
-			allEndpoints:    allEndpoints,
-			workers:         workers,
-			namespaces:      namespaces,
-			callingWorkflow: wf.Name,
+			workflows:    workflows,
+			activities:   activities,
+			signals:      signals,
+			queries:      queries,
+			updates:      updates,
+			conditions:   conditions,
+			promises:     promises,
+			nexusServices: nexusServices,
+			allEndpoints: allEndpoints,
 		}
 
 		// Resolve handler bodies.
@@ -212,17 +187,15 @@ func Resolve(file *ast.File) []*ResolveError {
 			} else if op.OpType == ast.NexusOpSync {
 				// Sync operations have a body — resolve like a workflow body.
 				syncCtx := &resolveCtx{
-					workflows:     workflows,
-					activities:    activities,
-					signals:       make(map[string]*ast.SignalDecl),
-					queries:       make(map[string]*ast.QueryDecl),
-					updates:       make(map[string]*ast.UpdateDecl),
-					conditions:    make(map[string]*ast.ConditionDecl),
-					promises:      make(map[string]*ast.PromiseStmt),
+					workflows:    workflows,
+					activities:   activities,
+					signals:      make(map[string]*ast.SignalDecl),
+					queries:      make(map[string]*ast.QueryDecl),
+					updates:      make(map[string]*ast.UpdateDecl),
+					conditions:   make(map[string]*ast.ConditionDecl),
+					promises:     make(map[string]*ast.PromiseStmt),
 					nexusServices: nexusServices,
-					allEndpoints:  allEndpoints,
-					workers:       workers,
-					namespaces:    namespaces,
+					allEndpoints: allEndpoints,
 				}
 				syncCtx.resolveStatements(op.Body)
 				errs = append(errs, syncCtx.errs...)
@@ -230,40 +203,7 @@ func Resolve(file *ast.File) []*ResolveError {
 		}
 	}
 
-	// Pass 3: Worker and namespace validation.
-	errs = append(errs, resolveWorkersAndNamespaces(namespaces, workers, workflows, activities, nexusServices, allEndpoints)...)
-
-	return errs
-}
-
-// resolveWorkersAndNamespaces validates worker type sets and namespace instantiations.
-func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef, nexusServices map[string]*ast.NexusServiceDef, allEndpoints map[string]*endpointInfo) []*ResolveError {
-	var errs []*ResolveError
-
-	// 0. Empty definition warnings.
-	for _, w := range workers {
-		if len(w.Workflows) == 0 && len(w.Activities) == 0 && len(w.Services) == 0 {
-			errs = append(errs, &ResolveError{
-				Msg:      fmt.Sprintf("worker %s has no workflow, activity, or nexus service registrations", w.Name),
-				Line:     w.Line,
-				Column:   w.Column,
-				Severity: "warning",
-			})
-		}
-	}
-	for _, ns := range namespaces {
-		if len(ns.Workers) == 0 && len(ns.Endpoints) == 0 {
-			errs = append(errs, &ResolveError{
-				Msg:      fmt.Sprintf("namespace %s has no worker or endpoint instantiations", ns.Name),
-				Line:     ns.Line,
-				Column:   ns.Column,
-				Severity: "warning",
-			})
-		}
-	}
-
-	// 1. Worker type set validation: refs must point to defined workflows/activities/services.
-	//    Store resolution links on each WorkerRef.
+	// Pass 3: Resolve worker and namespace references.
 	for _, w := range workers {
 		for i := range w.Workflows {
 			ref := &w.Workflows[i]
@@ -303,10 +243,6 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 		}
 	}
 
-	// 2. Namespace validation: worker instantiations must ref defined workers,
-	//    and each instantiation must have a task_queue option.
-	//    Endpoint instantiations must have a task_queue option.
-	//    Store resolution links on each NamespaceWorker.
 	for _, ns := range namespaces {
 		for i := range ns.Workers {
 			nw := &ns.Workers[i]
@@ -319,198 +255,23 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 					Column: nw.Column,
 				})
 			}
-			tq := extractTaskQueue(nw.Options)
-			if tq == "" {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("worker %s in namespace %s missing required task_queue option", nw.WorkerName, ns.Name),
-					Line:   nw.Line,
-					Column: nw.Column,
-				})
-			}
-		}
-		for _, ep := range ns.Endpoints {
-			tq := extractTaskQueue(ep.Options)
-			if tq == "" {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("nexus endpoint %s in namespace %s missing required task_queue option", ep.EndpointName, ns.Name),
-					Line:   ep.Line,
-					Column: ep.Column,
-				})
-			}
-		}
-	}
-
-	// 3. Coverage warnings (only when namespaces exist).
-	if len(namespaces) > 0 {
-		// Track which workflows/activities/services are covered by instantiated workers.
-		coveredWorkflows := make(map[string]bool)
-		coveredActivities := make(map[string]bool)
-		coveredServices := make(map[string]bool)
-		instantiatedWorkers := make(map[string]bool)
-
-		for _, ns := range namespaces {
-			for _, nw := range ns.Workers {
-				instantiatedWorkers[nw.WorkerName] = true
-				if w, ok := workers[nw.WorkerName]; ok {
-					for _, ref := range w.Workflows {
-						coveredWorkflows[ref.Name] = true
-					}
-					for _, ref := range w.Activities {
-						coveredActivities[ref.Name] = true
-					}
-					for _, ref := range w.Services {
-						coveredServices[ref.Name] = true
-					}
-				}
-			}
-		}
-
-		for name, wf := range workflows {
-			if !coveredWorkflows[name] {
-				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("workflow %s is not registered on any instantiated worker", name),
-					Line:     wf.Line,
-					Column:   wf.Column,
-					Severity: "warning",
-				})
-			}
-		}
-		for name, act := range activities {
-			if !coveredActivities[name] {
-				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("activity %s is not registered on any instantiated worker", name),
-					Line:     act.Line,
-					Column:   act.Column,
-					Severity: "warning",
-				})
-			}
-		}
-		for name, svc := range nexusServices {
-			if !coveredServices[name] {
-				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("nexus service %s is not referenced by any worker", name),
-					Line:     svc.Line,
-					Column:   svc.Column,
-					Severity: "warning",
-				})
-			}
-		}
-		for name, w := range workers {
-			if !instantiatedWorkers[name] {
-				errs = append(errs, &ResolveError{
-					Msg:      fmt.Sprintf("worker %s is not instantiated in any namespace", name),
-					Line:     w.Line,
-					Column:   w.Column,
-					Severity: "warning",
-				})
-			}
-		}
-	}
-
-	// 4. Task queue coherence (per namespace): different worker type sets on same queue → error.
-	type queueInfo struct {
-		workerName string
-		workflows  map[string]bool
-		activities map[string]bool
-	}
-	for _, ns := range namespaces {
-		queueWorkers := make(map[string][]queueInfo)
-		for _, nw := range ns.Workers {
-			tq := extractTaskQueue(nw.Options)
-			if tq == "" {
-				continue
-			}
-			w, ok := workers[nw.WorkerName]
-			if !ok {
-				continue
-			}
-			wfSet := make(map[string]bool)
-			for _, ref := range w.Workflows {
-				wfSet[ref.Name] = true
-			}
-			actSet := make(map[string]bool)
-			for _, ref := range w.Activities {
-				actSet[ref.Name] = true
-			}
-			queueWorkers[tq] = append(queueWorkers[tq], queueInfo{
-				workerName: nw.WorkerName,
-				workflows:  wfSet,
-				activities: actSet,
-			})
-		}
-		for queue, infos := range queueWorkers {
-			if len(infos) < 2 {
-				continue
-			}
-			first := infos[0]
-			for _, other := range infos[1:] {
-				if sameStringSet(first.workflows, other.workflows) && sameStringSet(first.activities, other.activities) {
-					errs = append(errs, &ResolveError{
-						Msg:      fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have identical type sets (redundant)", first.workerName, other.workerName, queue, ns.Name),
-						Severity: "warning",
-					})
-				} else {
-					errs = append(errs, &ResolveError{
-						Msg: fmt.Sprintf("workers %s and %s on task queue %q in namespace %s have different type sets", first.workerName, other.workerName, queue, ns.Name),
-					})
-				}
-			}
 		}
 	}
 
 	return errs
 }
 
-// hasNonCommentStmts returns true if the statement slice has at least one
-// statement that is not a Comment.
-func hasNonCommentStmts(stmts []ast.Statement) bool {
-	for _, s := range stmts {
-		if _, isComment := s.(*ast.Comment); !isComment {
-			return true
-		}
-	}
-	return false
-}
-
-// extractTaskQueue walks an OptionsBlock to find the task_queue key.
-func extractTaskQueue(opts *ast.OptionsBlock) string {
-	if opts == nil {
-		return ""
-	}
-	for _, e := range opts.Entries {
-		if e.Key == "task_queue" {
-			return e.Value
-		}
-	}
-	return ""
-}
-
-func sameStringSet(a, b map[string]bool) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k := range a {
-		if !b[k] {
-			return false
-		}
-	}
-	return true
-}
-
 type resolveCtx struct {
-	workflows       map[string]*ast.WorkflowDef
-	activities      map[string]*ast.ActivityDef
-	signals         map[string]*ast.SignalDecl
-	queries         map[string]*ast.QueryDecl
-	updates         map[string]*ast.UpdateDecl
-	conditions      map[string]*ast.ConditionDecl
-	promises        map[string]*ast.PromiseStmt
-	nexusServices   map[string]*ast.NexusServiceDef
-	allEndpoints    map[string]*endpointInfo
-	workers         map[string]*ast.WorkerDef
-	namespaces      map[string]*ast.NamespaceDef
-	callingWorkflow string // name of the workflow being resolved (for routing checks)
-	errs            []*ResolveError
+	workflows     map[string]*ast.WorkflowDef
+	activities    map[string]*ast.ActivityDef
+	signals       map[string]*ast.SignalDecl
+	queries       map[string]*ast.QueryDecl
+	updates       map[string]*ast.UpdateDecl
+	conditions    map[string]*ast.ConditionDecl
+	promises      map[string]*ast.PromiseStmt
+	nexusServices map[string]*ast.NexusServiceDef
+	allEndpoints  map[string]*endpointInfo
+	errs          []*ResolveError
 }
 
 func (c *resolveCtx) resolveStatements(stmts []ast.Statement) {
@@ -531,7 +292,6 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Column: s.Column,
 			})
 		}
-		c.checkCallRouting("activity", s.Name, s.Options, s.Line, s.Column)
 
 	case *ast.WorkflowCall:
 		if def, ok := c.workflows[s.Name]; ok {
@@ -543,10 +303,9 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Column: s.Column,
 			})
 		}
-		c.checkCallRouting("workflow", s.Name, s.Options, s.Line, s.Column)
 
 	case *ast.NexusCall:
-		res := c.resolveNexusRef(s.Endpoint, s.Service, s.Operation, s.Detach, s.Result, s.Line, s.Column)
+		res := c.resolveNexusRef(s.Endpoint, s.Service, s.Operation, s.Line, s.Column)
 		s.ResolvedEndpoint = res.endpoint
 		s.ResolvedEndpointNamespace = res.endpointNamespace
 		s.ResolvedService = res.service
@@ -613,17 +372,8 @@ type nexusResolution struct {
 
 // resolveNexusRef validates a nexus call site (endpoint, service, operation).
 // Used by NexusCall, AwaitStmt nexus, AwaitOneCase nexus, and PromiseStmt nexus.
-func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, detach bool, result string, line, column int) nexusResolution {
+func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, column int) nexusResolution {
 	var res nexusResolution
-
-	// Detach + result is invalid.
-	if detach && result != "" {
-		c.errs = append(c.errs, &ResolveError{
-			Msg:    "detach nexus call cannot have a result (-> identifier)",
-			Line:   line,
-			Column: column,
-		})
-	}
 
 	// Endpoint resolution.
 	if len(c.allEndpoints) > 0 {
@@ -670,9 +420,6 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, detach
 					Line:   line,
 					Column: column,
 				})
-			} else {
-				// Check endpoint→task_queue→worker→service linkage.
-				c.checkEndpointServiceLinkage(endpoint, service, line, column)
 			}
 		}
 	} else {
@@ -685,164 +432,6 @@ func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, detach
 	}
 
 	return res
-}
-
-// checkCallRouting validates that an activity or workflow call can reach its target
-// via task queue routing. Two cases:
-//   - Explicit task_queue option: target type must be on a worker polling that queue.
-//   - No task_queue option (implicit inheritance): target type must be on workers
-//     that share a task queue with the calling workflow.
-func (c *resolveCtx) checkCallRouting(kind, targetName string, opts *ast.OptionsBlock, line, column int) {
-	// Only validate when deployment topology exists.
-	if len(c.namespaces) == 0 {
-		return
-	}
-
-	explicitTQ := extractTaskQueue(opts)
-
-	if explicitTQ != "" {
-		// Explicit routing: check the target type is on a worker polling that queue.
-		if c.typeOnQueue(kind, targetName, explicitTQ) {
-			return
-		}
-		c.errs = append(c.errs, &ResolveError{
-			Msg:    fmt.Sprintf("%s %s has task_queue %q, but no worker on that queue registers it", kind, targetName, explicitTQ),
-			Line:   line,
-			Column: column,
-		})
-		return
-	}
-
-	// Implicit routing: the call inherits the calling workflow's task queue.
-	// Find all task queues that the calling workflow is instantiated on.
-	if c.callingWorkflow == "" {
-		return
-	}
-	callerQueues := c.taskQueuesForType("workflow", c.callingWorkflow)
-	if len(callerQueues) == 0 {
-		// Calling workflow not on any worker — already warned about in coverage checks.
-		return
-	}
-
-	for _, tq := range callerQueues {
-		if !c.typeOnQueue(kind, targetName, tq) {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("%s %s is not on any worker polling task queue %q (inherited from workflow %s)", kind, targetName, tq, c.callingWorkflow),
-				Line:   line,
-				Column: column,
-			})
-		}
-	}
-}
-
-// typeOnQueue checks if a workflow or activity is registered on any worker
-// instantiated on the given task queue.
-func (c *resolveCtx) typeOnQueue(kind, name, taskQueue string) bool {
-	for _, ns := range c.namespaces {
-		for _, nw := range ns.Workers {
-			nwTQ := extractTaskQueue(nw.Options)
-			if nwTQ != taskQueue {
-				continue
-			}
-			w, ok := c.workers[nw.WorkerName]
-			if !ok {
-				continue
-			}
-			switch kind {
-			case "activity":
-				for _, ref := range w.Activities {
-					if ref.Name == name {
-						return true
-					}
-				}
-			case "workflow":
-				for _, ref := range w.Workflows {
-					if ref.Name == name {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
-}
-
-// taskQueuesForType returns all task queues that a given workflow or activity
-// is instantiated on across all namespaces.
-func (c *resolveCtx) taskQueuesForType(kind, name string) []string {
-	seen := make(map[string]bool)
-	var queues []string
-	for _, ns := range c.namespaces {
-		for _, nw := range ns.Workers {
-			w, ok := c.workers[nw.WorkerName]
-			if !ok {
-				continue
-			}
-			var found bool
-			switch kind {
-			case "workflow":
-				for _, ref := range w.Workflows {
-					if ref.Name == name {
-						found = true
-						break
-					}
-				}
-			case "activity":
-				for _, ref := range w.Activities {
-					if ref.Name == name {
-						found = true
-						break
-					}
-				}
-			}
-			if found {
-				tq := extractTaskQueue(nw.Options)
-				if tq != "" && !seen[tq] {
-					seen[tq] = true
-					queues = append(queues, tq)
-				}
-			}
-		}
-	}
-	return queues
-}
-
-// checkEndpointServiceLinkage verifies that the endpoint's task queue has a worker
-// that registers the given service.
-func (c *resolveCtx) checkEndpointServiceLinkage(endpoint, service string, line, column int) {
-	epInfo, ok := c.allEndpoints[endpoint]
-	if !ok {
-		return // endpoint not found — already reported
-	}
-	tq := extractTaskQueue(epInfo.endpoint.Options)
-	if tq == "" {
-		return // missing task_queue — already reported in Pass 3
-	}
-
-	// Find all workers instantiated on this task queue across all namespaces.
-	for _, ns := range c.namespaces {
-		for _, nw := range ns.Workers {
-			nwTQ := extractTaskQueue(nw.Options)
-			if nwTQ != tq {
-				continue
-			}
-			w, ok := c.workers[nw.WorkerName]
-			if !ok {
-				continue
-			}
-			for _, ref := range w.Services {
-				if ref.Name == service {
-					return // found a worker on the right queue with this service
-				}
-			}
-		}
-	}
-
-	c.errs = append(c.errs, &ResolveError{
-		Msg:    fmt.Sprintf("nexus endpoint %s routes to task queue %q, but no worker on that queue has service %s", endpoint, tq, service),
-		Line:   line,
-		Column: column,
-	})
 }
 
 func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
@@ -902,7 +491,7 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 			})
 		}
 	case *ast.NexusTarget:
-		res := c.resolveNexusRef(t.Endpoint, t.Service, t.Operation, t.Detach, t.Result, line, column)
+		res := c.resolveNexusRef(t.Endpoint, t.Service, t.Operation, line, column)
 		t.ResolvedEndpoint = res.endpoint
 		t.ResolvedEndpointNamespace = res.endpointNamespace
 		t.ResolvedService = res.service

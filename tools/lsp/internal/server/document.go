@@ -6,22 +6,25 @@ import (
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/parser"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/resolver"
+	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/validator"
 )
 
 // Document holds the content and analysis results for a single open file.
 type Document struct {
-	URI     string
-	Content string
-	File    *ast.File
-	ParseErrs   []*parser.ParseError
-	ResolveErrs []*resolver.ResolveError
+	URI          string
+	Content      string
+	File         *ast.File
+	ParseErrs    []*parser.ParseError
+	ResolveErrs  []*resolver.ResolveError
+	ValidateErrs []*validator.Error
 }
 
-// analyze parses and resolves the document content.
+// analyze parses, resolves, and validates the document content.
 func (d *Document) analyze() {
 	d.File = nil
 	d.ParseErrs = nil
 	d.ResolveErrs = nil
+	d.ValidateErrs = nil
 
 	f, errs := parser.ParseFileAll(d.Content)
 	d.File = f
@@ -29,6 +32,7 @@ func (d *Document) analyze() {
 
 	if len(f.Definitions) > 0 {
 		d.ResolveErrs = resolver.Resolve(f)
+		d.ValidateErrs = validator.Validate(f)
 	}
 }
 

@@ -46,11 +46,28 @@ func publishDiagnostics(context *glsp.Context, doc *Document) error {
 	}
 
 	for _, re := range doc.ResolveErrs {
+		sev := protocol.DiagnosticSeverityError
+		if re.Severity == "warning" {
+			sev = protocol.DiagnosticSeverityWarning
+		}
 		diags = append(diags, protocol.Diagnostic{
 			Range:    posToRange(re.Line, re.Column),
-			Severity: ptrTo(protocol.DiagnosticSeverityError),
+			Severity: ptrTo(sev),
 			Source:   ptrTo("twf"),
 			Message:  re.Msg,
+		})
+	}
+
+	for _, ve := range doc.ValidateErrs {
+		sev := protocol.DiagnosticSeverityError
+		if ve.Severity == "warning" {
+			sev = protocol.DiagnosticSeverityWarning
+		}
+		diags = append(diags, protocol.Diagnostic{
+			Range:    posToRange(ve.Line, ve.Column),
+			Severity: ptrTo(sev),
+			Source:   ptrTo("twf"),
+			Message:  ve.Msg,
 		})
 	}
 

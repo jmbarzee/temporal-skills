@@ -1,6 +1,9 @@
-import type { WorkflowDef, HandlerDecl } from '../../types/ast'
+import React from 'react'
+import type { WorkflowDef, HandlerDecl, Statement, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
+import { InterlockingGearsIcon } from '../icons/GearIcons'
 import { useToggle } from './useToggle'
+import { HandlerContext } from '../WorkflowCanvas'
 import './blocks.css'
 
 const handlerConfig = {
@@ -148,5 +151,66 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
         ))}
       </div>
     </>
+  )
+}
+
+// Inline workflow block — renders a workflow as a call-style purple block.
+// Used by nexus async operations to show the backing workflow with clear indirection.
+export function InlineWorkflowBlock({ def }: { def: WorkflowDef }) {
+  const [expanded, toggle] = useToggle()
+  const signature = `${def.name}(${def.params})${def.returnType ? ` → ${def.returnType}` : ''}`
+
+  // Build handler context for signal/query/update resolution within this workflow
+  const handlerContext = React.useMemo<HandlerContext>(() => {
+    const signals = new Map<string, SignalDecl>()
+    const queries = new Map<string, QueryDecl>()
+    const updates = new Map<string, UpdateDecl>()
+
+    for (const s of def.signals || []) signals.set(s.name, s)
+    for (const q of def.queries || []) queries.set(q.name, q)
+    for (const u of def.updates || []) updates.set(u.name, u)
+
+    return { signals, queries, updates }
+  }, [def])
+
+  return (
+    <HandlerContext.Provider value={handlerContext}>
+      <div className={`block block-workflow-call ${expanded ? 'expanded' : 'collapsed'}`}>
+        <div className="block-header" onClick={toggle}>
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+          <span className="block-icon"><InterlockingGearsIcon /></span>
+          <span className="block-keyword">workflow</span>
+          <span className="block-signature">{signature}</span>
+        </div>
+        {expanded && (
+          <div className="block-body">
+            <WorkflowContent def={def} />
+          </div>
+        )}
+      </div>
+    </HandlerContext.Provider>
+  )
+}
+
+// Sync handler block — wraps sync operation statements in a control-flow-themed block.
+// Provides visual indirection parallel to InlineWorkflowBlock for async operations.
+export function SyncBodyBlock({ body }: { body: Statement[] }) {
+  const [expanded, toggle] = useToggle(true)
+
+  return (
+    <div className={`block block-sync-body ${expanded ? 'expanded' : 'collapsed'}`}>
+      <div className="block-header" onClick={toggle}>
+        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="block-icon-placeholder" />
+        <span className="block-keyword">handler</span>
+      </div>
+      {expanded && (
+        <div className="block-body">
+          {body.map((s) => (
+            <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

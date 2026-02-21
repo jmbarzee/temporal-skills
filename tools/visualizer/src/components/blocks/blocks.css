@@ -67,6 +67,16 @@
   --block-nexus-border: #F9A8D4;
   --block-nexus-text: #831843;
 
+  /* Nexus service-def — heaviest pink */
+  --block-nexus-service-bg: linear-gradient(135deg, #FCE7F3 0%, #FBCFE8 100%);
+  --block-nexus-service-border: #EC4899;
+  --block-nexus-service-text: #831843;
+
+  /* Nexus operation — medium pink */
+  --block-nexus-operation-bg: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%);
+  --block-nexus-operation-border: #F472B6;
+  --block-nexus-operation-text: #9D174D;
+
   --block-promise-bg: linear-gradient(135deg, #E0F7FA 0%, #CCF2F6 100%);
   --block-promise-border: #67D6E4;
   --block-promise-text: #155E63;
@@ -159,6 +169,14 @@
   --block-nexus-bg: linear-gradient(135deg, #3D1E30 0%, #4A2538 100%);
   --block-nexus-border: #C86DA5;
   --block-nexus-text: #F5A8D4;
+
+  --block-nexus-service-bg: linear-gradient(135deg, #4A2538 0%, #5C2D44 100%);
+  --block-nexus-service-border: #DB2777;
+  --block-nexus-service-text: #FBCFE8;
+
+  --block-nexus-operation-bg: linear-gradient(135deg, #3D1E30 0%, #4A2538 100%);
+  --block-nexus-operation-border: #EC4899;
+  --block-nexus-operation-text: #F9A8D4;
 
   --block-promise-bg: linear-gradient(135deg, #1A3035 0%, #20383E 100%);
   --block-promise-border: #3DA5B0;
@@ -582,6 +600,59 @@
 
 .block-nexus-call.block-mode-detach {
   border-style: dashed;
+}
+
+/* Nexus Service Definition — heaviest pink */
+.block-nexus-service-def {
+  background: var(--block-nexus-service-bg);
+  border: 2px solid var(--block-nexus-service-border);
+}
+
+.block-nexus-service-def>.block-header {
+  color: var(--block-nexus-service-text);
+}
+
+/* Nexus Operation — medium pink */
+.block-nexus-operation {
+  background: var(--block-nexus-operation-bg);
+  border: 1px solid var(--block-nexus-operation-border);
+}
+
+.block-nexus-operation>.block-header {
+  color: var(--block-nexus-operation-text);
+}
+
+/* Sync body block — control-flow-themed wrapper for sync operation implementation */
+.block-sync-body {
+  background: var(--block-control-bg);
+  border: 1px solid var(--block-control-border);
+}
+
+.block-sync-body>.block-header {
+  color: var(--block-control-text);
+}
+
+/* Grayed-out workflow params/return on async operations */
+.nexus-operation-grayed-sig {
+  opacity: 0.5;
+  margin-left: 0;
+}
+
+/* Nexus icon sizing */
+.block-icon-nexus-service {
+  font-size: 16px;
+}
+
+.block-icon-nexus-endpoint {
+  font-size: 12px;
+}
+
+.block-icon-nexus-operation {
+  font-size: 12px;
+}
+
+.block-icon-nexus-call {
+  font-size: 14px;
 }
 
 /* === Tagged Composite: Unified "hint" and "option" design === */

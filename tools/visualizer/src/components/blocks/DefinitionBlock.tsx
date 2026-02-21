@@ -1,7 +1,7 @@
 import React from 'react'
-import type { Definition, WorkflowDef, ActivityDef, WorkerDef, WorkerRef, NamespaceDef, NamespaceWorker, NamespaceEndpoint, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
+import type { Definition, WorkflowDef, ActivityDef, WorkerDef, WorkerRef, NamespaceDef, NamespaceWorker, NamespaceEndpoint, NexusServiceDef, NexusOperation, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
-import { WorkflowContent } from './WorkflowContent'
+import { WorkflowContent, InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useToggle } from './useToggle'
 import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
@@ -21,6 +21,8 @@ export function DefinitionBlock({ definition }: DefinitionBlockProps) {
       return <WorkerDefBlock def={definition} />
     case 'namespaceDef':
       return <NamespaceDefBlock def={definition} />
+    case 'nexusServiceDef':
+      return <NexusServiceDefBlock def={definition} />
     default:
       return null
   }
@@ -137,11 +139,14 @@ function WorkerRefItem({ ref_, refType }: { ref_: WorkerRef; refType: 'workflow'
     ? context.workflows.get(ref_.name)
     : refType === 'activity'
       ? context.activities.get(ref_.name)
-      : undefined // nexus services not yet in context
-  const isDefined = !!linkedDef
+      : undefined
+  const linkedService = refType === 'service'
+    ? context.nexusServices.get(ref_.name)
+    : undefined
+  const isDefined = !!(linkedDef || linkedService)
   const [expanded, toggle] = useToggle(false, isDefined)
 
-  const icon = refType === 'workflow' ? '⚙⚙' : refType === 'activity' ? '⚙' : '⬡'
+  const icon = refType === 'workflow' ? '⚙⚙' : refType === 'activity' ? '⚙' : '★'
 
   return (
     <div className={`worker-ref worker-ref-${refType} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'worker-ref-unresolved' : ''}`}>
@@ -151,20 +156,24 @@ function WorkerRefItem({ ref_, refType }: { ref_: WorkerRef; refType: 'workflow'
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon">{icon}</span>
+        <span className={`block-icon ${refType === 'service' ? 'block-icon-nexus-service' : ''}`}>{icon}</span>
         <span className="worker-ref-name">{ref_.name}</span>
         {!isDefined && <span className="block-unresolved-badge">?</span>}
       </div>
 
-      {expanded && isDefined && linkedDef && (
+      {expanded && isDefined && (
         <div className="block-body">
-          {linkedDef.type === 'workflowDef' ? (
+          {linkedDef?.type === 'workflowDef' ? (
             <WorkflowContent def={linkedDef} />
-          ) : (
+          ) : linkedDef ? (
             (linkedDef.body || []).map((stmt) => (
               <StatementBlock key={`${stmt.line}:${stmt.column}`} statement={stmt} />
             ))
-          )}
+          ) : linkedService ? (
+            (linkedService.operations || []).map((op) => (
+              <NexusOperationBlock key={`${op.line}:${op.column}`} operation={op} />
+            ))
+          ) : null}
         </div>
       )}
     </div>
@@ -250,7 +259,7 @@ function NamespaceEndpointEntry({ entry }: { entry: NamespaceEndpoint }) {
     <div className="namespace-entry namespace-entry-endpoint collapsed">
       <div className="namespace-entry-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">⬡</span>
+        <span className="block-icon block-icon-nexus-endpoint">★</span>
         <span className="namespace-entry-name">{entry.endpointName}</span>
       </div>
     </div>
@@ -263,6 +272,91 @@ function formatWorkflowSignature(def: WorkflowDef): string {
     sig += ` → ${def.returnType}`
   }
   return sig
+}
+
+function NexusServiceDefBlock({ def }: { def: NexusServiceDef }) {
+  const [expanded, toggle] = useToggle()
+  const opCount = def.operations?.length || 0
+
+  return (
+    <div className={`block block-nexus-service-def ${expanded ? 'expanded' : 'collapsed'}`}>
+      <div className="block-header" onClick={toggle}>
+        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="block-icon block-icon-nexus-service">★</span>
+        <span className="block-keyword">service</span>
+        <span className="block-signature">{def.name} ({opCount} operation{opCount !== 1 ? 's' : ''})</span>
+      </div>
+
+      {expanded && (
+        <div className="block-body">
+          {(def.operations || []).map((op) => (
+            <NexusOperationBlock key={`${op.line}:${op.column}`} operation={op} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function NexusOperationBlock({ operation }: { operation: NexusOperation }) {
+  const context = React.useContext(DefinitionContext)
+
+  // For async operations, look up the linked workflow to get params/return and body
+  const linkedWorkflow = operation.opType === 'async' && operation.workflowName
+    ? context.workflows.get(operation.workflowName)
+    : undefined
+
+  // Determine expandability
+  const isExpandable = operation.opType === 'async'
+    ? !!linkedWorkflow
+    : !!(operation.body && operation.body.length > 0)
+  const isUnresolved = operation.opType === 'async' && operation.workflowName && !linkedWorkflow
+
+  const [expanded, toggle] = useToggle(false, isExpandable)
+
+  // Build signature
+  let signature: React.ReactNode
+  if (operation.opType === 'async' && linkedWorkflow) {
+    signature = (
+      <>
+        {operation.name}
+        <span className="nexus-operation-grayed-sig">({linkedWorkflow.params}){linkedWorkflow.returnType ? ` → ${linkedWorkflow.returnType}` : ''}</span>
+      </>
+    )
+  } else if (operation.opType === 'sync') {
+    const params = operation.params || ''
+    const ret = operation.returnType ? ` → ${operation.returnType}` : ''
+    signature = `${operation.name}(${params})${ret}`
+  } else {
+    // Async but workflow not found
+    signature = operation.name
+  }
+
+  return (
+    <div className={`block block-nexus-operation nexus-operation-${operation.opType} ${expanded ? 'expanded' : 'collapsed'} ${isUnresolved ? 'block-unresolved' : ''}`}>
+      <div className="block-header" onClick={toggle}>
+        {isExpandable ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon block-icon-nexus-operation">☆</span>
+        <span className="block-keyword">{operation.opType}</span>
+        <span className="block-signature">{signature}</span>
+        {isUnresolved && <span className="block-unresolved-badge">?</span>}
+      </div>
+
+      {expanded && isExpandable && (
+        <div className="block-body">
+          {operation.opType === 'async' && linkedWorkflow ? (
+            <InlineWorkflowBlock def={linkedWorkflow} />
+          ) : operation.body ? (
+            <SyncBodyBlock body={operation.body} />
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatActivitySignature(def: ActivityDef): string {

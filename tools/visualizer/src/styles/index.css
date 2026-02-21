@@ -338,6 +338,26 @@ body {
   background: rgba(148, 163, 184, 0.15);
 }
 
+/* Nexus Service type toggle */
+.header-type-tag.header-type-nexusServiceDef:hover {
+  border-color: #EC4899;
+  color: #BE185D;
+  background: rgba(236, 72, 153, 0.06);
+}
+
+.header-type-tag.header-type-nexusServiceDef.active {
+  border-color: #EC4899;
+  background: rgba(236, 72, 153, 0.12);
+  color: #BE185D;
+  font-weight: 500;
+}
+
+.vscode-dark .header-type-tag.header-type-nexusServiceDef:hover,
+.vscode-dark .header-type-tag.header-type-nexusServiceDef.active {
+  color: #F9A8D4;
+  background: rgba(236, 72, 153, 0.15);
+}
+
 /* Namespace type toggle */
 .header-type-tag.header-type-namespaceDef:hover {
   border-color: #7E8CA0;

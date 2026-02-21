@@ -1,7 +1,7 @@
 import React from 'react'
 import type { ActivityCall, WorkflowCall, NexusCall } from '../../types/ast'
 import { DefinitionContext } from '../WorkflowCanvas'
-import { WorkflowContent } from './WorkflowContent'
+import { WorkflowContent, InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
 import { useToggle } from './useToggle'
 import { StatementBlock } from './StatementBlock'
@@ -77,20 +77,52 @@ export function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
   )
 }
 
-// Nexus Call - calls a nexus service operation
+// Nexus Call - calls a nexus service operation (expandable via service context lookup)
 export function NexusCallBlock({ stmt }: { stmt: NexusCall }) {
+  const context = React.useContext(DefinitionContext)
+
+  // Look up the service and operation from context
+  const serviceDef = context.nexusServices.get(stmt.service)
+  const operation = serviceDef?.operations?.find(op => op.name === stmt.operation)
+  const isDefined = !!operation
+
+  // For expansion: async shows linked workflow, sync shows body
+  const linkedWorkflow = operation?.opType === 'async' && operation.workflowName
+    ? context.workflows.get(operation.workflowName)
+    : undefined
+  const isExpandable = operation?.opType === 'async' ? !!linkedWorkflow : !!(operation?.body && operation.body.length > 0)
+
+  const [expanded, toggle] = useToggle(false, isExpandable)
+
   const modePrefix = stmt.detach ? 'detach ' : ''
   const signature = `${stmt.endpoint} ${stmt.service}.${stmt.operation}(${stmt.args})`
   const result = stmt.result ? ` → ${stmt.result}` : ''
 
   return (
-    <div className={`block block-nexus-call ${stmt.detach ? 'block-mode-detach' : ''} collapsed`}>
-      <div className="block-header">
-        <span className="block-toggle-placeholder" />
-        <span className="block-icon">⬡</span>
+    <div className={`block block-nexus-call ${stmt.detach ? 'block-mode-detach' : ''} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined && stmt.service ? 'block-unresolved' : ''}`}>
+      <div className="block-header" onClick={toggle}>
+        {isExpandable ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon block-icon-nexus-call">☆</span>
         <span className="block-keyword">{modePrefix}nexus</span>
         <span className="block-signature">{signature}{result}</span>
+        {!isDefined && stmt.service && <span className="block-unresolved-badge">?</span>}
       </div>
+
+      {expanded && isExpandable && (
+        <div className="block-body">
+          {operation?.opType === 'async' && linkedWorkflow ? (
+            <InlineWorkflowBlock def={linkedWorkflow} />
+          ) : operation?.body ? (
+            <SyncBodyBlock body={operation.body} />
+          ) : (
+            <div className="block-empty-body">No implementation defined</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -5,17 +5,19 @@ import type {
   AwaitAllBlock,
   AwaitOneBlock,
   AwaitOneCase,
+  WorkflowDef,
 } from '../../types/ast'
 import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
 import { useToggle } from './useToggle'
 import { StatementBlock } from './StatementBlock'
+import { InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
 
 // Shared await target display - both getAwaitStmtDisplay and getAwaitOneCaseDisplay delegate here
 function getAwaitTargetDisplay(
   target: { kind: string; timer?: string; signal?: string; signalParams?: string; update?: string; updateParams?: string; activity?: string; activityArgs?: string; activityResult?: string; workflow?: string; workflowMode?: string; workflowArgs?: string; workflowResult?: string; nexus?: string; nexusService?: string; nexusOperation?: string; nexusArgs?: string; nexusResult?: string; nexusDetach?: boolean; ident?: string; identResult?: string },
-  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  context: { activities: Map<string, any>; workflows: Map<string, any>; nexusServices: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
-): { icon: string; keyword: string; signature: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
+): { icon: string; keyword: string; signature: string; expandableDef?: { body?: Statement[] }; nexusAsyncWorkflow?: WorkflowDef; nexusSyncBody?: Statement[]; isUnresolved: boolean } {
   switch (target.kind) {
     case 'timer':
       return { icon: '⏱', keyword: 'timer', signature: `(${target.timer || ''})`, isUnresolved: false }
@@ -48,7 +50,19 @@ function getAwaitTargetDisplay(
       const detachPrefix = target.nexusDetach ? 'detach ' : ''
       const sig = `${target.nexus || ''} ${target.nexusService || ''}.${target.nexusOperation || ''}(${target.nexusArgs || ''})`
       const result = target.nexusResult ? ` → ${target.nexusResult}` : ''
-      return { icon: '⬡', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, isUnresolved: false }
+      // Look up service and operation from context
+      const serviceDef = context.nexusServices.get(target.nexusService || '')
+      const operation = serviceDef?.operations?.find((op: any) => op.name === (target.nexusOperation || ''))
+      const isUnresolved = !!(target.nexusService && !serviceDef)
+      if (operation?.opType === 'async' && operation.workflowName) {
+        const wf = context.workflows.get(operation.workflowName)
+        if (wf) {
+          return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusAsyncWorkflow: wf, isUnresolved }
+        }
+      } else if (operation?.opType === 'sync' && operation.body) {
+        return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusSyncBody: operation.body, isUnresolved }
+      }
+      return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, isUnresolved }
     }
     case 'ident': {
       const name = target.ident || ''
@@ -63,9 +77,9 @@ function getAwaitTargetDisplay(
 // Get display info for single await statements
 function getAwaitStmtDisplay(
   stmt: AwaitStmt,
-  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  context: { activities: Map<string, any>; workflows: Map<string, any>; nexusServices: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
-): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
+): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] }; nexusAsyncWorkflow?: WorkflowDef; nexusSyncBody?: Statement[]; isUnresolved: boolean } {
   const target = getAwaitTargetDisplay(stmt, context, handlers)
   return {
     ...target,
@@ -79,7 +93,7 @@ function getAwaitStmtDisplay(
 // Get display info for await one cases
 function getAwaitOneCaseDisplay(
   c: AwaitOneCase,
-  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  context: { activities: Map<string, any>; workflows: Map<string, any>; nexusServices: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
 ): { contentClass: string; icon: string; keyword: string; signature: string; isUnresolved: boolean } {
   // await_all is case-only, handle separately
@@ -101,13 +115,14 @@ export function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   const context = React.useContext(DefinitionContext)
   const handlers = React.useContext(HandlerContext)
 
-  const { icon, keyword, signature, blockClass, expandableDef, isUnresolved } = getAwaitStmtDisplay(stmt, context, handlers)
-  const [expanded, toggle] = useToggle(false, !!expandableDef)
+  const { icon, keyword, signature, blockClass, expandableDef, nexusAsyncWorkflow, nexusSyncBody, isUnresolved } = getAwaitStmtDisplay(stmt, context, handlers)
+  const isExpandable = !!(expandableDef || nexusAsyncWorkflow || nexusSyncBody)
+  const [expanded, toggle] = useToggle(false, isExpandable)
 
   return (
     <div className={`block ${blockClass} ${expanded ? 'expanded' : 'collapsed'} ${isUnresolved ? 'block-unresolved' : ''}`}>
       <div className="block-header" onClick={toggle}>
-        {expandableDef ? (
+        {isExpandable ? (
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
         ) : (
           <span className="block-toggle-placeholder" />
@@ -118,9 +133,13 @@ export function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
         {isUnresolved && <span className="block-unresolved-badge">?</span>}
       </div>
 
-      {expanded && expandableDef && (
+      {expanded && isExpandable && (
         <div className="block-body">
-          {(expandableDef.body || []).length > 0 ? (
+          {nexusAsyncWorkflow ? (
+            <InlineWorkflowBlock def={nexusAsyncWorkflow} />
+          ) : nexusSyncBody ? (
+            <SyncBodyBlock body={nexusSyncBody} />
+          ) : expandableDef && (expandableDef.body || []).length > 0 ? (
             (expandableDef.body || []).map((s) => (
               <StatementBlock key={`${s.line}:${s.column}`} statement={s} />
             ))

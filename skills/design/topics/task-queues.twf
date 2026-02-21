@@ -56,6 +56,28 @@ activity TranscodeVideo(media: Media) -> (TranscodeResult):
 activity GenerateThumbnail(video: Video) -> (Thumbnail):
     return thumbnail(video)
 
+# --- Nexus services ---
+
+# PaymentService is registered on paymentWorker → hooked up via "payments" queue
+nexus service PaymentService:
+    sync CheckPaymentStatus(paymentId: string) -> (PaymentStatus):
+        activity LookupPayment(paymentId) -> status
+        close complete(status)
+
+# AnalyticsService is defined but NOT registered on any worker → not hooked up
+nexus service AnalyticsService:
+    async TrackEvent workflow TrackEventWorkflow
+
+activity LookupPayment(paymentId: string) -> (PaymentStatus):
+    return lookup(paymentId)
+
+workflow TrackEventWorkflow(event: Event):
+    activity RecordEvent(event)
+    close complete
+
+activity RecordEvent(event: Event):
+    record(event)
+
 # --- Workers ---
 
 worker orderWorker:
@@ -64,6 +86,8 @@ worker orderWorker:
 
 worker paymentWorker:
     activity ChargePayment
+    activity LookupPayment
+    nexus service PaymentService
 
 worker expressShipWorker:
     activity ShipOrder
@@ -93,6 +117,14 @@ namespace ecommerce:
     worker standardShipWorker
         options:
             task_queue: "shipping-standard"
+    # Connected: PaymentEndpoint routes to "payments" queue where paymentWorker has PaymentService
+    nexus endpoint PaymentEndpoint
+        options:
+            task_queue: "payments"
+    # Not connected: AnalyticsEndpoint routes to "analytics" but no worker on that queue has AnalyticsService
+    nexus endpoint AnalyticsEndpoint
+        options:
+            task_queue: "analytics"
 
 namespace media:
     worker mediaWorker

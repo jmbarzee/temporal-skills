@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TWFFile, Definition, WorkflowDef, ActivityDef, WorkerDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
+import type { TWFFile, Definition, WorkflowDef, ActivityDef, WorkerDef, NamespaceDef, NexusServiceDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
 import { SearchIcon } from './icons/GearIcons'
 
@@ -12,6 +12,8 @@ export interface DefinitionContext {
   workflows: Map<string, WorkflowDef>
   activities: Map<string, ActivityDef>
   workers: Map<string, WorkerDef>
+  nexusServices: Map<string, NexusServiceDef>
+  namespaces: Map<string, NamespaceDef>
 }
 
 // Context for looking up signal/query/update handlers in the current workflow
@@ -25,6 +27,8 @@ export const DefinitionContext = React.createContext<DefinitionContext>({
   workflows: new Map(),
   activities: new Map(),
   workers: new Map(),
+  nexusServices: new Map(),
+  namespaces: new Map(),
 })
 
 export const HandlerContext = React.createContext<HandlerContext>({
@@ -44,6 +48,7 @@ interface DefTypeConfig {
 const DEF_TYPE_CONFIGS: DefTypeConfig[] = [
   { type: 'workflowDef', label: 'Workflows', icon: '⚙⚙', defaultOn: true },
   { type: 'activityDef', label: 'Activities', icon: '⚙', defaultOn: false },
+  { type: 'nexusServiceDef', label: 'Nexus Services', icon: '★', defaultOn: false },
   { type: 'workerDef', label: 'Workers', icon: '□', defaultOn: false },
   { type: 'namespaceDef', label: 'Namespaces', icon: '⧉', defaultOn: false },
 ]
@@ -65,6 +70,8 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
     const workflows = new Map<string, WorkflowDef>()
     const activities = new Map<string, ActivityDef>()
     const workers = new Map<string, WorkerDef>()
+    const nexusServices = new Map<string, NexusServiceDef>()
+    const namespaces = new Map<string, NamespaceDef>()
 
     for (const def of ast.definitions) {
       if (def.type === 'workflowDef') {
@@ -73,10 +80,14 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
         activities.set(def.name, def)
       } else if (def.type === 'workerDef') {
         workers.set(def.name, def)
+      } else if (def.type === 'nexusServiceDef') {
+        nexusServices.set(def.name, def)
+      } else if (def.type === 'namespaceDef') {
+        namespaces.set(def.name, def)
       }
     }
 
-    return { workflows, activities, workers }
+    return { workflows, activities, workers, nexusServices, namespaces }
   }, [ast])
 
   // Extract all unique source files from definitions

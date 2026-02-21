@@ -5,6 +5,13 @@ export interface Position {
   column: number
 }
 
+// Lightweight reference to a resolved AST node (matches Go resolvedRefJSON)
+export interface ResolvedRef {
+  name: string
+  line: number
+  column: number
+}
+
 // Per-file parse error
 export interface FileError {
   file: string
@@ -21,8 +28,27 @@ export interface TWFFile {
   errors?: FileError[]
 }
 
+// Nexus service definition
+export type NexusOperationType = 'async' | 'sync'
+
+export interface NexusOperation extends Position {
+  opType: NexusOperationType
+  name: string
+  workflowName?: string   // async only: backing workflow
+  params?: string         // sync only
+  returnType?: string     // sync only
+  body?: Statement[]      // sync only
+}
+
+export interface NexusServiceDef extends Position {
+  type: 'nexusServiceDef'
+  name: string
+  operations?: NexusOperation[]
+  sourceFile?: string
+}
+
 // Definition types
-export type Definition = WorkflowDef | ActivityDef | WorkerDef | NamespaceDef
+export type Definition = WorkflowDef | ActivityDef | WorkerDef | NamespaceDef | NexusServiceDef
 
 export interface WorkflowDef extends Position {
   type: 'workflowDef'
@@ -61,6 +87,7 @@ export interface ActivityDef extends Position {
 // Worker reference (a named ref to a workflow, activity, or nexus service)
 export interface WorkerRef extends Position {
   name: string
+  resolved?: ResolvedRef
 }
 
 // Worker definition - groups workflows, activities, and nexus services
@@ -78,6 +105,7 @@ export interface WorkerDef extends Position {
 export interface NamespaceWorker extends Position {
   workerName: string
   options?: OptionsBlock
+  resolvedWorker?: ResolvedRef
 }
 
 // Namespace endpoint instantiation (nexus endpoint + options)
@@ -185,6 +213,10 @@ export interface NexusCall extends Position {
   args: string
   result?: string
   options?: OptionsBlock
+  resolvedEndpoint?: ResolvedRef
+  resolvedEndpointNamespace?: string
+  resolvedService?: ResolvedRef
+  resolvedOperation?: ResolvedRef
 }
 
 // Single await statement: await timer/signal/update/activity/workflow/nexus/ident
@@ -212,6 +244,10 @@ export interface AwaitStmt extends Position {
   nexusArgs?: string
   nexusResult?: string
   nexusDetach?: boolean
+  nexusResolvedEndpoint?: ResolvedRef
+  nexusResolvedEndpointNamespace?: string
+  nexusResolvedService?: ResolvedRef
+  nexusResolvedOperation?: ResolvedRef
   // Ident await (promise or condition reference)
   ident?: string
   identResult?: string
@@ -252,6 +288,10 @@ export interface AwaitOneCase extends Position {
   nexusArgs?: string
   nexusResult?: string
   nexusDetach?: boolean
+  nexusResolvedEndpoint?: ResolvedRef
+  nexusResolvedEndpointNamespace?: string
+  nexusResolvedService?: ResolvedRef
+  nexusResolvedOperation?: ResolvedRef
   // Await all case (nested)
   awaitAll?: AwaitAllBlock
   // Ident case (promise or condition reference)
@@ -345,6 +385,10 @@ export interface PromiseStmt extends Position {
   nexusService?: string
   nexusOperation?: string
   nexusArgs?: string
+  nexusResolvedEndpoint?: ResolvedRef
+  nexusResolvedEndpointNamespace?: string
+  nexusResolvedService?: ResolvedRef
+  nexusResolvedOperation?: ResolvedRef
 }
 
 // Set a condition to true
@@ -374,4 +418,8 @@ export function isWorkerDef(def: Definition): def is WorkerDef {
 
 export function isNamespaceDef(def: Definition): def is NamespaceDef {
   return def.type === 'namespaceDef'
+}
+
+export function isNexusServiceDef(def: Definition): def is NexusServiceDef {
+  return def.type === 'nexusServiceDef'
 }

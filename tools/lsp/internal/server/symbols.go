@@ -262,40 +262,11 @@ func defRange(def ast.Definition) protocol.Range {
 }
 
 func lastLineInStmts(stmts []ast.Statement, current int) int {
-	for _, s := range stmts {
-		if l := lastLineInStmt(s); l > current {
-			current = l
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		if s.NodeLine() > current {
+			current = s.NodeLine()
 		}
-	}
+		return true
+	})
 	return current
-}
-
-func lastLineInStmt(stmt ast.Statement) int {
-	line := stmt.NodeLine()
-	switch s := stmt.(type) {
-	case *ast.AwaitAllBlock:
-		line = lastLineInStmts(s.Body, line)
-	case *ast.AwaitOneBlock:
-		for _, c := range s.Cases {
-			if c.Line > line {
-				line = c.Line
-			}
-			// Handle nested await all if present.
-			if c.AwaitAll != nil {
-				line = lastLineInStmts(c.AwaitAll.Body, line)
-			}
-			line = lastLineInStmts(c.Body, line)
-		}
-	case *ast.SwitchBlock:
-		for _, c := range s.Cases {
-			line = lastLineInStmts(c.Body, line)
-		}
-		line = lastLineInStmts(s.Default, line)
-	case *ast.IfStmt:
-		line = lastLineInStmts(s.Body, line)
-		line = lastLineInStmts(s.ElseBody, line)
-	case *ast.ForStmt:
-		line = lastLineInStmts(s.Body, line)
-	}
-	return line
 }

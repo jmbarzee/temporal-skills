@@ -68,68 +68,51 @@ func foldingRangeHandler(store *DocumentStore) protocol.TextDocumentFoldingRange
 }
 
 func foldStmts(stmts []ast.Statement, ranges *[]protocol.FoldingRange) {
-	for _, s := range stmts {
-		foldStmt(s, ranges)
-	}
-}
-
-func foldStmt(stmt ast.Statement, ranges *[]protocol.FoldingRange) {
-	switch s := stmt.(type) {
-	case *ast.AwaitAllBlock:
-		addFold(ranges, s.Line, lastLineInStmts(s.Body, s.Line))
-		foldStmts(s.Body, ranges)
-
-	case *ast.AwaitOneBlock:
-		endLine := s.Line
-		for _, c := range s.Cases {
-			// Handle nested await all block.
-			if c.AwaitAll != nil {
-				aaEnd := lastLineInStmts(c.AwaitAll.Body, c.Line)
-				if aaEnd > endLine {
-					endLine = aaEnd
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		switch n := s.(type) {
+		case *ast.AwaitAllBlock:
+			addFold(ranges, n.Line, lastLineInStmts(n.Body, n.Line))
+		case *ast.AwaitOneBlock:
+			endLine := n.Line
+			for _, c := range n.Cases {
+				if c.AwaitAll != nil {
+					aaEnd := lastLineInStmts(c.AwaitAll.Body, c.Line)
+					if aaEnd > endLine {
+						endLine = aaEnd
+					}
+					addFold(ranges, c.Line, aaEnd)
 				}
-				addFold(ranges, c.Line, aaEnd)
-				foldStmts(c.AwaitAll.Body, ranges)
+				cEnd := lastLineInStmts(c.Body, c.Line)
+				if cEnd > endLine {
+					endLine = cEnd
+				}
+				addFold(ranges, c.Line, lastLineInStmts(c.Body, c.Line))
 			}
-			// Handle case body.
-			cEnd := lastLineInStmts(c.Body, c.Line)
-			if cEnd > endLine {
-				endLine = cEnd
+			addFold(ranges, n.Line, endLine)
+		case *ast.SwitchBlock:
+			endLine := n.Line
+			for _, c := range n.Cases {
+				cEnd := lastLineInStmts(c.Body, c.Line)
+				if cEnd > endLine {
+					endLine = cEnd
+				}
+				addFold(ranges, c.Line, lastLineInStmts(c.Body, c.Line))
 			}
-			addFold(ranges, c.Line, lastLineInStmts(c.Body, c.Line))
-			foldStmts(c.Body, ranges)
-		}
-		addFold(ranges, s.Line, endLine)
-
-	case *ast.SwitchBlock:
-		endLine := s.Line
-		for _, c := range s.Cases {
-			cEnd := lastLineInStmts(c.Body, c.Line)
-			if cEnd > endLine {
-				endLine = cEnd
+			defEnd := lastLineInStmts(n.Default, endLine)
+			if defEnd > endLine {
+				endLine = defEnd
 			}
-			addFold(ranges, c.Line, lastLineInStmts(c.Body, c.Line))
-			foldStmts(c.Body, ranges)
+			addFold(ranges, n.Line, endLine)
+		case *ast.IfStmt:
+			endLine := lastLineInStmts(n.Body, n.Line)
+			endLine = lastLineInStmts(n.ElseBody, endLine)
+			addFold(ranges, n.Line, endLine)
+		case *ast.ForStmt:
+			endLine := lastLineInStmts(n.Body, n.Line)
+			addFold(ranges, n.Line, endLine)
 		}
-		defEnd := lastLineInStmts(s.Default, endLine)
-		if defEnd > endLine {
-			endLine = defEnd
-		}
-		addFold(ranges, s.Line, endLine)
-		foldStmts(s.Default, ranges)
-
-	case *ast.IfStmt:
-		endLine := lastLineInStmts(s.Body, s.Line)
-		endLine = lastLineInStmts(s.ElseBody, endLine)
-		addFold(ranges, s.Line, endLine)
-		foldStmts(s.Body, ranges)
-		foldStmts(s.ElseBody, ranges)
-
-	case *ast.ForStmt:
-		endLine := lastLineInStmts(s.Body, s.Line)
-		addFold(ranges, s.Line, endLine)
-		foldStmts(s.Body, ranges)
-	}
+		return true
+	})
 }
 
 // addFold appends a FoldingRange converting 1-based lines to 0-based.

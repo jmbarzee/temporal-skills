@@ -144,81 +144,15 @@ func findNodeAtLine(file *ast.File, line int) ast.Node {
 
 // findNodeInStmts searches statements recursively for a node on the given line.
 func findNodeInStmts(stmts []ast.Statement, line int) ast.Node {
-	for _, stmt := range stmts {
-		if n := findNodeInStmt(stmt, line); n != nil {
-			return n
+	var found ast.Node
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		if s.NodeLine() == line {
+			found = s
+			return false
 		}
-	}
-	return nil
-}
-
-func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
-	switch s := stmt.(type) {
-	case *ast.ActivityCall:
-		if s.Line == line {
-			return s
-		}
-	case *ast.WorkflowCall:
-		if s.Line == line {
-			return s
-		}
-	case *ast.NexusCall:
-		if s.Line == line {
-			return s
-		}
-	case *ast.AwaitStmt:
-		if s.Line == line {
-			return s
-		}
-	case *ast.AwaitAllBlock:
-		if n := findNodeInStmts(s.Body, line); n != nil {
-			return n
-		}
-	case *ast.AwaitOneBlock:
-		for _, c := range s.Cases {
-			if c.Line == line {
-				return c
-			}
-			// Check nested await all block.
-			if c.AwaitAll != nil {
-				if n := findNodeInStmts(c.AwaitAll.Body, line); n != nil {
-					return n
-				}
-			}
-			if n := findNodeInStmts(c.Body, line); n != nil {
-				return n
-			}
-		}
-	case *ast.SwitchBlock:
-		for _, c := range s.Cases {
-			if n := findNodeInStmts(c.Body, line); n != nil {
-				return n
-			}
-		}
-		if n := findNodeInStmts(s.Default, line); n != nil {
-			return n
-		}
-	case *ast.IfStmt:
-		if n := findNodeInStmts(s.Body, line); n != nil {
-			return n
-		}
-		if n := findNodeInStmts(s.ElseBody, line); n != nil {
-			return n
-		}
-	case *ast.ForStmt:
-		if n := findNodeInStmts(s.Body, line); n != nil {
-			return n
-		}
-	case *ast.PromiseStmt:
-		if s.Line == line {
-			return s
-		}
-	case *ast.ReturnStmt:
-		if s.Line == line {
-			return s
-		}
-	}
-	return nil
+		return true
+	})
+	return found
 }
 
 // signatureFor builds a human-readable signature for a node.

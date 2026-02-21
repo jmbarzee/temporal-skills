@@ -214,60 +214,38 @@ func collectReferences(file *ast.File, name, kind string, includeDecl bool) []as
 }
 
 func collectRefsInStmts(stmts []ast.Statement, name, kind string, refs []ast.Node) []ast.Node {
-	for _, stmt := range stmts {
-		refs = collectRefsInStmt(stmt, name, kind, refs)
-	}
-	return refs
-}
-
-func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) []ast.Node {
-	switch s := stmt.(type) {
-	case *ast.ActivityCall:
-		if kind == "activity" && s.Name == name {
-			refs = append(refs, s)
-		}
-	case *ast.WorkflowCall:
-		if kind == "workflow" && s.Name == name {
-			refs = append(refs, s)
-		}
-	case *ast.NexusCall:
-		if kind == "nexus_service" && s.Service == name {
-			refs = append(refs, s)
-		}
-		if kind == "nexus_endpoint" && s.Endpoint == name {
-			refs = append(refs, s)
-		}
-	case *ast.AwaitStmt:
-		if matchesAsyncTarget(s.Target, name, kind) {
-			refs = append(refs, s)
-		}
-	case *ast.AwaitAllBlock:
-		refs = collectRefsInStmts(s.Body, name, kind, refs)
-	case *ast.AwaitOneBlock:
-		for _, c := range s.Cases {
-			if matchesAsyncTarget(c.Target, name, kind) {
-				refs = append(refs, c)
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		switch n := s.(type) {
+		case *ast.ActivityCall:
+			if kind == "activity" && n.Name == name {
+				refs = append(refs, n)
 			}
-			if c.AwaitAll != nil {
-				refs = collectRefsInStmts(c.AwaitAll.Body, name, kind, refs)
+		case *ast.WorkflowCall:
+			if kind == "workflow" && n.Name == name {
+				refs = append(refs, n)
 			}
-			refs = collectRefsInStmts(c.Body, name, kind, refs)
+		case *ast.NexusCall:
+			if kind == "nexus_service" && n.Service == name {
+				refs = append(refs, n)
+			}
+			if kind == "nexus_endpoint" && n.Endpoint == name {
+				refs = append(refs, n)
+			}
+		case *ast.AwaitStmt:
+			if matchesAsyncTarget(n.Target, name, kind) {
+				refs = append(refs, n)
+			}
+		case *ast.AwaitOneCase:
+			if matchesAsyncTarget(n.Target, name, kind) {
+				refs = append(refs, n)
+			}
+		case *ast.PromiseStmt:
+			if matchesAsyncTarget(n.Target, name, kind) {
+				refs = append(refs, n)
+			}
 		}
-	case *ast.PromiseStmt:
-		if matchesAsyncTarget(s.Target, name, kind) {
-			refs = append(refs, s)
-		}
-	case *ast.SwitchBlock:
-		for _, c := range s.Cases {
-			refs = collectRefsInStmts(c.Body, name, kind, refs)
-		}
-		refs = collectRefsInStmts(s.Default, name, kind, refs)
-	case *ast.IfStmt:
-		refs = collectRefsInStmts(s.Body, name, kind, refs)
-		refs = collectRefsInStmts(s.ElseBody, name, kind, refs)
-	case *ast.ForStmt:
-		refs = collectRefsInStmts(s.Body, name, kind, refs)
-	}
+		return true
+	})
 	return refs
 }
 

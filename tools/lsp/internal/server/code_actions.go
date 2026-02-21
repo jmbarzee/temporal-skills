@@ -181,58 +181,24 @@ func findCallByName(file *ast.File, name string) *ast.ActivityCall {
 }
 
 func findCallInStatements(stmts []ast.Statement, name string) *ast.ActivityCall {
-	for _, stmt := range stmts {
-		switch s := stmt.(type) {
-		case *ast.ActivityCall:
-			if s.Name == name {
-				return s
-			}
-		case *ast.IfStmt:
-			if call := findCallInStatements(s.Body, name); call != nil {
-				return call
-			}
-			if call := findCallInStatements(s.ElseBody, name); call != nil {
-				return call
-			}
-		case *ast.ForStmt:
-			if call := findCallInStatements(s.Body, name); call != nil {
-				return call
-			}
-		case *ast.AwaitAllBlock:
-			if call := findCallInStatements(s.Body, name); call != nil {
-				return call
-			}
-		case *ast.AwaitOneBlock:
-			for _, c := range s.Cases {
-				if call := findCallInStatements(c.Body, name); call != nil {
-					return call
-				}
-			}
+	var found *ast.ActivityCall
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		if call, ok := s.(*ast.ActivityCall); ok && call.Name == name {
+			found = call
+			return false
 		}
-	}
-	return nil
+		return true
+	})
+	return found
 }
 
 func findReturnStatements(stmts []ast.Statement) []*ast.ReturnStmt {
 	var returns []*ast.ReturnStmt
-	var visit func([]ast.Statement)
-	visit = func(stmts []ast.Statement) {
-		for _, stmt := range stmts {
-			switch s := stmt.(type) {
-			case *ast.ReturnStmt:
-				returns = append(returns, s)
-			case *ast.IfStmt:
-				visit(s.Body)
-				visit(s.ElseBody)
-			case *ast.ForStmt:
-				visit(s.Body)
-			case *ast.AwaitOneBlock:
-				for _, c := range s.Cases {
-					visit(c.Body)
-				}
-			}
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		if ret, ok := s.(*ast.ReturnStmt); ok {
+			returns = append(returns, ret)
 		}
-	}
-	visit(stmts)
+		return true
+	})
 	return returns
 }

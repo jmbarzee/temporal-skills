@@ -16,13 +16,7 @@ func parseNamespaceDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 

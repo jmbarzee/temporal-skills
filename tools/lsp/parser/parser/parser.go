@@ -22,14 +22,22 @@ func (e *ParseError) Error() string {
 type defParser func(p *Parser) (ast.Definition, error)
 type stmtParser func(p *Parser) (ast.Statement, error)
 
+// bodyContext tracks what kind of body the parser is currently inside.
+type bodyContext int
+
+const (
+	bodyNone     bodyContext = iota
+	bodyWorkflow            // workflow, signal handler, update handler, nexus sync op
+	bodyActivity            // activity, query handler
+)
+
 // Parser is a recursive descent parser for .twf files.
 type Parser struct {
 	lex     *lexer.Lexer
 	current token.Token
 	peek    token.Token
 
-	inWorkflow bool
-	inActivity bool
+	bodyCtx bodyContext
 
 	collecting bool          // true when collecting errors instead of bailing
 	errors     []*ParseError // accumulated errors in collecting mode
@@ -198,9 +206,10 @@ func (p *Parser) parseBody() ([]ast.Statement, error) {
 
 		var parseFn stmtParser
 		var ok bool
-		if p.inWorkflow {
+		switch p.bodyCtx {
+		case bodyWorkflow:
 			parseFn, ok = workflowStmtParsers[p.current.Type]
-		} else if p.inActivity {
+		case bodyActivity:
 			// Check for temporal keywords that aren't allowed.
 			if temporalKeywords[p.current.Type] {
 				return nil, p.errorf("%s is not allowed in activity body", p.current.Literal)

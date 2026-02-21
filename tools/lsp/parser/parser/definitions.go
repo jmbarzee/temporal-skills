@@ -32,13 +32,7 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 		returnType = rt.Literal
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
@@ -87,13 +81,7 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 
 parseBody:
 	// Parse workflow body.
-	prevWorkflow := p.inWorkflow
-	prevActivity := p.inActivity
-	p.inWorkflow = true
-	p.inActivity = false
-	body, err := p.parseBody()
-	p.inWorkflow = prevWorkflow
-	p.inActivity = prevActivity
+	body, err := p.parseBodyAs(bodyWorkflow)
 	if err != nil {
 		return nil, err
 	}
@@ -138,23 +126,11 @@ func parseActivityDef(p *Parser) (ast.Definition, error) {
 		returnType = rt.Literal
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
-	prevWorkflow := p.inWorkflow
-	prevActivity := p.inActivity
-	p.inWorkflow = false
-	p.inActivity = true
-	body, err := p.parseBody()
-	p.inWorkflow = prevWorkflow
-	p.inActivity = prevActivity
+	body, err := p.parseBodyAs(bodyActivity)
 	if err != nil {
 		return nil, err
 	}
@@ -184,23 +160,11 @@ func parseSignalDecl(p *Parser) (*ast.SignalDecl, error) {
 		p.advance()
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
-	prevWorkflow := p.inWorkflow
-	prevActivity := p.inActivity
-	p.inWorkflow = true
-	p.inActivity = false
-	body, err := p.parseBody()
-	p.inWorkflow = prevWorkflow
-	p.inActivity = prevActivity
+	body, err := p.parseBodyAs(bodyWorkflow)
 	if err != nil {
 		return nil, err
 	}
@@ -238,24 +202,12 @@ func parseQueryDecl(p *Parser) (*ast.QueryDecl, error) {
 		returnType = rt.Literal
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
 	// Query bodies are restricted like activity bodies (no temporal primitives).
-	prevWorkflow := p.inWorkflow
-	prevActivity := p.inActivity
-	p.inWorkflow = false
-	p.inActivity = true
-	body, err := p.parseBody()
-	p.inWorkflow = prevWorkflow
-	p.inActivity = prevActivity
+	body, err := p.parseBodyAs(bodyActivity)
 	if err != nil {
 		return nil, err
 	}
@@ -294,23 +246,11 @@ func parseUpdateDecl(p *Parser) (*ast.UpdateDecl, error) {
 		returnType = rt.Literal
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
-	prevWorkflow := p.inWorkflow
-	prevActivity := p.inActivity
-	p.inWorkflow = true
-	p.inActivity = false
-	body, err := p.parseBody()
-	p.inWorkflow = prevWorkflow
-	p.inActivity = prevActivity
+	body, err := p.parseBodyAs(bodyWorkflow)
 	if err != nil {
 		return nil, err
 	}
@@ -329,13 +269,7 @@ func parseStateBlock(p *Parser) (*ast.StateBlock, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume STATE
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 

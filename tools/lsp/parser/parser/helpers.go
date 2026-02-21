@@ -80,6 +80,29 @@ func (p *Parser) collectRawUntil(terminators ...token.TokenType) string {
 	}
 }
 
+// expectBlock consumes the COLON NEWLINE INDENT sequence that opens an
+// indented block.
+func (p *Parser) expectBlock() error {
+	if _, err := p.expect(token.COLON); err != nil {
+		return err
+	}
+	if _, err := p.expect(token.NEWLINE); err != nil {
+		return err
+	}
+	_, err := p.expect(token.INDENT)
+	return err
+}
+
+// parseBodyAs sets the body context, parses the body, then restores the
+// previous context. Use instead of manual save/restore around parseBody().
+func (p *Parser) parseBodyAs(ctx bodyContext) ([]ast.Statement, error) {
+	prev := p.bodyCtx
+	p.bodyCtx = ctx
+	body, err := p.parseBody()
+	p.bodyCtx = prev
+	return body, err
+}
+
 // skipBlankLinesAndComments consumes any NEWLINE and COMMENT tokens at the current position.
 // This allows comments to appear between declarations without breaking parsing.
 func (p *Parser) skipBlankLinesAndComments() {

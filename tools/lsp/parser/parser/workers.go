@@ -16,13 +16,7 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
@@ -44,34 +38,18 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 			continue
 
 		case token.WORKFLOW:
-			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-			p.advance() // consume WORKFLOW
-			wfName, err := p.expect(token.IDENT)
+			ref, err := p.parseWorkerRef()
 			if err != nil {
 				return nil, err
 			}
-			worker.Workflows = append(worker.Workflows, ast.WorkerRef{
-				Pos:  refPos,
-				Name: wfName.Literal,
-			})
-			if p.current.Type == token.NEWLINE {
-				p.advance()
-			}
+			worker.Workflows = append(worker.Workflows, ref)
 
 		case token.ACTIVITY:
-			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-			p.advance() // consume ACTIVITY
-			actName, err := p.expect(token.IDENT)
+			ref, err := p.parseWorkerRef()
 			if err != nil {
 				return nil, err
 			}
-			worker.Activities = append(worker.Activities, ast.WorkerRef{
-				Pos:  refPos,
-				Name: actName.Literal,
-			})
-			if p.current.Type == token.NEWLINE {
-				p.advance()
-			}
+			worker.Activities = append(worker.Activities, ref)
 
 		case token.NEXUS:
 			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
@@ -103,4 +81,19 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 	}
 
 	return worker, nil
+}
+
+// parseWorkerRef consumes the current keyword token, expects an IDENT name,
+// and returns a WorkerRef. Consumes a trailing NEWLINE if present.
+func (p *Parser) parseWorkerRef() (ast.WorkerRef, error) {
+	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+	p.advance() // consume keyword (WORKFLOW, ACTIVITY, etc.)
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return ast.WorkerRef{}, err
+	}
+	if p.current.Type == token.NEWLINE {
+		p.advance()
+	}
+	return ast.WorkerRef{Pos: pos, Name: name.Literal}, nil
 }

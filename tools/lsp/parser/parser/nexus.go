@@ -27,13 +27,7 @@ func parseNexusServiceDef(p *Parser) (ast.Definition, error) {
 		return nil, err
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
@@ -132,21 +126,12 @@ func parseSyncOperation(p *Parser) (*ast.NexusOperation, error) {
 		return nil, err
 	}
 
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
+	if err := p.expectBlock(); err != nil {
 		return nil, err
 	}
 
 	// Parse body with workflow statement set (sync ops can use temporal primitives)
-	prevInWorkflow := p.inWorkflow
-	p.inWorkflow = true
-	body, err := p.parseBody()
-	p.inWorkflow = prevInWorkflow
+	body, err := p.parseBodyAs(bodyWorkflow)
 	if err != nil {
 		return nil, err
 	}

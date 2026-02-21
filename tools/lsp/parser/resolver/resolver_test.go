@@ -1172,32 +1172,40 @@ namespace ns:
 
 	// Check await nexus resolution.
 	awaitStmt := caller.Body[0].(*ast.AwaitStmt)
-	if awaitStmt.NexusResolvedEndpoint == nil {
-		t.Error("await nexus endpoint not resolved")
-	} else if awaitStmt.NexusResolvedEndpoint.EndpointName != "Ep" {
-		t.Errorf("await resolved endpoint %q, expected 'Ep'", awaitStmt.NexusResolvedEndpoint.EndpointName)
+	awaitNexus, ok := awaitStmt.Target.(*ast.NexusTarget)
+	if !ok {
+		t.Fatalf("expected NexusTarget, got %T", awaitStmt.Target)
 	}
-	if awaitStmt.NexusResolvedService == nil {
+	if awaitNexus.ResolvedEndpoint == nil {
+		t.Error("await nexus endpoint not resolved")
+	} else if awaitNexus.ResolvedEndpoint.EndpointName != "Ep" {
+		t.Errorf("await resolved endpoint %q, expected 'Ep'", awaitNexus.ResolvedEndpoint.EndpointName)
+	}
+	if awaitNexus.ResolvedService == nil {
 		t.Error("await nexus service not resolved")
 	}
-	if awaitStmt.NexusResolvedOperation == nil {
+	if awaitNexus.ResolvedOperation == nil {
 		t.Error("await nexus operation not resolved")
 	}
-	if awaitStmt.NexusResolvedEndpointNamespace != "ns" {
-		t.Errorf("await resolved endpoint namespace %q, expected 'ns'", awaitStmt.NexusResolvedEndpointNamespace)
+	if awaitNexus.ResolvedEndpointNamespace != "ns" {
+		t.Errorf("await resolved endpoint namespace %q, expected 'ns'", awaitNexus.ResolvedEndpointNamespace)
 	}
 
 	// Check promise nexus resolution.
 	promiseStmt := caller.Body[1].(*ast.PromiseStmt)
-	if promiseStmt.NexusResolvedEndpoint == nil {
-		t.Error("promise nexus endpoint not resolved")
-	} else if promiseStmt.NexusResolvedEndpoint.EndpointName != "Ep" {
-		t.Errorf("promise resolved endpoint %q, expected 'Ep'", promiseStmt.NexusResolvedEndpoint.EndpointName)
+	promiseNexus, ok := promiseStmt.Target.(*ast.NexusTarget)
+	if !ok {
+		t.Fatalf("expected NexusTarget, got %T", promiseStmt.Target)
 	}
-	if promiseStmt.NexusResolvedService == nil {
+	if promiseNexus.ResolvedEndpoint == nil {
+		t.Error("promise nexus endpoint not resolved")
+	} else if promiseNexus.ResolvedEndpoint.EndpointName != "Ep" {
+		t.Errorf("promise resolved endpoint %q, expected 'Ep'", promiseNexus.ResolvedEndpoint.EndpointName)
+	}
+	if promiseNexus.ResolvedService == nil {
 		t.Error("promise nexus service not resolved")
 	}
-	if promiseStmt.NexusResolvedOperation == nil {
+	if promiseNexus.ResolvedOperation == nil {
 		t.Error("promise nexus operation not resolved")
 	}
 }

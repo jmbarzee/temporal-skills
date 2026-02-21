@@ -95,24 +95,12 @@ func nameOfNode(node ast.Node) (name, kind string) {
 		}
 		return n.Service, "nexus_service"
 	case *ast.AwaitStmt:
-		if n.Signal != "" {
-			return n.Signal, "signal"
-		}
-		if n.Update != "" {
-			return n.Update, "update"
-		}
-		if n.Activity != "" {
-			return n.Activity, "activity"
-		}
-		if n.Workflow != "" {
-			return n.Workflow, "workflow"
-		}
-		if n.Nexus != "" {
-			return n.NexusService, "nexus_service"
+		if n.Target != nil {
+			return nameOfAsyncTarget(n.Target)
 		}
 	case *ast.AwaitOneCase:
-		if n.Nexus != "" {
-			return n.NexusService, "nexus_service"
+		if n.Target != nil {
+			return nameOfAsyncTarget(n.Target)
 		}
 	}
 	return "", ""
@@ -250,40 +238,23 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 			refs = append(refs, s)
 		}
 	case *ast.AwaitStmt:
-		if kind == "signal" && s.Signal == name {
-			refs = append(refs, s)
-		} else if kind == "update" && s.Update == name {
-			refs = append(refs, s)
-		} else if kind == "activity" && s.Activity == name {
-			refs = append(refs, s)
-		} else if kind == "workflow" && s.Workflow == name {
-			refs = append(refs, s)
-		} else if kind == "nexus_service" && s.NexusService == name {
-			refs = append(refs, s)
-		} else if kind == "nexus_endpoint" && s.Nexus == name {
+		if matchesAsyncTarget(s.Target, name, kind) {
 			refs = append(refs, s)
 		}
 	case *ast.AwaitAllBlock:
 		refs = collectRefsInStmts(s.Body, name, kind, refs)
 	case *ast.AwaitOneBlock:
 		for _, c := range s.Cases {
-			// Check nexus references in cases.
-			if kind == "nexus_service" && c.NexusService == name {
-				refs = append(refs, c)
-			} else if kind == "nexus_endpoint" && c.Nexus == name {
+			if matchesAsyncTarget(c.Target, name, kind) {
 				refs = append(refs, c)
 			}
-			// Check nested await all block.
 			if c.AwaitAll != nil {
 				refs = collectRefsInStmts(c.AwaitAll.Body, name, kind, refs)
 			}
 			refs = collectRefsInStmts(c.Body, name, kind, refs)
 		}
 	case *ast.PromiseStmt:
-		if kind == "nexus_service" && s.NexusService == name {
-			refs = append(refs, s)
-		}
-		if kind == "nexus_endpoint" && s.Nexus == name {
+		if matchesAsyncTarget(s.Target, name, kind) {
 			refs = append(refs, s)
 		}
 	case *ast.SwitchBlock:
@@ -298,6 +269,41 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 		refs = collectRefsInStmts(s.Body, name, kind, refs)
 	}
 	return refs
+}
+
+// nameOfAsyncTarget returns the name and kind for an async target node.
+func nameOfAsyncTarget(target ast.AsyncTarget) (name, kind string) {
+	switch t := target.(type) {
+	case *ast.SignalTarget:
+		return t.Name, "signal"
+	case *ast.UpdateTarget:
+		return t.Name, "update"
+	case *ast.ActivityTarget:
+		return t.Name, "activity"
+	case *ast.WorkflowTarget:
+		return t.Name, "workflow"
+	case *ast.NexusTarget:
+		return t.Service, "nexus_service"
+	}
+	return "", ""
+}
+
+// matchesAsyncTarget reports whether an async target matches the given name and kind.
+func matchesAsyncTarget(target ast.AsyncTarget, name, kind string) bool {
+	switch t := target.(type) {
+	case *ast.SignalTarget:
+		return kind == "signal" && t.Name == name
+	case *ast.UpdateTarget:
+		return kind == "update" && t.Name == name
+	case *ast.ActivityTarget:
+		return kind == "activity" && t.Name == name
+	case *ast.WorkflowTarget:
+		return kind == "workflow" && t.Name == name
+	case *ast.NexusTarget:
+		return (kind == "nexus_service" && t.Service == name) ||
+			(kind == "nexus_endpoint" && t.Endpoint == name)
+	}
+	return false
 }
 
 // nameRange returns an LSP range covering just the name portion of a node.

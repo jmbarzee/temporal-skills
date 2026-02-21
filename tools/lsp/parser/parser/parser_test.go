@@ -273,11 +273,15 @@ func TestPromiseActivity(t *testing.T) {
 	if promise.Name != "p" {
 		t.Errorf("expected name 'p', got %q", promise.Name)
 	}
-	if promise.Activity != "ProcessAsync" {
-		t.Errorf("expected activity 'ProcessAsync', got %q", promise.Activity)
+	at, ok := promise.Target.(*ast.ActivityTarget)
+	if !ok {
+		t.Fatalf("expected ActivityTarget, got %T", promise.Target)
 	}
-	if promise.ActivityArgs != "data" {
-		t.Errorf("expected args 'data', got %q", promise.ActivityArgs)
+	if at.Name != "ProcessAsync" {
+		t.Errorf("expected activity 'ProcessAsync', got %q", at.Name)
+	}
+	if at.Args != "data" {
+		t.Errorf("expected args 'data', got %q", at.Args)
 	}
 }
 
@@ -351,8 +355,12 @@ workflow ProcessAsync(data: Data) -> (Result):
 	if promise.Name != "p" {
 		t.Errorf("expected name 'p', got %q", promise.Name)
 	}
-	if promise.Workflow != "ProcessAsync" {
-		t.Errorf("expected workflow 'ProcessAsync', got %q", promise.Workflow)
+	wt, ok := promise.Target.(*ast.WorkflowTarget)
+	if !ok {
+		t.Fatalf("expected WorkflowTarget, got %T", promise.Target)
+	}
+	if wt.Name != "ProcessAsync" {
+		t.Errorf("expected workflow 'ProcessAsync', got %q", wt.Name)
 	}
 }
 
@@ -372,8 +380,12 @@ func TestPromiseTimer(t *testing.T) {
 	if promise.Name != "timeout" {
 		t.Errorf("expected name 'timeout', got %q", promise.Name)
 	}
-	if promise.Timer != "5m" {
-		t.Errorf("expected timer '5m', got %q", promise.Timer)
+	tt, ok := promise.Target.(*ast.TimerTarget)
+	if !ok {
+		t.Fatalf("expected TimerTarget, got %T", promise.Target)
+	}
+	if tt.Duration != "5m" {
+		t.Errorf("expected timer '5m', got %q", tt.Duration)
 	}
 }
 
@@ -392,8 +404,12 @@ func TestPromiseSignal(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
 	}
-	if promise.Signal != "Approved" {
-		t.Errorf("expected signal 'Approved', got %q", promise.Signal)
+	st, ok := promise.Target.(*ast.SignalTarget)
+	if !ok {
+		t.Fatalf("expected SignalTarget, got %T", promise.Target)
+	}
+	if st.Name != "Approved" {
+		t.Errorf("expected signal 'Approved', got %q", st.Name)
 	}
 }
 
@@ -479,8 +495,12 @@ func TestAwaitIdent(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected AwaitStmt, got %T", wf.Body[0])
 	}
-	if awaitStmt.Ident != "ready" {
-		t.Errorf("expected ident 'ready', got %q", awaitStmt.Ident)
+	it, ok := awaitStmt.Target.(*ast.IdentTarget)
+	if !ok {
+		t.Fatalf("expected IdentTarget, got %T", awaitStmt.Target)
+	}
+	if it.Name != "ready" {
+		t.Errorf("expected ident 'ready', got %q", it.Name)
 	}
 }
 
@@ -502,11 +522,15 @@ activity Process(data: Data) -> (Result):
 	if !ok {
 		t.Fatalf("expected AwaitStmt, got %T", wf.Body[1])
 	}
-	if awaitStmt.Ident != "p" {
-		t.Errorf("expected ident 'p', got %q", awaitStmt.Ident)
+	it, ok := awaitStmt.Target.(*ast.IdentTarget)
+	if !ok {
+		t.Fatalf("expected IdentTarget, got %T", awaitStmt.Target)
 	}
-	if awaitStmt.IdentResult != "result" {
-		t.Errorf("expected ident result 'result', got %q", awaitStmt.IdentResult)
+	if it.Name != "p" {
+		t.Errorf("expected ident 'p', got %q", it.Name)
+	}
+	if it.Result != "result" {
+		t.Errorf("expected ident result 'result', got %q", it.Result)
 	}
 }
 
@@ -533,11 +557,15 @@ func TestAwaitOneIdentCase(t *testing.T) {
 	if len(awaitOne.Cases) != 2 {
 		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
 	}
-	if awaitOne.Cases[0].CaseKind() != "ident" {
-		t.Errorf("case[0]: expected ident, got %q", awaitOne.Cases[0].CaseKind())
+	if ast.AsyncTargetKind(awaitOne.Cases[0].Target) != "ident" {
+		t.Errorf("case[0]: expected ident, got %q", ast.AsyncTargetKind(awaitOne.Cases[0].Target))
 	}
-	if awaitOne.Cases[0].Ident != "ready" {
-		t.Errorf("case[0] ident: expected 'ready', got %q", awaitOne.Cases[0].Ident)
+	identCase, ok := awaitOne.Cases[0].Target.(*ast.IdentTarget)
+	if !ok {
+		t.Fatalf("expected IdentTarget, got %T", awaitOne.Cases[0].Target)
+	}
+	if identCase.Name != "ready" {
+		t.Errorf("case[0] ident: expected 'ready', got %q", identCase.Name)
 	}
 }
 
@@ -668,20 +696,28 @@ func TestAwaitOneBlock(t *testing.T) {
 	if len(awaitOne.Cases) != 2 {
 		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
 	}
-	if awaitOne.Cases[0].CaseKind() != "timer" {
-		t.Errorf("case[0]: expected timer, got %q", awaitOne.Cases[0].CaseKind())
+	if ast.AsyncTargetKind(awaitOne.Cases[0].Target) != "timer" {
+		t.Errorf("case[0]: expected timer, got %q", ast.AsyncTargetKind(awaitOne.Cases[0].Target))
 	}
-	if awaitOne.Cases[0].Timer != "1h" {
-		t.Errorf("case[0] timer: expected '1h', got %q", awaitOne.Cases[0].Timer)
+	timer0, ok := awaitOne.Cases[0].Target.(*ast.TimerTarget)
+	if !ok {
+		t.Fatalf("expected TimerTarget, got %T", awaitOne.Cases[0].Target)
+	}
+	if timer0.Duration != "1h" {
+		t.Errorf("case[0] timer: expected '1h', got %q", timer0.Duration)
 	}
 	if len(awaitOne.Cases[0].Body) != 1 {
 		t.Errorf("case[0] body: expected 1 statement, got %d", len(awaitOne.Cases[0].Body))
 	}
-	if awaitOne.Cases[1].CaseKind() != "timer" {
-		t.Errorf("case[1]: expected timer, got %q", awaitOne.Cases[1].CaseKind())
+	if ast.AsyncTargetKind(awaitOne.Cases[1].Target) != "timer" {
+		t.Errorf("case[1]: expected timer, got %q", ast.AsyncTargetKind(awaitOne.Cases[1].Target))
 	}
-	if awaitOne.Cases[1].Timer != "24h" {
-		t.Errorf("case[1] timer: expected '24h', got %q", awaitOne.Cases[1].Timer)
+	timer1, ok := awaitOne.Cases[1].Target.(*ast.TimerTarget)
+	if !ok {
+		t.Fatalf("expected TimerTarget, got %T", awaitOne.Cases[1].Target)
+	}
+	if timer1.Duration != "24h" {
+		t.Errorf("case[1] timer: expected '24h', got %q", timer1.Duration)
 	}
 	if len(awaitOne.Cases[1].Body) != 1 {
 		t.Errorf("case[1] body: expected 1 statement, got %d", len(awaitOne.Cases[1].Body))
@@ -1311,11 +1347,15 @@ func TestTimerCaseWithBody(t *testing.T) {
 	}
 
 	c := awaitOne.Cases[0]
-	if c.CaseKind() != "timer" {
-		t.Errorf("expected timer case, got %q", c.CaseKind())
+	if ast.AsyncTargetKind(c.Target) != "timer" {
+		t.Errorf("expected timer case, got %q", ast.AsyncTargetKind(c.Target))
 	}
-	if c.Timer != "5m" {
-		t.Errorf("timer duration: expected '5m', got %q", c.Timer)
+	ct, ok := c.Target.(*ast.TimerTarget)
+	if !ok {
+		t.Fatalf("expected TimerTarget, got %T", c.Target)
+	}
+	if ct.Duration != "5m" {
+		t.Errorf("timer duration: expected '5m', got %q", ct.Duration)
 	}
 	if len(c.Body) != 2 {
 		t.Errorf("expected 2 statements in timer body, got %d", len(c.Body))
@@ -1768,17 +1808,21 @@ func TestNexusCallPromise(t *testing.T) {
 	if promise.Name != "p" {
 		t.Errorf("expected name 'p', got %q", promise.Name)
 	}
-	if promise.Nexus != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", promise.Nexus)
+	nt, ok := promise.Target.(*ast.NexusTarget)
+	if !ok {
+		t.Fatalf("expected NexusTarget, got %T", promise.Target)
 	}
-	if promise.NexusService != "Svc" {
-		t.Errorf("expected nexus service 'Svc', got %q", promise.NexusService)
+	if nt.Endpoint != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", nt.Endpoint)
 	}
-	if promise.NexusOperation != "Op" {
-		t.Errorf("expected nexus operation 'Op', got %q", promise.NexusOperation)
+	if nt.Service != "Svc" {
+		t.Errorf("expected nexus service 'Svc', got %q", nt.Service)
 	}
-	if promise.NexusArgs != "args" {
-		t.Errorf("expected nexus args 'args', got %q", promise.NexusArgs)
+	if nt.Operation != "Op" {
+		t.Errorf("expected nexus operation 'Op', got %q", nt.Operation)
+	}
+	if nt.Args != "args" {
+		t.Errorf("expected nexus args 'args', got %q", nt.Args)
 	}
 }
 
@@ -1795,20 +1839,24 @@ func TestNexusCallAwait(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected AwaitStmt, got %T", wf.Body[0])
 	}
-	if await.AwaitKind() != "nexus" {
-		t.Errorf("expected kind 'nexus', got %q", await.AwaitKind())
+	if ast.AsyncTargetKind(await.Target) != "nexus" {
+		t.Errorf("expected kind 'nexus', got %q", ast.AsyncTargetKind(await.Target))
 	}
-	if await.Nexus != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", await.Nexus)
+	ant, ok := await.Target.(*ast.NexusTarget)
+	if !ok {
+		t.Fatalf("expected NexusTarget, got %T", await.Target)
 	}
-	if await.NexusService != "Svc" {
-		t.Errorf("expected service 'Svc', got %q", await.NexusService)
+	if ant.Endpoint != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", ant.Endpoint)
 	}
-	if await.NexusOperation != "Op" {
-		t.Errorf("expected operation 'Op', got %q", await.NexusOperation)
+	if ant.Service != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", ant.Service)
 	}
-	if await.NexusResult != "result" {
-		t.Errorf("expected result 'result', got %q", await.NexusResult)
+	if ant.Operation != "Op" {
+		t.Errorf("expected operation 'Op', got %q", ant.Operation)
+	}
+	if ant.Result != "result" {
+		t.Errorf("expected result 'result', got %q", ant.Result)
 	}
 }
 
@@ -1839,20 +1887,24 @@ activity HandleTimeout():
 		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
 	}
 	nexusCase := awaitOne.Cases[0]
-	if nexusCase.CaseKind() != "nexus" {
-		t.Errorf("expected kind 'nexus', got %q", nexusCase.CaseKind())
+	if ast.AsyncTargetKind(nexusCase.Target) != "nexus" {
+		t.Errorf("expected kind 'nexus', got %q", ast.AsyncTargetKind(nexusCase.Target))
 	}
-	if nexusCase.Nexus != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", nexusCase.Nexus)
+	nct, ok := nexusCase.Target.(*ast.NexusTarget)
+	if !ok {
+		t.Fatalf("expected NexusTarget, got %T", nexusCase.Target)
 	}
-	if nexusCase.NexusService != "Svc" {
-		t.Errorf("expected service 'Svc', got %q", nexusCase.NexusService)
+	if nct.Endpoint != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", nct.Endpoint)
 	}
-	if nexusCase.NexusOperation != "Op" {
-		t.Errorf("expected operation 'Op', got %q", nexusCase.NexusOperation)
+	if nct.Service != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", nct.Service)
 	}
-	if nexusCase.NexusResult != "result" {
-		t.Errorf("expected result 'result', got %q", nexusCase.NexusResult)
+	if nct.Operation != "Op" {
+		t.Errorf("expected operation 'Op', got %q", nct.Operation)
+	}
+	if nct.Result != "result" {
+		t.Errorf("expected result 'result', got %q", nct.Result)
 	}
 	if len(nexusCase.Body) != 1 {
 		t.Fatalf("expected 1 body statement, got %d", len(nexusCase.Body))

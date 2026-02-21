@@ -578,123 +578,10 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 		c.resolveStatements(s.Body)
 
 	case *ast.AwaitStmt:
-		// Resolve signal/update/activity/workflow references
-		if s.Signal != "" {
-			if def, ok := c.signals[s.Signal]; ok {
-				s.SignalResolved = def
-			} else {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined signal: %s", s.Signal),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Update != "" {
-			if def, ok := c.updates[s.Update]; ok {
-				s.UpdateResolved = def
-			} else {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined update: %s", s.Update),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Activity != "" {
-			if def, ok := c.activities[s.Activity]; ok {
-				s.ActivityResolved = def
-			} else {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined activity: %s", s.Activity),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Workflow != "" {
-			if def, ok := c.workflows[s.Workflow]; ok {
-				s.WorkflowResolved = def
-			} else {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined workflow: %s", s.Workflow),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Nexus != "" {
-			res := c.resolveNexusRef(s.Nexus, s.NexusService, s.NexusOperation, s.NexusDetach, s.NexusResult, s.Line, s.Column)
-			s.NexusResolvedEndpoint = res.endpoint
-			s.NexusResolvedEndpointNamespace = res.endpointNamespace
-			s.NexusResolvedService = res.service
-			s.NexusResolvedOperation = res.operation
-		}
-		if s.Ident != "" {
-			_, isPromise := c.promises[s.Ident]
-			_, isCondition := c.conditions[s.Ident]
-			if !isPromise && !isCondition {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined promise or condition: %s", s.Ident),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-			// Conditions cannot have result bindings
-			if isCondition && s.IdentResult != "" {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", s.Ident),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
+		c.resolveAsyncTarget(s.Target, s.Line, s.Column)
 
 	case *ast.PromiseStmt:
-		// Resolve the async target references
-		if s.Activity != "" {
-			if _, ok := c.activities[s.Activity]; !ok {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined activity: %s", s.Activity),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Workflow != "" {
-			if _, ok := c.workflows[s.Workflow]; !ok {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined workflow: %s", s.Workflow),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Signal != "" {
-			if _, ok := c.signals[s.Signal]; !ok {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined signal: %s", s.Signal),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Update != "" {
-			if _, ok := c.updates[s.Update]; !ok {
-				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("undefined update: %s", s.Update),
-					Line:   s.Line,
-					Column: s.Column,
-				})
-			}
-		}
-		if s.Nexus != "" {
-			res := c.resolveNexusRef(s.Nexus, s.NexusService, s.NexusOperation, false, "", s.Line, s.Column)
-			s.NexusResolvedEndpoint = res.endpoint
-			s.NexusResolvedEndpointNamespace = res.endpointNamespace
-			s.NexusResolvedService = res.service
-			s.NexusResolvedOperation = res.operation
-		}
+		c.resolveAsyncTarget(s.Target, s.Line, s.Column)
 
 	case *ast.SetStmt:
 		if _, ok := c.conditions[s.Name]; !ok {
@@ -959,78 +846,8 @@ func (c *resolveCtx) checkEndpointServiceLinkage(endpoint, service string, line,
 }
 
 func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
-	// Resolve signal/update/activity/workflow references
-	if awaitCase.Signal != "" {
-		if def, ok := c.signals[awaitCase.Signal]; ok {
-			awaitCase.SignalResolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined signal: %s", awaitCase.Signal),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
-	}
-	if awaitCase.Update != "" {
-		if def, ok := c.updates[awaitCase.Update]; ok {
-			awaitCase.UpdateResolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined update: %s", awaitCase.Update),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
-	}
-	if awaitCase.Activity != "" {
-		if def, ok := c.activities[awaitCase.Activity]; ok {
-			awaitCase.ActivityResolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined activity: %s", awaitCase.Activity),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
-	}
-	if awaitCase.Workflow != "" {
-		if def, ok := c.workflows[awaitCase.Workflow]; ok {
-			awaitCase.WorkflowResolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined workflow: %s", awaitCase.Workflow),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
-	}
-
-	if awaitCase.Nexus != "" {
-		res := c.resolveNexusRef(awaitCase.Nexus, awaitCase.NexusService, awaitCase.NexusOperation, awaitCase.NexusDetach, awaitCase.NexusResult, awaitCase.Line, awaitCase.Column)
-		awaitCase.NexusResolvedEndpoint = res.endpoint
-		awaitCase.NexusResolvedEndpointNamespace = res.endpointNamespace
-		awaitCase.NexusResolvedService = res.service
-		awaitCase.NexusResolvedOperation = res.operation
-	}
-
-	if awaitCase.Ident != "" {
-		_, isPromise := c.promises[awaitCase.Ident]
-		_, isCondition := c.conditions[awaitCase.Ident]
-		if !isPromise && !isCondition {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined promise or condition: %s", awaitCase.Ident),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
-		// Conditions cannot have result bindings
-		if isCondition && awaitCase.IdentResult != "" {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", awaitCase.Ident),
-				Line:   awaitCase.Line,
-				Column: awaitCase.Column,
-			})
-		}
+	if awaitCase.Target != nil {
+		c.resolveAsyncTarget(awaitCase.Target, awaitCase.Line, awaitCase.Column)
 	}
 
 	// Resolve nested await all block if present.
@@ -1039,4 +856,75 @@ func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
 	}
 	// Resolve the case body.
 	c.resolveStatements(awaitCase.Body)
+}
+
+// resolveAsyncTarget resolves references inside an async target.
+func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int) {
+	switch t := target.(type) {
+	case *ast.SignalTarget:
+		if def, ok := c.signals[t.Name]; ok {
+			t.Resolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined signal: %s", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+	case *ast.UpdateTarget:
+		if def, ok := c.updates[t.Name]; ok {
+			t.Resolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined update: %s", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+	case *ast.ActivityTarget:
+		if def, ok := c.activities[t.Name]; ok {
+			t.Resolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined activity: %s", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+	case *ast.WorkflowTarget:
+		if def, ok := c.workflows[t.Name]; ok {
+			t.Resolved = def
+		} else {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined workflow: %s", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+	case *ast.NexusTarget:
+		res := c.resolveNexusRef(t.Endpoint, t.Service, t.Operation, t.Detach, t.Result, line, column)
+		t.ResolvedEndpoint = res.endpoint
+		t.ResolvedEndpointNamespace = res.endpointNamespace
+		t.ResolvedService = res.service
+		t.ResolvedOperation = res.operation
+	case *ast.IdentTarget:
+		_, isPromise := c.promises[t.Name]
+		_, isCondition := c.conditions[t.Name]
+		if !isPromise && !isCondition {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined promise or condition: %s", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+		if isCondition && t.Result != "" {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("condition %q cannot have a result binding (-> identifier)", t.Name),
+				Line:   line,
+				Column: column,
+			})
+		}
+	case *ast.TimerTarget:
+		// No resolution needed for timers
+	}
 }

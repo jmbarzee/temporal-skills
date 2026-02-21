@@ -14,6 +14,7 @@ type Lexer struct {
 	pending []token.Token // queued tokens (INDENT/DEDENT)
 
 	indentStack []int // stack of indent levels, starts at [0]
+	eofEmitted  bool  // true after first EOF has been emitted
 }
 
 // New creates a new Lexer for the given input.
@@ -172,16 +173,21 @@ func (l *Lexer) emitDedentsTo(target int) {
 		l.indentStack = l.indentStack[:len(l.indentStack)-1]
 		l.pending = append(l.pending, l.makeToken(token.DEDENT, ""))
 	}
+	if l.indentStack[len(l.indentStack)-1] != target {
+		l.pending = append(l.pending, l.makeToken(token.ILLEGAL, "inconsistent indentation"))
+	}
 }
 
 // emitEOF emits a synthetic NEWLINE (if needed), remaining DEDENTs, then EOF.
 func (l *Lexer) emitEOF() token.Token {
+	if l.eofEmitted {
+		return l.makeToken(token.EOF, "")
+	}
+	l.eofEmitted = true
+
 	// If the input doesn't end with a newline, emit a synthetic one so
 	// the parser always sees NEWLINE before DEDENT/EOF.
 	if len(l.input) > 0 && l.input[len(l.input)-1] != '\n' {
-		// Rewrite the input to appear as if it ended with \n so this
-		// branch only fires once.
-		l.input = append(l.input, '\n')
 		nl := l.makeToken(token.NEWLINE, "")
 		// Queue remaining dedents and EOF after the newline.
 		for len(l.indentStack) > 1 {

@@ -170,73 +170,105 @@ type WorkflowCall struct {
 
 func (*WorkflowCall) stmtNode() {}
 
-// AwaitStmt represents a single await statement.
-type AwaitStmt struct {
-	Pos
-	// Timer await
-	Timer string // duration, e.g. "5m"
+// ---------------------------------------------------------------------------
+// Async target discriminated union
+// ---------------------------------------------------------------------------
 
-	// Signal await
-	Signal         string // signal name
-	SignalParams   string // optional parameter binding, e.g. "(approver, timestamp)"
-	SignalResolved *SignalDecl
-
-	// Update await
-	Update         string // update name
-	UpdateParams   string // optional parameter binding
-	UpdateResolved *UpdateDecl
-
-	// Activity await
-	Activity         string // activity name
-	ActivityArgs     string
-	ActivityResult   string // optional result binding
-	ActivityResolved *ActivityDef
-
-	// Workflow await
-	Workflow         string // workflow name
-	WorkflowMode     WorkflowCallMode
-	WorkflowArgs     string
-	WorkflowResult   string // optional result binding
-	WorkflowResolved *WorkflowDef
-
-	// Nexus await
-	Nexus          string // endpoint name
-	NexusService   string
-	NexusOperation string
-	NexusArgs      string
-	NexusResult    string
-	NexusDetach    bool
-	// Nexus resolution links
-	NexusResolvedEndpoint          *NamespaceEndpoint
-	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
-	NexusResolvedService           *NexusServiceDef
-	NexusResolvedOperation         *NexusOperation
-
-	// Ident await (promise or condition reference)
-	Ident       string // promise or condition name
-	IdentResult string // optional result binding (promises only)
+// AsyncTarget is the interface for async operation targets used in await,
+// await-one-case, and promise statements. Exactly one concrete type is used.
+type AsyncTarget interface {
+	asyncTarget() // unexported marker
 }
 
-// AwaitKind returns the kind of await statement.
-func (a *AwaitStmt) AwaitKind() string {
-	switch {
-	case a.Timer != "":
+// AsyncTargetKind returns a string identifying the kind of async target.
+func AsyncTargetKind(t AsyncTarget) string {
+	switch t.(type) {
+	case *TimerTarget:
 		return "timer"
-	case a.Signal != "":
+	case *SignalTarget:
 		return "signal"
-	case a.Update != "":
+	case *UpdateTarget:
 		return "update"
-	case a.Activity != "":
+	case *ActivityTarget:
 		return "activity"
-	case a.Workflow != "":
+	case *WorkflowTarget:
 		return "workflow"
-	case a.Nexus != "":
+	case *NexusTarget:
 		return "nexus"
-	case a.Ident != "":
+	case *IdentTarget:
 		return "ident"
 	default:
 		return "unknown"
 	}
+}
+
+type TimerTarget struct {
+	Duration string
+}
+
+func (*TimerTarget) asyncTarget() {}
+
+type SignalTarget struct {
+	Name     string
+	Params   string
+	Resolved *SignalDecl
+}
+
+func (*SignalTarget) asyncTarget() {}
+
+type UpdateTarget struct {
+	Name     string
+	Params   string
+	Resolved *UpdateDecl
+}
+
+func (*UpdateTarget) asyncTarget() {}
+
+type ActivityTarget struct {
+	Name     string
+	Args     string
+	Result   string
+	Resolved *ActivityDef
+}
+
+func (*ActivityTarget) asyncTarget() {}
+
+type WorkflowTarget struct {
+	Name     string
+	Mode     WorkflowCallMode
+	Args     string
+	Result   string
+	Resolved *WorkflowDef
+}
+
+func (*WorkflowTarget) asyncTarget() {}
+
+type NexusTarget struct {
+	Endpoint                  string
+	Service                   string
+	Operation                 string
+	Args                      string
+	Result                    string
+	Detach                    bool
+	ResolvedEndpoint          *NamespaceEndpoint
+	ResolvedEndpointNamespace string
+	ResolvedService           *NexusServiceDef
+	ResolvedOperation         *NexusOperation
+}
+
+func (*NexusTarget) asyncTarget() {}
+
+type IdentTarget struct {
+	Name   string
+	Result string
+}
+
+func (*IdentTarget) asyncTarget() {}
+
+// AwaitStmt represents a single await statement.
+type AwaitStmt struct {
+	Pos
+	Target AsyncTarget
 }
 
 func (*AwaitStmt) stmtNode() {}
@@ -250,81 +282,12 @@ type AwaitAllBlock struct {
 func (*AwaitAllBlock) stmtNode() {}
 
 // AwaitOneCase represents a single case in an "await one:" block.
-// Can be signal, update, timer, activity, workflow, or nested await all.
+// Can be signal, update, timer, activity, workflow, nexus, ident, or nested await all.
 type AwaitOneCase struct {
 	Pos
-
-	// Signal case
-	Signal         string // signal name
-	SignalParams   string // optional parameter binding, e.g. "(approver, timestamp)"
-	SignalResolved *SignalDecl
-
-	// Update case
-	Update         string // update name
-	UpdateParams   string // optional parameter binding
-	UpdateResolved *UpdateDecl
-
-	// Timer case
-	Timer string // duration
-
-	// Activity case
-	Activity         string // activity name
-	ActivityArgs     string
-	ActivityResult   string // optional result binding
-	ActivityResolved *ActivityDef
-
-	// Workflow case
-	Workflow         string           // workflow name
-	WorkflowMode     WorkflowCallMode // spawn/detach/child
-	WorkflowArgs     string
-	WorkflowResult   string // optional result binding
-	WorkflowResolved *WorkflowDef
-
-	// Nexus case
-	Nexus          string // endpoint name
-	NexusService   string
-	NexusOperation string
-	NexusArgs      string
-	NexusResult    string
-	NexusDetach    bool
-	// Nexus resolution links
-	NexusResolvedEndpoint          *NamespaceEndpoint
-	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
-	NexusResolvedService           *NexusServiceDef
-	NexusResolvedOperation         *NexusOperation
-
-	// Await all case (nested)
-	AwaitAll *AwaitAllBlock
-
-	// Ident case (promise or condition reference)
-	Ident       string // promise or condition name
-	IdentResult string // optional result binding (promises only)
-
-	Body []Statement // optional body (can be empty)
-}
-
-// CaseKind returns the kind of this await one case.
-func (c *AwaitOneCase) CaseKind() string {
-	switch {
-	case c.Signal != "":
-		return "signal"
-	case c.Update != "":
-		return "update"
-	case c.Timer != "":
-		return "timer"
-	case c.Activity != "":
-		return "activity"
-	case c.Workflow != "":
-		return "workflow"
-	case c.Nexus != "":
-		return "nexus"
-	case c.AwaitAll != nil:
-		return "await_all"
-	case c.Ident != "":
-		return "ident"
-	default:
-		return "unknown"
-	}
+	Target   AsyncTarget    // nil when AwaitAll is set
+	AwaitAll *AwaitAllBlock // nil when Target is set
+	Body     []Statement
 }
 
 func (*AwaitOneCase) stmtNode() {}
@@ -443,32 +406,8 @@ type ConditionDecl struct {
 // PromiseStmt represents a promise declaration: promise name <- async_target
 type PromiseStmt struct {
 	Pos
-	Name string
-
-	// The async target (exactly one set, mirrors AwaitStmt fields)
-	Timer string
-
-	Signal       string
-	SignalParams string
-
-	Update       string
-	UpdateParams string
-
-	Activity     string
-	ActivityArgs string
-
-	Workflow     string
-	WorkflowArgs string
-
-	Nexus          string // endpoint name
-	NexusService   string
-	NexusOperation string
-	NexusArgs      string
-	// Nexus resolution links
-	NexusResolvedEndpoint          *NamespaceEndpoint
-	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
-	NexusResolvedService           *NexusServiceDef
-	NexusResolvedOperation         *NexusOperation
+	Name   string
+	Target AsyncTarget
 }
 
 func (*PromiseStmt) stmtNode() {}

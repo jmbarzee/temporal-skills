@@ -8,6 +8,7 @@ type TokenType int
 const (
 	// Structural
 	EOF TokenType = iota
+	ILLEGAL
 	NEWLINE
 	INDENT
 	DEDENT
@@ -87,6 +88,7 @@ const (
 
 var tokenNames = map[TokenType]string{
 	EOF:             "EOF",
+	ILLEGAL:         "ILLEGAL",
 	NEWLINE:         "NEWLINE",
 	INDENT:          "INDENT",
 	DEDENT:          "DEDENT",

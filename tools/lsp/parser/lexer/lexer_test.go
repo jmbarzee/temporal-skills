@@ -400,6 +400,45 @@ func TestNumberToken(t *testing.T) {
 	}
 }
 
+func TestEmitEOFIdempotent(t *testing.T) {
+	input := "a:\n    b"
+	l := New(input)
+	_ = l.AllTokens()
+
+	// Calling NextToken after AllTokens should return EOF, not panic or garbage.
+	tok := l.NextToken()
+	if tok.Type != token.EOF {
+		t.Fatalf("expected EOF after AllTokens, got %s (%q)", tok.Type, tok.Literal)
+	}
+	// And again.
+	tok = l.NextToken()
+	if tok.Type != token.EOF {
+		t.Fatalf("expected EOF on third call, got %s (%q)", tok.Type, tok.Literal)
+	}
+}
+
+func TestInconsistentDedent(t *testing.T) {
+	// Indent stack will be [0, 4] after the indent. Dedenting to column 3
+	// doesn't match any stack level, so an ILLEGAL token should appear.
+	input := "a:\n    b\n   c\n"
+	l := New(input)
+	tokens := l.AllTokens()
+
+	foundIllegal := false
+	for _, tok := range tokens {
+		if tok.Type == token.ILLEGAL {
+			foundIllegal = true
+			if tok.Literal != "inconsistent indentation" {
+				t.Fatalf("expected ILLEGAL literal 'inconsistent indentation', got %q", tok.Literal)
+			}
+			break
+		}
+	}
+	if !foundIllegal {
+		t.Fatalf("expected ILLEGAL token for inconsistent dedent, got tokens: %v", tokens)
+	}
+}
+
 func TestOptionsBlockTokenStream(t *testing.T) {
 	input := "activity Foo(x) -> y\n    options:\n        task_queue: \"workers\"\n        start_to_close: 60s\n"
 	expected := []struct {

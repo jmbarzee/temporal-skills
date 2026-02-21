@@ -52,24 +52,8 @@ func resolvedTarget(node ast.Node) ast.Node {
 			return n.ResolvedEndpoint
 		}
 	case *ast.AwaitStmt:
-		// Check which type of await and return appropriate resolved reference
-		if n.Signal != "" && n.SignalResolved != nil {
-			return n.SignalResolved
-		}
-		if n.Update != "" && n.UpdateResolved != nil {
-			return n.UpdateResolved
-		}
-		if n.Activity != "" && n.ActivityResolved != nil {
-			return n.ActivityResolved
-		}
-		if n.Workflow != "" && n.WorkflowResolved != nil {
-			return n.WorkflowResolved
-		}
-		if n.Nexus != "" && n.NexusResolvedService != nil {
-			return n.NexusResolvedService
-		}
-		if n.Nexus != "" && n.NexusResolvedEndpoint != nil {
-			return n.NexusResolvedEndpoint
+		if n.Target != nil {
+			return resolvedTargetFromAsync(n.Target)
 		}
 	case *ast.WorkerRef:
 		if n.Resolved != nil {
@@ -80,24 +64,38 @@ func resolvedTarget(node ast.Node) ast.Node {
 			return n.ResolvedWorker
 		}
 	case *ast.AwaitOneCase:
-		// Check which type of case and return appropriate resolved reference
-		if n.Signal != "" && n.SignalResolved != nil {
-			return n.SignalResolved
+		if n.Target != nil {
+			return resolvedTargetFromAsync(n.Target)
 		}
-		if n.Update != "" && n.UpdateResolved != nil {
-			return n.UpdateResolved
+	}
+	return nil
+}
+
+// resolvedTargetFromAsync returns the resolved definition from an async target.
+func resolvedTargetFromAsync(target ast.AsyncTarget) ast.Node {
+	switch t := target.(type) {
+	case *ast.SignalTarget:
+		if t.Resolved != nil {
+			return t.Resolved
 		}
-		if n.Activity != "" && n.ActivityResolved != nil {
-			return n.ActivityResolved
+	case *ast.UpdateTarget:
+		if t.Resolved != nil {
+			return t.Resolved
 		}
-		if n.Workflow != "" && n.WorkflowResolved != nil {
-			return n.WorkflowResolved
+	case *ast.ActivityTarget:
+		if t.Resolved != nil {
+			return t.Resolved
 		}
-		if n.Nexus != "" && n.NexusResolvedService != nil {
-			return n.NexusResolvedService
+	case *ast.WorkflowTarget:
+		if t.Resolved != nil {
+			return t.Resolved
 		}
-		if n.Nexus != "" && n.NexusResolvedEndpoint != nil {
-			return n.NexusResolvedEndpoint
+	case *ast.NexusTarget:
+		if t.ResolvedService != nil {
+			return t.ResolvedService
+		}
+		if t.ResolvedEndpoint != nil {
+			return t.ResolvedEndpoint
 		}
 	}
 	return nil

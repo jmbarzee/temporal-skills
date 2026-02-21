@@ -413,42 +413,10 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 		})
 	case *AwaitStmt:
 		aj := awaitStmtJSON{
-			Type:           "await",
-			Line:           s.Line,
-			Column:         s.Column,
-			Kind:           s.AwaitKind(),
-			Timer:          s.Timer,
-			Signal:         s.Signal,
-			SignalParams:   s.SignalParams,
-			Update:         s.Update,
-			UpdateParams:   s.UpdateParams,
-			Activity:       s.Activity,
-			ActivityArgs:   s.ActivityArgs,
-			ActivityResult: s.ActivityResult,
-			Workflow:       s.Workflow,
-			WorkflowMode:   workflowCallModeString(s.WorkflowMode),
-			WorkflowArgs:   s.WorkflowArgs,
-			WorkflowResult: s.WorkflowResult,
-			Nexus:          s.Nexus,
-			NexusService:   s.NexusService,
-			NexusOperation: s.NexusOperation,
-			NexusArgs:      s.NexusArgs,
-			NexusResult:    s.NexusResult,
-			NexusDetach:    s.NexusDetach,
-			Ident:          s.Ident,
-			IdentResult:    s.IdentResult,
-		}
-		if s.NexusResolvedEndpoint != nil {
-			aj.NexusResolvedEndpoint = &resolvedRefJSON{Name: s.NexusResolvedEndpoint.EndpointName, Line: s.NexusResolvedEndpoint.Line, Column: s.NexusResolvedEndpoint.Column}
-		}
-		if s.NexusResolvedEndpointNamespace != "" {
-			aj.NexusResolvedEndpointNamespace = s.NexusResolvedEndpointNamespace
-		}
-		if s.NexusResolvedService != nil {
-			aj.NexusResolvedService = &resolvedRefJSON{Name: s.NexusResolvedService.Name, Line: s.NexusResolvedService.Line, Column: s.NexusResolvedService.Column}
-		}
-		if s.NexusResolvedOperation != nil {
-			aj.NexusResolvedOperation = &resolvedRefJSON{Name: s.NexusResolvedOperation.Name, Line: s.NexusResolvedOperation.Line, Column: s.NexusResolvedOperation.Column}
+			Type:                  "await",
+			Line:                  s.Line,
+			Column:                s.Column,
+			asyncTargetFieldsJSON: marshalAsyncTargetFields(s.Target),
 		}
 		return json.Marshal(aj)
 	case *AwaitAllBlock:
@@ -477,52 +445,20 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				}
 				caseBody = append(caseBody, data)
 			}
-			var awaitAllData json.RawMessage
+			cj := awaitOneCaseJSON{
+				Line: c.Line,
+				Column: c.Column,
+				Body: caseBody,
+			}
 			if c.AwaitAll != nil {
+				cj.Kind = "await_all"
 				data, err := marshalStatement(c.AwaitAll)
 				if err != nil {
 					return nil, err
 				}
-				awaitAllData = data
-			}
-			cj := awaitOneCaseJSON{
-				Line:           c.Line,
-				Column:         c.Column,
-				Kind:           c.CaseKind(),
-				Signal:         c.Signal,
-				SignalParams:   c.SignalParams,
-				Update:         c.Update,
-				UpdateParams:   c.UpdateParams,
-				Timer:          c.Timer,
-				Activity:       c.Activity,
-				ActivityArgs:   c.ActivityArgs,
-				ActivityResult: c.ActivityResult,
-				Workflow:       c.Workflow,
-				WorkflowMode:   workflowCallModeString(c.WorkflowMode),
-				WorkflowArgs:   c.WorkflowArgs,
-				WorkflowResult: c.WorkflowResult,
-				Nexus:          c.Nexus,
-				NexusService:   c.NexusService,
-				NexusOperation: c.NexusOperation,
-				NexusArgs:      c.NexusArgs,
-				NexusResult:    c.NexusResult,
-				NexusDetach:    c.NexusDetach,
-				AwaitAll:       awaitAllData,
-				Ident:          c.Ident,
-				IdentResult:    c.IdentResult,
-				Body:           caseBody,
-			}
-			if c.NexusResolvedEndpoint != nil {
-				cj.NexusResolvedEndpoint = &resolvedRefJSON{Name: c.NexusResolvedEndpoint.EndpointName, Line: c.NexusResolvedEndpoint.Line, Column: c.NexusResolvedEndpoint.Column}
-			}
-			if c.NexusResolvedEndpointNamespace != "" {
-				cj.NexusResolvedEndpointNamespace = c.NexusResolvedEndpointNamespace
-			}
-			if c.NexusResolvedService != nil {
-				cj.NexusResolvedService = &resolvedRefJSON{Name: c.NexusResolvedService.Name, Line: c.NexusResolvedService.Line, Column: c.NexusResolvedService.Column}
-			}
-			if c.NexusResolvedOperation != nil {
-				cj.NexusResolvedOperation = &resolvedRefJSON{Name: c.NexusResolvedOperation.Name, Line: c.NexusResolvedOperation.Line, Column: c.NexusResolvedOperation.Column}
+				cj.AwaitAll = data
+			} else if c.Target != nil {
+				cj.asyncTargetFieldsJSON = marshalAsyncTargetFields(c.Target)
 			}
 			cases = append(cases, cj)
 		}
@@ -653,35 +589,11 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 		})
 	case *PromiseStmt:
 		pj := promiseStmtJSON{
-			Type:           "promise",
-			Line:           s.Line,
-			Column:         s.Column,
-			Name:           s.Name,
-			Timer:          s.Timer,
-			Signal:         s.Signal,
-			SignalParams:   s.SignalParams,
-			Update:         s.Update,
-			UpdateParams:   s.UpdateParams,
-			Activity:       s.Activity,
-			ActivityArgs:   s.ActivityArgs,
-			Workflow:       s.Workflow,
-			WorkflowArgs:   s.WorkflowArgs,
-			Nexus:          s.Nexus,
-			NexusService:   s.NexusService,
-			NexusOperation: s.NexusOperation,
-			NexusArgs:      s.NexusArgs,
-		}
-		if s.NexusResolvedEndpoint != nil {
-			pj.NexusResolvedEndpoint = &resolvedRefJSON{Name: s.NexusResolvedEndpoint.EndpointName, Line: s.NexusResolvedEndpoint.Line, Column: s.NexusResolvedEndpoint.Column}
-		}
-		if s.NexusResolvedEndpointNamespace != "" {
-			pj.NexusResolvedEndpointNamespace = s.NexusResolvedEndpointNamespace
-		}
-		if s.NexusResolvedService != nil {
-			pj.NexusResolvedService = &resolvedRefJSON{Name: s.NexusResolvedService.Name, Line: s.NexusResolvedService.Line, Column: s.NexusResolvedService.Column}
-		}
-		if s.NexusResolvedOperation != nil {
-			pj.NexusResolvedOperation = &resolvedRefJSON{Name: s.NexusResolvedOperation.Name, Line: s.NexusResolvedOperation.Line, Column: s.NexusResolvedOperation.Column}
+			Type:                  "promise",
+			Line:                  s.Line,
+			Column:                s.Column,
+			Name:                  s.Name,
+			asyncTargetFieldsJSON: marshalAsyncTargetFields(s.Target),
 		}
 		return json.Marshal(pj)
 	case *NexusCall:
@@ -775,10 +687,10 @@ type workflowCallJSON struct {
 	Options *OptionsBlockJSON `json:"options,omitempty"`
 }
 
-type awaitStmtJSON struct {
-	Type           string `json:"type"`
-	Line           int    `json:"line"`
-	Column         int    `json:"column"`
+// asyncTargetFieldsJSON holds the flat JSON fields for an async target.
+// Embedded in awaitStmtJSON, awaitOneCaseJSON, and promiseStmtJSON
+// to maintain backward-compatible flat JSON format.
+type asyncTargetFieldsJSON struct {
 	Kind           string `json:"kind"`
 	Timer          string `json:"timer,omitempty"`
 	Signal         string `json:"signal,omitempty"`
@@ -807,6 +719,59 @@ type awaitStmtJSON struct {
 	IdentResult                    string           `json:"identResult,omitempty"`
 }
 
+func marshalAsyncTargetFields(target AsyncTarget) asyncTargetFieldsJSON {
+	f := asyncTargetFieldsJSON{Kind: AsyncTargetKind(target)}
+	switch t := target.(type) {
+	case *TimerTarget:
+		f.Timer = t.Duration
+	case *SignalTarget:
+		f.Signal = t.Name
+		f.SignalParams = t.Params
+	case *UpdateTarget:
+		f.Update = t.Name
+		f.UpdateParams = t.Params
+	case *ActivityTarget:
+		f.Activity = t.Name
+		f.ActivityArgs = t.Args
+		f.ActivityResult = t.Result
+	case *WorkflowTarget:
+		f.Workflow = t.Name
+		f.WorkflowMode = workflowCallModeString(t.Mode)
+		f.WorkflowArgs = t.Args
+		f.WorkflowResult = t.Result
+	case *NexusTarget:
+		f.Nexus = t.Endpoint
+		f.NexusService = t.Service
+		f.NexusOperation = t.Operation
+		f.NexusArgs = t.Args
+		f.NexusResult = t.Result
+		f.NexusDetach = t.Detach
+		if t.ResolvedEndpoint != nil {
+			f.NexusResolvedEndpoint = &resolvedRefJSON{Name: t.ResolvedEndpoint.EndpointName, Line: t.ResolvedEndpoint.Line, Column: t.ResolvedEndpoint.Column}
+		}
+		if t.ResolvedEndpointNamespace != "" {
+			f.NexusResolvedEndpointNamespace = t.ResolvedEndpointNamespace
+		}
+		if t.ResolvedService != nil {
+			f.NexusResolvedService = &resolvedRefJSON{Name: t.ResolvedService.Name, Line: t.ResolvedService.Line, Column: t.ResolvedService.Column}
+		}
+		if t.ResolvedOperation != nil {
+			f.NexusResolvedOperation = &resolvedRefJSON{Name: t.ResolvedOperation.Name, Line: t.ResolvedOperation.Line, Column: t.ResolvedOperation.Column}
+		}
+	case *IdentTarget:
+		f.Ident = t.Name
+		f.IdentResult = t.Result
+	}
+	return f
+}
+
+type awaitStmtJSON struct {
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	asyncTargetFieldsJSON
+}
+
 type awaitAllBlockJSON struct {
 	Type   string            `json:"type"`
 	Line   int               `json:"line"`
@@ -815,36 +780,11 @@ type awaitAllBlockJSON struct {
 }
 
 type awaitOneCaseJSON struct {
-	Line           int               `json:"line"`
-	Column         int               `json:"column"`
-	Kind           string            `json:"kind"`
-	Signal         string            `json:"signal,omitempty"`
-	SignalParams   string            `json:"signalParams,omitempty"`
-	Update         string            `json:"update,omitempty"`
-	UpdateParams   string            `json:"updateParams,omitempty"`
-	Timer          string            `json:"timer,omitempty"`
-	Activity       string            `json:"activity,omitempty"`
-	ActivityArgs   string            `json:"activityArgs,omitempty"`
-	ActivityResult string            `json:"activityResult,omitempty"`
-	Workflow       string            `json:"workflow,omitempty"`
-	WorkflowMode   string            `json:"workflowMode,omitempty"`
-	WorkflowArgs   string            `json:"workflowArgs,omitempty"`
-	WorkflowResult string            `json:"workflowResult,omitempty"`
-	Nexus          string            `json:"nexus,omitempty"`
-	NexusService   string            `json:"nexusService,omitempty"`
-	NexusOperation string            `json:"nexusOperation,omitempty"`
-	NexusArgs      string            `json:"nexusArgs,omitempty"`
-	NexusResult    string            `json:"nexusResult,omitempty"`
-	NexusDetach    bool              `json:"nexusDetach,omitempty"`
-	// Nexus resolution links
-	NexusResolvedEndpoint          *resolvedRefJSON `json:"nexusResolvedEndpoint,omitempty"`
-	NexusResolvedEndpointNamespace string           `json:"nexusResolvedEndpointNamespace,omitempty"`
-	NexusResolvedService           *resolvedRefJSON `json:"nexusResolvedService,omitempty"`
-	NexusResolvedOperation         *resolvedRefJSON `json:"nexusResolvedOperation,omitempty"`
-	AwaitAll                       json.RawMessage  `json:"awaitAll,omitempty"`
-	Ident                          string           `json:"ident,omitempty"`
-	IdentResult                    string           `json:"identResult,omitempty"`
-	Body                           []json.RawMessage `json:"body"`
+	Line   int `json:"line"`
+	Column int `json:"column"`
+	asyncTargetFieldsJSON
+	AwaitAll json.RawMessage   `json:"awaitAll,omitempty"`
+	Body     []json.RawMessage `json:"body"`
 }
 
 type awaitOneBlockJSON struct {
@@ -932,28 +872,11 @@ type commentJSON struct {
 }
 
 type promiseStmtJSON struct {
-	Type           string `json:"type"`
-	Line           int    `json:"line"`
-	Column         int    `json:"column"`
-	Name           string `json:"name"`
-	Timer          string `json:"timer,omitempty"`
-	Signal         string `json:"signal,omitempty"`
-	SignalParams   string `json:"signalParams,omitempty"`
-	Update         string `json:"update,omitempty"`
-	UpdateParams   string `json:"updateParams,omitempty"`
-	Activity       string `json:"activity,omitempty"`
-	ActivityArgs   string `json:"activityArgs,omitempty"`
-	Workflow       string `json:"workflow,omitempty"`
-	WorkflowArgs   string `json:"workflowArgs,omitempty"`
-	Nexus          string `json:"nexus,omitempty"`
-	NexusService   string `json:"nexusService,omitempty"`
-	NexusOperation string `json:"nexusOperation,omitempty"`
-	NexusArgs      string `json:"nexusArgs,omitempty"`
-	// Nexus resolution links
-	NexusResolvedEndpoint          *resolvedRefJSON `json:"nexusResolvedEndpoint,omitempty"`
-	NexusResolvedEndpointNamespace string           `json:"nexusResolvedEndpointNamespace,omitempty"`
-	NexusResolvedService           *resolvedRefJSON `json:"nexusResolvedService,omitempty"`
-	NexusResolvedOperation         *resolvedRefJSON `json:"nexusResolvedOperation,omitempty"`
+	Type   string `json:"type"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+	Name   string `json:"name"`
+	asyncTargetFieldsJSON
 }
 
 type setStmtJSON struct {

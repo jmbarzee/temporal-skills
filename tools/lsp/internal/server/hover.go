@@ -357,42 +357,45 @@ func signatureFor(node ast.Node) string {
 		}
 		return sig
 	case *ast.AwaitStmt:
-		switch n.AwaitKind() {
-		case "timer":
-			return fmt.Sprintf("await timer(%s)", n.Timer)
-		case "signal":
-			if n.SignalParams != "" {
-				return fmt.Sprintf("await signal %s -> %s", n.Signal, n.SignalParams)
+		if n.Target == nil {
+			return "await"
+		}
+		switch t := n.Target.(type) {
+		case *ast.TimerTarget:
+			return fmt.Sprintf("await timer(%s)", t.Duration)
+		case *ast.SignalTarget:
+			if t.Params != "" {
+				return fmt.Sprintf("await signal %s -> %s", t.Name, t.Params)
 			}
-			return fmt.Sprintf("await signal %s", n.Signal)
-		case "update":
-			if n.UpdateParams != "" {
-				return fmt.Sprintf("await update %s -> %s", n.Update, n.UpdateParams)
+			return fmt.Sprintf("await signal %s", t.Name)
+		case *ast.UpdateTarget:
+			if t.Params != "" {
+				return fmt.Sprintf("await update %s -> %s", t.Name, t.Params)
 			}
-			return fmt.Sprintf("await update %s", n.Update)
-		case "activity":
-			if n.ActivityResult != "" {
-				return fmt.Sprintf("await activity %s(%s) -> %s", n.Activity, n.ActivityArgs, n.ActivityResult)
+			return fmt.Sprintf("await update %s", t.Name)
+		case *ast.ActivityTarget:
+			if t.Result != "" {
+				return fmt.Sprintf("await activity %s(%s) -> %s", t.Name, t.Args, t.Result)
 			}
-			return fmt.Sprintf("await activity %s(%s)", n.Activity, n.ActivityArgs)
-		case "workflow":
+			return fmt.Sprintf("await activity %s(%s)", t.Name, t.Args)
+		case *ast.WorkflowTarget:
 			prefix := "await workflow"
-			if n.WorkflowMode == ast.CallDetach {
+			if t.Mode == ast.CallDetach {
 				prefix = "await detach workflow"
 			}
-			if n.WorkflowResult != "" {
-				return fmt.Sprintf("%s %s(%s) -> %s", prefix, n.Workflow, n.WorkflowArgs, n.WorkflowResult)
+			if t.Result != "" {
+				return fmt.Sprintf("%s %s(%s) -> %s", prefix, t.Name, t.Args, t.Result)
 			}
-			return fmt.Sprintf("%s %s(%s)", prefix, n.Workflow, n.WorkflowArgs)
-		case "nexus":
-			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", n.Nexus, n.NexusService, n.NexusOperation, n.NexusArgs)
-			if n.NexusResult != "" {
-				sig += " -> " + n.NexusResult
+			return fmt.Sprintf("%s %s(%s)", prefix, t.Name, t.Args)
+		case *ast.NexusTarget:
+			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint, t.Service, t.Operation, t.Args)
+			if t.Result != "" {
+				sig += " -> " + t.Result
 			}
-			if n.NexusResolvedEndpoint != nil {
-				tq := extractEndpointTaskQueue(n.NexusResolvedEndpoint)
+			if t.ResolvedEndpoint != nil {
+				tq := extractEndpointTaskQueue(t.ResolvedEndpoint)
 				if tq != "" {
-					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, n.NexusResolvedEndpointNamespace)
+					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, t.ResolvedEndpointNamespace)
 				}
 			}
 			return sig

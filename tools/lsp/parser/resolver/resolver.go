@@ -69,60 +69,15 @@ func Resolve(file *ast.File) []*ResolveError {
 	for _, def := range file.Definitions {
 		switch d := def.(type) {
 		case *ast.WorkflowDef:
-			if _, exists := workflows[d.Name]; exists {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate workflow definition: %s", d.Name),
-					Line:   d.Line,
-					Column: d.Column,
-					Kind:   ErrDuplicateWorkflow,
-					Name:   d.Name,
-				})
-			}
-			workflows[d.Name] = d
+			collectDef(workflows, d.Name, d, "workflow", ErrDuplicateWorkflow, d.Line, d.Column, &errs)
 		case *ast.ActivityDef:
-			if _, exists := activities[d.Name]; exists {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate activity definition: %s", d.Name),
-					Line:   d.Line,
-					Column: d.Column,
-					Kind:   ErrDuplicateActivity,
-					Name:   d.Name,
-				})
-			}
-			activities[d.Name] = d
+			collectDef(activities, d.Name, d, "activity", ErrDuplicateActivity, d.Line, d.Column, &errs)
 		case *ast.WorkerDef:
-			if _, exists := workers[d.Name]; exists {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate worker definition: %s", d.Name),
-					Line:   d.Line,
-					Column: d.Column,
-					Kind:   ErrDuplicateWorker,
-					Name:   d.Name,
-				})
-			}
-			workers[d.Name] = d
+			collectDef(workers, d.Name, d, "worker", ErrDuplicateWorker, d.Line, d.Column, &errs)
 		case *ast.NamespaceDef:
-			if _, exists := namespaces[d.Name]; exists {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate namespace definition: %s", d.Name),
-					Line:   d.Line,
-					Column: d.Column,
-					Kind:   ErrDuplicateNamespace,
-					Name:   d.Name,
-				})
-			}
-			namespaces[d.Name] = d
+			collectDef(namespaces, d.Name, d, "namespace", ErrDuplicateNamespace, d.Line, d.Column, &errs)
 		case *ast.NexusServiceDef:
-			if _, exists := nexusServices[d.Name]; exists {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate nexus service definition: %s", d.Name),
-					Line:   d.Line,
-					Column: d.Column,
-					Kind:   ErrDuplicateNexusService,
-					Name:   d.Name,
-				})
-			}
-			nexusServices[d.Name] = d
+			collectDef(nexusServices, d.Name, d, "nexus service", ErrDuplicateNexusService, d.Line, d.Column, &errs)
 		}
 	}
 
@@ -250,48 +205,9 @@ func Resolve(file *ast.File) []*ResolveError {
 
 	// Pass 3: Resolve worker and namespace references.
 	for _, w := range workers {
-		for i := range w.Workflows {
-			ref := &w.Workflows[i]
-			if def, ok := workflows[ref.Name]; ok {
-				ref.Resolved = def
-			} else {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("worker %s references undefined workflow: %s", w.Name, ref.Name),
-					Line:   ref.Line,
-					Column: ref.Column,
-					Kind:   ErrWorkerUndefinedWorkflow,
-					Name:   ref.Name,
-				})
-			}
-		}
-		for i := range w.Activities {
-			ref := &w.Activities[i]
-			if def, ok := activities[ref.Name]; ok {
-				ref.Resolved = def
-			} else {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("worker %s references undefined activity: %s", w.Name, ref.Name),
-					Line:   ref.Line,
-					Column: ref.Column,
-					Kind:   ErrWorkerUndefinedActivity,
-					Name:   ref.Name,
-				})
-			}
-		}
-		for i := range w.Services {
-			ref := &w.Services[i]
-			if def, ok := nexusServices[ref.Name]; ok {
-				ref.Resolved = def
-			} else {
-				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("worker %s references undefined nexus service: %s", w.Name, ref.Name),
-					Line:   ref.Line,
-					Column: ref.Column,
-					Kind:   ErrWorkerUndefinedNexusService,
-					Name:   ref.Name,
-				})
-			}
-		}
+		resolveWorkerRefs(w.Workflows, workflows, w.Name, "workflow", ErrWorkerUndefinedWorkflow, &errs)
+		resolveWorkerRefs(w.Activities, activities, w.Name, "activity", ErrWorkerUndefinedActivity, &errs)
+		resolveWorkerRefs(w.Services, nexusServices, w.Name, "nexus service", ErrWorkerUndefinedNexusService, &errs)
 	}
 
 	for _, ns := range namespaces {
@@ -598,5 +514,39 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 		}
 	case *ast.TimerTarget:
 		// No resolution needed for timers
+	}
+}
+
+// collectDef registers a definition in the map, appending a duplicate error if
+// the name already exists.
+func collectDef[T any](m map[string]T, name string, def T, kind string, errKind ErrorKind, line, column int, errs *[]*ResolveError) {
+	if _, exists := m[name]; exists {
+		*errs = append(*errs, &ResolveError{
+			Msg:    fmt.Sprintf("duplicate %s definition: %s", kind, name),
+			Line:   line,
+			Column: column,
+			Kind:   errKind,
+			Name:   name,
+		})
+	}
+	m[name] = def
+}
+
+// resolveWorkerRefs resolves a slice of worker references against a definition map,
+// appending an error for each undefined reference.
+func resolveWorkerRefs[T ast.Definition](refs []ast.WorkerRef, defs map[string]T, workerName, kind string, errKind ErrorKind, errs *[]*ResolveError) {
+	for i := range refs {
+		ref := &refs[i]
+		if def, ok := defs[ref.Name]; ok {
+			ref.Resolved = def
+		} else {
+			*errs = append(*errs, &ResolveError{
+				Msg:    fmt.Sprintf("worker %s references undefined %s: %s", workerName, kind, ref.Name),
+				Line:   ref.Line,
+				Column: ref.Column,
+				Kind:   errKind,
+				Name:   ref.Name,
+			})
+		}
 	}
 }

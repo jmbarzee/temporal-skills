@@ -221,54 +221,10 @@ func (v *validationCtx) checkCoverage() {
 		}
 	}
 
-	for name, wf := range v.workflows {
-		if !coveredWorkflows[name] {
-			v.errs = append(v.errs, &Error{
-				Msg:      fmt.Sprintf("workflow %s is not registered on any instantiated worker", name),
-				Line:     wf.Line,
-				Column:   wf.Column,
-				Severity: "warning",
-				Kind:     ErrUncoveredWorkflow,
-				Name:     name,
-			})
-		}
-	}
-	for name, act := range v.activities {
-		if !coveredActivities[name] {
-			v.errs = append(v.errs, &Error{
-				Msg:      fmt.Sprintf("activity %s is not registered on any instantiated worker", name),
-				Line:     act.Line,
-				Column:   act.Column,
-				Severity: "warning",
-				Kind:     ErrUncoveredActivity,
-				Name:     name,
-			})
-		}
-	}
-	for name, svc := range v.nexusServices {
-		if !coveredServices[name] {
-			v.errs = append(v.errs, &Error{
-				Msg:      fmt.Sprintf("nexus service %s is not referenced by any worker", name),
-				Line:     svc.Line,
-				Column:   svc.Column,
-				Severity: "warning",
-				Kind:     ErrUncoveredService,
-				Name:     name,
-			})
-		}
-	}
-	for name, w := range v.workers {
-		if !instantiatedWorkers[name] {
-			v.errs = append(v.errs, &Error{
-				Msg:      fmt.Sprintf("worker %s is not instantiated in any namespace", name),
-				Line:     w.Line,
-				Column:   w.Column,
-				Severity: "warning",
-				Kind:     ErrUninstantiatedWorker,
-				Name:     name,
-			})
-		}
-	}
+	checkUncovered(v.workflows, coveredWorkflows, "workflow %s is not registered on any instantiated worker", ErrUncoveredWorkflow, &v.errs)
+	checkUncovered(v.activities, coveredActivities, "activity %s is not registered on any instantiated worker", ErrUncoveredActivity, &v.errs)
+	checkUncovered(v.nexusServices, coveredServices, "nexus service %s is not referenced by any worker", ErrUncoveredService, &v.errs)
+	checkUncovered(v.workers, instantiatedWorkers, "worker %s is not instantiated in any namespace", ErrUninstantiatedWorker, &v.errs)
 }
 
 func (v *validationCtx) checkTaskQueueCoherence() {
@@ -357,63 +313,25 @@ func (v *validationCtx) walkAllBodies() {
 }
 
 func (v *validationCtx) walkStatements(stmts []ast.Statement, callingWorkflow string) {
-	for _, stmt := range stmts {
-		v.walkStatement(stmt, callingWorkflow)
-	}
-}
-
-func (v *validationCtx) walkStatement(stmt ast.Statement, callingWorkflow string) {
-	switch s := stmt.(type) {
-	case *ast.ActivityCall:
-		v.checkCallRouting("activity", s.Name, s.Options, callingWorkflow, s.Line, s.Column)
-
-	case *ast.WorkflowCall:
-		v.checkCallRouting("workflow", s.Name, s.Options, callingWorkflow, s.Line, s.Column)
-
-	case *ast.NexusCall:
-		v.checkEndpointServiceLinkage(s.Endpoint, s.Service, s.Line, s.Column)
-
-	case *ast.AwaitAllBlock:
-		v.walkStatements(s.Body, callingWorkflow)
-
-	case *ast.AwaitOneBlock:
-		for _, awaitCase := range s.Cases {
-			v.walkAwaitOneCase(awaitCase, callingWorkflow)
+	ast.WalkStatements(stmts, func(s ast.Statement) bool {
+		switch n := s.(type) {
+		case *ast.ActivityCall:
+			v.checkCallRouting("activity", n.Name, n.Options, callingWorkflow, n.Line, n.Column)
+		case *ast.WorkflowCall:
+			v.checkCallRouting("workflow", n.Name, n.Options, callingWorkflow, n.Line, n.Column)
+		case *ast.NexusCall:
+			v.checkEndpointServiceLinkage(n.Endpoint, n.Service, n.Line, n.Column)
+		case *ast.AwaitStmt:
+			v.walkAsyncTarget(n.Target, n.Line, n.Column)
+		case *ast.AwaitOneCase:
+			if n.Target != nil {
+				v.walkAsyncTarget(n.Target, n.Line, n.Column)
+			}
+		case *ast.PromiseStmt:
+			v.walkAsyncTarget(n.Target, n.Line, n.Column)
 		}
-
-	case *ast.SwitchBlock:
-		for _, sc := range s.Cases {
-			v.walkStatements(sc.Body, callingWorkflow)
-		}
-		if s.Default != nil {
-			v.walkStatements(s.Default, callingWorkflow)
-		}
-
-	case *ast.IfStmt:
-		v.walkStatements(s.Body, callingWorkflow)
-		if s.ElseBody != nil {
-			v.walkStatements(s.ElseBody, callingWorkflow)
-		}
-
-	case *ast.ForStmt:
-		v.walkStatements(s.Body, callingWorkflow)
-
-	case *ast.AwaitStmt:
-		v.walkAsyncTarget(s.Target, s.Line, s.Column)
-
-	case *ast.PromiseStmt:
-		v.walkAsyncTarget(s.Target, s.Line, s.Column)
-	}
-}
-
-func (v *validationCtx) walkAwaitOneCase(awaitCase *ast.AwaitOneCase, callingWorkflow string) {
-	if awaitCase.Target != nil {
-		v.walkAsyncTarget(awaitCase.Target, awaitCase.Line, awaitCase.Column)
-	}
-	if awaitCase.AwaitAll != nil {
-		v.walkStatements(awaitCase.AwaitAll.Body, callingWorkflow)
-	}
-	v.walkStatements(awaitCase.Body, callingWorkflow)
+		return true
+	})
 }
 
 func (v *validationCtx) walkAsyncTarget(target ast.AsyncTarget, line, column int) {
@@ -601,6 +519,23 @@ func sameStringSet(a, b map[string]bool) bool {
 		}
 	}
 	return true
+}
+
+// checkUncovered reports a warning for each definition in defs that is not
+// present in the covered set.
+func checkUncovered[T ast.Node](defs map[string]T, covered map[string]bool, msgFmt string, kind ErrorKind, errs *[]*Error) {
+	for name, node := range defs {
+		if !covered[name] {
+			*errs = append(*errs, &Error{
+				Msg:      fmt.Sprintf(msgFmt, name),
+				Line:     node.NodeLine(),
+				Column:   node.NodeColumn(),
+				Severity: "warning",
+				Kind:     kind,
+				Name:     name,
+			})
+		}
+	}
 }
 
 // hasNonCommentStmts returns true if the statement slice has at least one

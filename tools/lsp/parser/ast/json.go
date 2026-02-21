@@ -4,6 +4,14 @@ import "encoding/json"
 
 // JSON serialization with type discriminators for interface types.
 
+// resolvedRefJSON is a lightweight JSON reference to a resolved AST definition.
+// Instead of embedding the entire target node, we emit its name and source position.
+type resolvedRefJSON struct {
+	Name   string `json:"name"`
+	Line   int    `json:"line"`
+	Column int    `json:"column"`
+}
+
 // FileJSON is the JSON-serializable representation of a File.
 type FileJSON struct {
 	Definitions []json.RawMessage `json:"definitions"`
@@ -232,9 +240,10 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 
 // WorkerRefJSON is the JSON representation of a worker reference.
 type WorkerRefJSON struct {
-	Name   string `json:"name"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
+	Name     string           `json:"name"`
+	Line     int              `json:"line"`
+	Column   int              `json:"column"`
+	Resolved *resolvedRefJSON `json:"resolved,omitempty"`
 }
 
 // WorkerDefJSON is the JSON representation of WorkerDef.
@@ -256,35 +265,48 @@ func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 		Name:   w.Name,
 	}
 	for _, ref := range w.Workflows {
-		wj.Workflows = append(wj.Workflows, WorkerRefJSON{
+		rj := WorkerRefJSON{
 			Name:   ref.Name,
 			Line:   ref.Line,
 			Column: ref.Column,
-		})
+		}
+		if ref.Resolved != nil {
+			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
+		}
+		wj.Workflows = append(wj.Workflows, rj)
 	}
 	for _, ref := range w.Activities {
-		wj.Activities = append(wj.Activities, WorkerRefJSON{
+		rj := WorkerRefJSON{
 			Name:   ref.Name,
 			Line:   ref.Line,
 			Column: ref.Column,
-		})
+		}
+		if ref.Resolved != nil {
+			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
+		}
+		wj.Activities = append(wj.Activities, rj)
 	}
 	for _, ref := range w.Services {
-		wj.Services = append(wj.Services, WorkerRefJSON{
+		rj := WorkerRefJSON{
 			Name:   ref.Name,
 			Line:   ref.Line,
 			Column: ref.Column,
-		})
+		}
+		if ref.Resolved != nil {
+			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
+		}
+		wj.Services = append(wj.Services, rj)
 	}
 	return json.Marshal(wj)
 }
 
 // NamespaceWorkerJSON is the JSON representation of a worker instantiation in a namespace.
 type NamespaceWorkerJSON struct {
-	WorkerName string            `json:"workerName"`
-	Line       int               `json:"line"`
-	Column     int               `json:"column"`
-	Options    *OptionsBlockJSON `json:"options,omitempty"`
+	WorkerName     string            `json:"workerName"`
+	Line           int               `json:"line"`
+	Column         int               `json:"column"`
+	Options        *OptionsBlockJSON `json:"options,omitempty"`
+	ResolvedWorker *resolvedRefJSON  `json:"resolvedWorker,omitempty"`
 }
 
 // NamespaceEndpointJSON is the JSON representation of a nexus endpoint in a namespace.
@@ -313,12 +335,16 @@ func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
 		Name:   n.Name,
 	}
 	for _, w := range n.Workers {
-		nj.Workers = append(nj.Workers, NamespaceWorkerJSON{
+		wj := NamespaceWorkerJSON{
 			WorkerName: w.WorkerName,
 			Line:       w.Line,
 			Column:     w.Column,
 			Options:    marshalOptionsBlock(w.Options),
-		})
+		}
+		if w.ResolvedWorker != nil {
+			wj.ResolvedWorker = &resolvedRefJSON{Name: w.ResolvedWorker.Name, Line: w.ResolvedWorker.Line, Column: w.ResolvedWorker.Column}
+		}
+		nj.Workers = append(nj.Workers, wj)
 	}
 	for _, ep := range n.Endpoints {
 		nj.Endpoints = append(nj.Endpoints, NamespaceEndpointJSON{
@@ -386,7 +412,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Options: marshalOptionsBlock(s.Options),
 		})
 	case *AwaitStmt:
-		return json.Marshal(awaitStmtJSON{
+		aj := awaitStmtJSON{
 			Type:           "await",
 			Line:           s.Line,
 			Column:         s.Column,
@@ -411,7 +437,20 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			NexusDetach:    s.NexusDetach,
 			Ident:          s.Ident,
 			IdentResult:    s.IdentResult,
-		})
+		}
+		if s.NexusResolvedEndpoint != nil {
+			aj.NexusResolvedEndpoint = &resolvedRefJSON{Name: s.NexusResolvedEndpoint.EndpointName, Line: s.NexusResolvedEndpoint.Line, Column: s.NexusResolvedEndpoint.Column}
+		}
+		if s.NexusResolvedEndpointNamespace != "" {
+			aj.NexusResolvedEndpointNamespace = s.NexusResolvedEndpointNamespace
+		}
+		if s.NexusResolvedService != nil {
+			aj.NexusResolvedService = &resolvedRefJSON{Name: s.NexusResolvedService.Name, Line: s.NexusResolvedService.Line, Column: s.NexusResolvedService.Column}
+		}
+		if s.NexusResolvedOperation != nil {
+			aj.NexusResolvedOperation = &resolvedRefJSON{Name: s.NexusResolvedOperation.Name, Line: s.NexusResolvedOperation.Line, Column: s.NexusResolvedOperation.Column}
+		}
+		return json.Marshal(aj)
 	case *AwaitAllBlock:
 		body := make([]json.RawMessage, 0, len(s.Body))
 		for _, stmt := range s.Body {
@@ -446,7 +485,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				}
 				awaitAllData = data
 			}
-			cases = append(cases, awaitOneCaseJSON{
+			cj := awaitOneCaseJSON{
 				Line:           c.Line,
 				Column:         c.Column,
 				Kind:           c.CaseKind(),
@@ -472,7 +511,20 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				Ident:          c.Ident,
 				IdentResult:    c.IdentResult,
 				Body:           caseBody,
-			})
+			}
+			if c.NexusResolvedEndpoint != nil {
+				cj.NexusResolvedEndpoint = &resolvedRefJSON{Name: c.NexusResolvedEndpoint.EndpointName, Line: c.NexusResolvedEndpoint.Line, Column: c.NexusResolvedEndpoint.Column}
+			}
+			if c.NexusResolvedEndpointNamespace != "" {
+				cj.NexusResolvedEndpointNamespace = c.NexusResolvedEndpointNamespace
+			}
+			if c.NexusResolvedService != nil {
+				cj.NexusResolvedService = &resolvedRefJSON{Name: c.NexusResolvedService.Name, Line: c.NexusResolvedService.Line, Column: c.NexusResolvedService.Column}
+			}
+			if c.NexusResolvedOperation != nil {
+				cj.NexusResolvedOperation = &resolvedRefJSON{Name: c.NexusResolvedOperation.Name, Line: c.NexusResolvedOperation.Line, Column: c.NexusResolvedOperation.Column}
+			}
+			cases = append(cases, cj)
 		}
 		return json.Marshal(awaitOneBlockJSON{
 			Type:   "awaitOne",
@@ -600,7 +652,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Text:   s.Text,
 		})
 	case *PromiseStmt:
-		return json.Marshal(promiseStmtJSON{
+		pj := promiseStmtJSON{
 			Type:           "promise",
 			Line:           s.Line,
 			Column:         s.Column,
@@ -618,9 +670,22 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			NexusService:   s.NexusService,
 			NexusOperation: s.NexusOperation,
 			NexusArgs:      s.NexusArgs,
-		})
+		}
+		if s.NexusResolvedEndpoint != nil {
+			pj.NexusResolvedEndpoint = &resolvedRefJSON{Name: s.NexusResolvedEndpoint.EndpointName, Line: s.NexusResolvedEndpoint.Line, Column: s.NexusResolvedEndpoint.Column}
+		}
+		if s.NexusResolvedEndpointNamespace != "" {
+			pj.NexusResolvedEndpointNamespace = s.NexusResolvedEndpointNamespace
+		}
+		if s.NexusResolvedService != nil {
+			pj.NexusResolvedService = &resolvedRefJSON{Name: s.NexusResolvedService.Name, Line: s.NexusResolvedService.Line, Column: s.NexusResolvedService.Column}
+		}
+		if s.NexusResolvedOperation != nil {
+			pj.NexusResolvedOperation = &resolvedRefJSON{Name: s.NexusResolvedOperation.Name, Line: s.NexusResolvedOperation.Line, Column: s.NexusResolvedOperation.Column}
+		}
+		return json.Marshal(pj)
 	case *NexusCall:
-		return json.Marshal(nexusCallJSON{
+		nj := nexusCallJSON{
 			Type:      "nexusCall",
 			Line:      s.Line,
 			Column:    s.Column,
@@ -631,7 +696,20 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Args:      s.Args,
 			Result:    s.Result,
 			Options:   marshalOptionsBlock(s.Options),
-		})
+		}
+		if s.ResolvedEndpoint != nil {
+			nj.ResolvedEndpoint = &resolvedRefJSON{Name: s.ResolvedEndpoint.EndpointName, Line: s.ResolvedEndpoint.Line, Column: s.ResolvedEndpoint.Column}
+		}
+		if s.ResolvedEndpointNamespace != "" {
+			nj.ResolvedEndpointNamespace = s.ResolvedEndpointNamespace
+		}
+		if s.ResolvedService != nil {
+			nj.ResolvedService = &resolvedRefJSON{Name: s.ResolvedService.Name, Line: s.ResolvedService.Line, Column: s.ResolvedService.Column}
+		}
+		if s.ResolvedOperation != nil {
+			nj.ResolvedOperation = &resolvedRefJSON{Name: s.ResolvedOperation.Name, Line: s.ResolvedOperation.Line, Column: s.ResolvedOperation.Column}
+		}
+		return json.Marshal(nj)
 	case *SetStmt:
 		return json.Marshal(setStmtJSON{
 			Type:   "set",
@@ -720,8 +798,13 @@ type awaitStmtJSON struct {
 	NexusArgs      string `json:"nexusArgs,omitempty"`
 	NexusResult    string `json:"nexusResult,omitempty"`
 	NexusDetach    bool   `json:"nexusDetach,omitempty"`
-	Ident          string `json:"ident,omitempty"`
-	IdentResult    string `json:"identResult,omitempty"`
+	// Nexus resolution links
+	NexusResolvedEndpoint          *resolvedRefJSON `json:"nexusResolvedEndpoint,omitempty"`
+	NexusResolvedEndpointNamespace string           `json:"nexusResolvedEndpointNamespace,omitempty"`
+	NexusResolvedService           *resolvedRefJSON `json:"nexusResolvedService,omitempty"`
+	NexusResolvedOperation         *resolvedRefJSON `json:"nexusResolvedOperation,omitempty"`
+	Ident                          string           `json:"ident,omitempty"`
+	IdentResult                    string           `json:"identResult,omitempty"`
 }
 
 type awaitAllBlockJSON struct {
@@ -753,10 +836,15 @@ type awaitOneCaseJSON struct {
 	NexusArgs      string            `json:"nexusArgs,omitempty"`
 	NexusResult    string            `json:"nexusResult,omitempty"`
 	NexusDetach    bool              `json:"nexusDetach,omitempty"`
-	AwaitAll       json.RawMessage   `json:"awaitAll,omitempty"`
-	Ident          string            `json:"ident,omitempty"`
-	IdentResult    string            `json:"identResult,omitempty"`
-	Body           []json.RawMessage `json:"body"`
+	// Nexus resolution links
+	NexusResolvedEndpoint          *resolvedRefJSON `json:"nexusResolvedEndpoint,omitempty"`
+	NexusResolvedEndpointNamespace string           `json:"nexusResolvedEndpointNamespace,omitempty"`
+	NexusResolvedService           *resolvedRefJSON `json:"nexusResolvedService,omitempty"`
+	NexusResolvedOperation         *resolvedRefJSON `json:"nexusResolvedOperation,omitempty"`
+	AwaitAll                       json.RawMessage  `json:"awaitAll,omitempty"`
+	Ident                          string           `json:"ident,omitempty"`
+	IdentResult                    string           `json:"identResult,omitempty"`
+	Body                           []json.RawMessage `json:"body"`
 }
 
 type awaitOneBlockJSON struct {
@@ -861,6 +949,11 @@ type promiseStmtJSON struct {
 	NexusService   string `json:"nexusService,omitempty"`
 	NexusOperation string `json:"nexusOperation,omitempty"`
 	NexusArgs      string `json:"nexusArgs,omitempty"`
+	// Nexus resolution links
+	NexusResolvedEndpoint          *resolvedRefJSON `json:"nexusResolvedEndpoint,omitempty"`
+	NexusResolvedEndpointNamespace string           `json:"nexusResolvedEndpointNamespace,omitempty"`
+	NexusResolvedService           *resolvedRefJSON `json:"nexusResolvedService,omitempty"`
+	NexusResolvedOperation         *resolvedRefJSON `json:"nexusResolvedOperation,omitempty"`
 }
 
 type setStmtJSON struct {
@@ -888,6 +981,11 @@ type nexusCallJSON struct {
 	Args      string            `json:"args"`
 	Result    string            `json:"result,omitempty"`
 	Options   *OptionsBlockJSON `json:"options,omitempty"`
+	// Resolution links
+	ResolvedEndpoint          *resolvedRefJSON `json:"resolvedEndpoint,omitempty"`
+	ResolvedEndpointNamespace string           `json:"resolvedEndpointNamespace,omitempty"`
+	ResolvedService           *resolvedRefJSON `json:"resolvedService,omitempty"`
+	ResolvedOperation         *resolvedRefJSON `json:"resolvedOperation,omitempty"`
 }
 
 // NexusOperationJSON is the JSON representation of a nexus operation.

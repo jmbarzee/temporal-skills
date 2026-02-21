@@ -20,6 +20,12 @@ func documentSymbolHandler(store *DocumentStore) protocol.TextDocumentDocumentSy
 				symbols = append(symbols, workflowSymbol(d))
 			case *ast.ActivityDef:
 				symbols = append(symbols, activitySymbol(d))
+			case *ast.WorkerDef:
+				symbols = append(symbols, workerSymbol(d))
+			case *ast.NamespaceDef:
+				symbols = append(symbols, namespaceSymbol(d))
+			case *ast.NexusServiceDef:
+				symbols = append(symbols, nexusServiceSymbol(d))
 			}
 		}
 
@@ -81,6 +87,138 @@ func activitySymbol(act *ast.ActivityDef) protocol.DocumentSymbol {
 		Range:          r,
 		SelectionRange: posToRange(act.Line, act.Column),
 	}
+}
+
+func workerSymbol(w *ast.WorkerDef) protocol.DocumentSymbol {
+	// Estimate end line from the last ref.
+	endLine := w.Line
+	for _, ref := range w.Workflows {
+		if ref.Line > endLine {
+			endLine = ref.Line
+		}
+	}
+	for _, ref := range w.Activities {
+		if ref.Line > endLine {
+			endLine = ref.Line
+		}
+	}
+	for _, ref := range w.Services {
+		if ref.Line > endLine {
+			endLine = ref.Line
+		}
+	}
+
+	sym := protocol.DocumentSymbol{
+		Name:           w.Name,
+		Kind:           protocol.SymbolKindModule,
+		Range:          lineRange(w.Line, endLine),
+		SelectionRange: posToRange(w.Line, w.Column),
+	}
+
+	var children []protocol.DocumentSymbol
+	for _, ref := range w.Workflows {
+		children = append(children, protocol.DocumentSymbol{
+			Name:           ref.Name,
+			Kind:           protocol.SymbolKindFunction,
+			Range:          lineRange(ref.Line, ref.Line),
+			SelectionRange: posToRange(ref.Line, ref.Column),
+		})
+	}
+	for _, ref := range w.Activities {
+		children = append(children, protocol.DocumentSymbol{
+			Name:           ref.Name,
+			Kind:           protocol.SymbolKindFunction,
+			Range:          lineRange(ref.Line, ref.Line),
+			SelectionRange: posToRange(ref.Line, ref.Column),
+		})
+	}
+	for _, ref := range w.Services {
+		children = append(children, protocol.DocumentSymbol{
+			Name:           ref.Name,
+			Kind:           protocol.SymbolKindInterface,
+			Range:          lineRange(ref.Line, ref.Line),
+			SelectionRange: posToRange(ref.Line, ref.Column),
+		})
+	}
+	if len(children) > 0 {
+		sym.Children = children
+	}
+	return sym
+}
+
+func namespaceSymbol(ns *ast.NamespaceDef) protocol.DocumentSymbol {
+	endLine := ns.Line
+	for _, w := range ns.Workers {
+		if w.Line > endLine {
+			endLine = w.Line
+		}
+	}
+	for _, ep := range ns.Endpoints {
+		if ep.Line > endLine {
+			endLine = ep.Line
+		}
+	}
+
+	sym := protocol.DocumentSymbol{
+		Name:           ns.Name,
+		Kind:           protocol.SymbolKindNamespace,
+		Range:          lineRange(ns.Line, endLine),
+		SelectionRange: posToRange(ns.Line, ns.Column),
+	}
+
+	var children []protocol.DocumentSymbol
+	for _, w := range ns.Workers {
+		children = append(children, protocol.DocumentSymbol{
+			Name:           w.WorkerName,
+			Kind:           protocol.SymbolKindModule,
+			Range:          lineRange(w.Line, w.Line),
+			SelectionRange: posToRange(w.Line, w.Column),
+		})
+	}
+	for _, ep := range ns.Endpoints {
+		children = append(children, protocol.DocumentSymbol{
+			Name:           ep.EndpointName,
+			Kind:           protocol.SymbolKindInterface,
+			Range:          lineRange(ep.Line, ep.Line),
+			SelectionRange: posToRange(ep.Line, ep.Column),
+		})
+	}
+	if len(children) > 0 {
+		sym.Children = children
+	}
+	return sym
+}
+
+func nexusServiceSymbol(svc *ast.NexusServiceDef) protocol.DocumentSymbol {
+	endLine := svc.Line
+	for _, op := range svc.Operations {
+		if op.Line > endLine {
+			endLine = op.Line
+		}
+		endLine = lastLineInStmts(op.Body, endLine)
+	}
+
+	sym := protocol.DocumentSymbol{
+		Name:           svc.Name,
+		Kind:           protocol.SymbolKindInterface,
+		Range:          lineRange(svc.Line, endLine),
+		SelectionRange: posToRange(svc.Line, svc.Column),
+	}
+
+	var children []protocol.DocumentSymbol
+	for _, op := range svc.Operations {
+		opEndLine := lastLineInStmts(op.Body, op.Line)
+		children = append(children, protocol.DocumentSymbol{
+			Name:           op.Name,
+			Kind:           protocol.SymbolKindMethod,
+			Range:          lineRange(op.Line, opEndLine),
+			SelectionRange: posToRange(op.Line, op.Column),
+		})
+	}
+	if len(children) > 0 {
+		sym.Children = children
+	}
+	return sym
 }
 
 // defRange estimates the full range of a definition by scanning its body

@@ -63,7 +63,8 @@ func (*ActivityDef) defNode() {}
 // WorkerRef is a reference to a workflow or activity name inside a worker block.
 type WorkerRef struct {
 	Pos
-	Name string
+	Name     string
+	Resolved Definition // *WorkflowDef, *ActivityDef, or *NexusServiceDef
 }
 
 type WorkerDef struct {
@@ -79,8 +80,9 @@ func (*WorkerDef) defNode() {}
 // NamespaceWorker is a worker instantiation inside a namespace block.
 type NamespaceWorker struct {
 	Pos
-	WorkerName string
-	Options    *OptionsBlock
+	WorkerName     string
+	Options        *OptionsBlock
+	ResolvedWorker *WorkerDef
 }
 
 // NamespaceEndpoint is a nexus endpoint instantiation inside a namespace block.
@@ -175,26 +177,26 @@ type AwaitStmt struct {
 	Timer string // duration, e.g. "5m"
 
 	// Signal await
-	Signal       string // signal name
-	SignalParams string // optional parameter binding, e.g. "(approver, timestamp)"
+	Signal         string // signal name
+	SignalParams   string // optional parameter binding, e.g. "(approver, timestamp)"
 	SignalResolved *SignalDecl
 
 	// Update await
-	Update       string // update name
-	UpdateParams string // optional parameter binding
+	Update         string // update name
+	UpdateParams   string // optional parameter binding
 	UpdateResolved *UpdateDecl
 
 	// Activity await
-	Activity string // activity name
-	ActivityArgs string
-	ActivityResult string // optional result binding
+	Activity         string // activity name
+	ActivityArgs     string
+	ActivityResult   string // optional result binding
 	ActivityResolved *ActivityDef
 
 	// Workflow await
-	Workflow        string // workflow name
-	WorkflowMode   WorkflowCallMode
-	WorkflowArgs   string
-	WorkflowResult string // optional result binding
+	Workflow         string // workflow name
+	WorkflowMode     WorkflowCallMode
+	WorkflowArgs     string
+	WorkflowResult   string // optional result binding
 	WorkflowResolved *WorkflowDef
 
 	// Nexus await
@@ -204,6 +206,11 @@ type AwaitStmt struct {
 	NexusArgs      string
 	NexusResult    string
 	NexusDetach    bool
+	// Nexus resolution links
+	NexusResolvedEndpoint          *NamespaceEndpoint
+	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
+	NexusResolvedService           *NexusServiceDef
+	NexusResolvedOperation         *NexusOperation
 
 	// Ident await (promise or condition reference)
 	Ident       string // promise or condition name
@@ -248,29 +255,29 @@ type AwaitOneCase struct {
 	Pos
 
 	// Signal case
-	Signal string // signal name
-	SignalParams string // optional parameter binding, e.g. "(approver, timestamp)"
+	Signal         string // signal name
+	SignalParams   string // optional parameter binding, e.g. "(approver, timestamp)"
 	SignalResolved *SignalDecl
 
 	// Update case
-	Update string // update name
-	UpdateParams string // optional parameter binding
+	Update         string // update name
+	UpdateParams   string // optional parameter binding
 	UpdateResolved *UpdateDecl
 
 	// Timer case
 	Timer string // duration
 
 	// Activity case
-	Activity string // activity name
-	ActivityArgs string
-	ActivityResult string // optional result binding
+	Activity         string // activity name
+	ActivityArgs     string
+	ActivityResult   string // optional result binding
 	ActivityResolved *ActivityDef
 
 	// Workflow case
-	Workflow        string // workflow name
-	WorkflowMode   WorkflowCallMode // spawn/detach/child
-	WorkflowArgs   string
-	WorkflowResult string // optional result binding
+	Workflow         string           // workflow name
+	WorkflowMode     WorkflowCallMode // spawn/detach/child
+	WorkflowArgs     string
+	WorkflowResult   string // optional result binding
 	WorkflowResolved *WorkflowDef
 
 	// Nexus case
@@ -280,6 +287,11 @@ type AwaitOneCase struct {
 	NexusArgs      string
 	NexusResult    string
 	NexusDetach    bool
+	// Nexus resolution links
+	NexusResolvedEndpoint          *NamespaceEndpoint
+	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
+	NexusResolvedService           *NexusServiceDef
+	NexusResolvedOperation         *NexusOperation
 
 	// Await all case (nested)
 	AwaitAll *AwaitAllBlock
@@ -452,6 +464,11 @@ type PromiseStmt struct {
 	NexusService   string
 	NexusOperation string
 	NexusArgs      string
+	// Nexus resolution links
+	NexusResolvedEndpoint          *NamespaceEndpoint
+	NexusResolvedEndpointNamespace string // namespace that owns the endpoint
+	NexusResolvedService           *NexusServiceDef
+	NexusResolvedOperation         *NexusOperation
 }
 
 func (*PromiseStmt) stmtNode() {}
@@ -515,8 +532,10 @@ type NexusCall struct {
 	Result    string // optional
 	Options   *OptionsBlock
 	// Resolution links
-	ResolvedService   *NexusServiceDef
-	ResolvedOperation *NexusOperation
+	ResolvedEndpoint          *NamespaceEndpoint
+	ResolvedEndpointNamespace string // namespace that owns the endpoint
+	ResolvedService           *NexusServiceDef
+	ResolvedOperation         *NexusOperation
 }
 
 func (*NexusCall) stmtNode() {}

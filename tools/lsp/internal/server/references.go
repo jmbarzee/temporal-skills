@@ -42,8 +42,8 @@ func referencesHandler(store *DocumentStore) protocol.TextDocumentReferencesFunc
 }
 
 // nameOfNode returns the name and kind ("workflow", "activity", "signal",
-// "query", "update") for an AST node. For references it follows the Resolved
-// pointer to normalize to the definition identity.
+// "query", "update", "nexus_service", "nexus_endpoint", "worker") for an AST node.
+// For references it follows the Resolved pointer to normalize to the definition identity.
 func nameOfNode(node ast.Node) (name, kind string) {
 	switch n := node.(type) {
 	case *ast.WorkflowDef:
@@ -56,6 +56,29 @@ func nameOfNode(node ast.Node) (name, kind string) {
 		return n.Name, "query"
 	case *ast.UpdateDecl:
 		return n.Name, "update"
+	case *ast.NexusServiceDef:
+		return n.Name, "nexus_service"
+	case *ast.NamespaceEndpoint:
+		return n.EndpointName, "nexus_endpoint"
+	case *ast.WorkerDef:
+		return n.Name, "worker"
+	case *ast.WorkerRef:
+		// WorkerRef can resolve to workflow, activity, or nexus service.
+		if n.Resolved != nil {
+			switch d := n.Resolved.(type) {
+			case *ast.WorkflowDef:
+				return d.Name, "workflow"
+			case *ast.ActivityDef:
+				return d.Name, "activity"
+			case *ast.NexusServiceDef:
+				return d.Name, "nexus_service"
+			}
+		}
+		return n.Name, "workflow" // best-effort fallback
+	case *ast.NamespaceWorker:
+		return n.WorkerName, "worker"
+	case *ast.NamespaceDef:
+		return n.Name, "namespace"
 	case *ast.ActivityCall:
 		if n.Resolved != nil {
 			return n.Resolved.Name, "activity"
@@ -66,6 +89,11 @@ func nameOfNode(node ast.Node) (name, kind string) {
 			return n.Resolved.Name, "workflow"
 		}
 		return n.Name, "workflow"
+	case *ast.NexusCall:
+		if n.ResolvedService != nil {
+			return n.ResolvedService.Name, "nexus_service"
+		}
+		return n.Service, "nexus_service"
 	case *ast.AwaitStmt:
 		if n.Signal != "" {
 			return n.Signal, "signal"
@@ -78,6 +106,13 @@ func nameOfNode(node ast.Node) (name, kind string) {
 		}
 		if n.Workflow != "" {
 			return n.Workflow, "workflow"
+		}
+		if n.Nexus != "" {
+			return n.NexusService, "nexus_service"
+		}
+	case *ast.AwaitOneCase:
+		if n.Nexus != "" {
+			return n.NexusService, "nexus_service"
 		}
 	}
 	return "", ""
@@ -129,6 +164,62 @@ func collectReferences(file *ast.File, name, kind string, includeDecl bool) []as
 				refs = append(refs, d)
 			}
 			refs = collectRefsInStmts(d.Body, name, kind, refs)
+
+		case *ast.NexusServiceDef:
+			if includeDecl && kind == "nexus_service" && d.Name == name {
+				refs = append(refs, d)
+			}
+			// Walk sync operation bodies for nested references.
+			for _, op := range d.Operations {
+				if op.OpType == ast.NexusOpSync {
+					refs = collectRefsInStmts(op.Body, name, kind, refs)
+				}
+			}
+
+		case *ast.WorkerDef:
+			if includeDecl && kind == "worker" && d.Name == name {
+				refs = append(refs, d)
+			}
+			// Worker refs reference workflows, activities, and nexus services.
+			for i := range d.Workflows {
+				ref := &d.Workflows[i]
+				if kind == "workflow" && ref.Name == name {
+					refs = append(refs, ref)
+				}
+			}
+			for i := range d.Activities {
+				ref := &d.Activities[i]
+				if kind == "activity" && ref.Name == name {
+					refs = append(refs, ref)
+				}
+			}
+			for i := range d.Services {
+				ref := &d.Services[i]
+				if kind == "nexus_service" && ref.Name == name {
+					refs = append(refs, ref)
+				}
+			}
+
+		case *ast.NamespaceDef:
+			if includeDecl && kind == "namespace" && d.Name == name {
+				refs = append(refs, d)
+			}
+			// Check worker references.
+			if kind == "worker" {
+				for i := range d.Workers {
+					if d.Workers[i].WorkerName == name {
+						refs = append(refs, &d.Workers[i])
+					}
+				}
+			}
+			// Check endpoint references.
+			if kind == "nexus_endpoint" {
+				for i := range d.Endpoints {
+					if d.Endpoints[i].EndpointName == name {
+						refs = append(refs, &d.Endpoints[i])
+					}
+				}
+			}
 		}
 	}
 	return refs
@@ -151,6 +242,13 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 		if kind == "workflow" && s.Name == name {
 			refs = append(refs, s)
 		}
+	case *ast.NexusCall:
+		if kind == "nexus_service" && s.Service == name {
+			refs = append(refs, s)
+		}
+		if kind == "nexus_endpoint" && s.Endpoint == name {
+			refs = append(refs, s)
+		}
 	case *ast.AwaitStmt:
 		if kind == "signal" && s.Signal == name {
 			refs = append(refs, s)
@@ -160,16 +258,33 @@ func collectRefsInStmt(stmt ast.Statement, name, kind string, refs []ast.Node) [
 			refs = append(refs, s)
 		} else if kind == "workflow" && s.Workflow == name {
 			refs = append(refs, s)
+		} else if kind == "nexus_service" && s.NexusService == name {
+			refs = append(refs, s)
+		} else if kind == "nexus_endpoint" && s.Nexus == name {
+			refs = append(refs, s)
 		}
 	case *ast.AwaitAllBlock:
 		refs = collectRefsInStmts(s.Body, name, kind, refs)
 	case *ast.AwaitOneBlock:
 		for _, c := range s.Cases {
+			// Check nexus references in cases.
+			if kind == "nexus_service" && c.NexusService == name {
+				refs = append(refs, c)
+			} else if kind == "nexus_endpoint" && c.Nexus == name {
+				refs = append(refs, c)
+			}
 			// Check nested await all block.
 			if c.AwaitAll != nil {
 				refs = collectRefsInStmts(c.AwaitAll.Body, name, kind, refs)
 			}
 			refs = collectRefsInStmts(c.Body, name, kind, refs)
+		}
+	case *ast.PromiseStmt:
+		if kind == "nexus_service" && s.NexusService == name {
+			refs = append(refs, s)
+		}
+		if kind == "nexus_endpoint" && s.Nexus == name {
+			refs = append(refs, s)
 		}
 	case *ast.SwitchBlock:
 		for _, c := range s.Cases {

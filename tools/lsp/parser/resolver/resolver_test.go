@@ -602,6 +602,14 @@ namespace ns:
 	} else if call.ResolvedOperation.Name != "PlaceOrder" {
 		t.Errorf("resolved operation %q, expected 'PlaceOrder'", call.ResolvedOperation.Name)
 	}
+	if call.ResolvedEndpoint == nil {
+		t.Error("nexus call endpoint not resolved")
+	} else if call.ResolvedEndpoint.EndpointName != "OrderEndpoint" {
+		t.Errorf("resolved endpoint %q, expected 'OrderEndpoint'", call.ResolvedEndpoint.EndpointName)
+	}
+	if call.ResolvedEndpointNamespace != "ns" {
+		t.Errorf("resolved endpoint namespace %q, expected 'ns'", call.ResolvedEndpointNamespace)
+	}
 }
 
 func TestNexusDuplicateService(t *testing.T) {
@@ -1122,6 +1130,199 @@ activity Bar(x: int) -> (int):
 		for _, e := range errs {
 			t.Errorf("unexpected error: %v", e)
 		}
+	}
+}
+
+func TestNexusEndpointResolutionOnAwaitAndPromise(t *testing.T) {
+	input := `nexus service Svc:
+    async Op workflow W
+
+workflow W():
+    close complete(Result{})
+
+workflow Caller():
+    await nexus Ep Svc.Op(x) -> result
+    promise p <- nexus Ep Svc.Op(x)
+    close complete(result)
+
+activity Dummy():
+    pass()
+
+worker w:
+    workflow W
+    workflow Caller
+    activity Dummy
+    nexus service Svc
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint Ep
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		t.Errorf("unexpected error: %v (severity: %s)", e, e.Severity)
+	}
+
+	caller := file.Definitions[2].(*ast.WorkflowDef)
+
+	// Check await nexus resolution.
+	awaitStmt := caller.Body[0].(*ast.AwaitStmt)
+	if awaitStmt.NexusResolvedEndpoint == nil {
+		t.Error("await nexus endpoint not resolved")
+	} else if awaitStmt.NexusResolvedEndpoint.EndpointName != "Ep" {
+		t.Errorf("await resolved endpoint %q, expected 'Ep'", awaitStmt.NexusResolvedEndpoint.EndpointName)
+	}
+	if awaitStmt.NexusResolvedService == nil {
+		t.Error("await nexus service not resolved")
+	}
+	if awaitStmt.NexusResolvedOperation == nil {
+		t.Error("await nexus operation not resolved")
+	}
+	if awaitStmt.NexusResolvedEndpointNamespace != "ns" {
+		t.Errorf("await resolved endpoint namespace %q, expected 'ns'", awaitStmt.NexusResolvedEndpointNamespace)
+	}
+
+	// Check promise nexus resolution.
+	promiseStmt := caller.Body[1].(*ast.PromiseStmt)
+	if promiseStmt.NexusResolvedEndpoint == nil {
+		t.Error("promise nexus endpoint not resolved")
+	} else if promiseStmt.NexusResolvedEndpoint.EndpointName != "Ep" {
+		t.Errorf("promise resolved endpoint %q, expected 'Ep'", promiseStmt.NexusResolvedEndpoint.EndpointName)
+	}
+	if promiseStmt.NexusResolvedService == nil {
+		t.Error("promise nexus service not resolved")
+	}
+	if promiseStmt.NexusResolvedOperation == nil {
+		t.Error("promise nexus operation not resolved")
+	}
+}
+
+func TestWorkerRefResolution(t *testing.T) {
+	input := `workflow ProcessOrder(orderId: string) -> (Result):
+    activity ChargePayment(orderId) -> payment
+    return Result{payment: payment}
+
+activity ChargePayment(orderId: string) -> (Payment):
+    return charge(orderId)
+
+nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+
+worker orderWorker:
+    workflow ProcessOrder
+    activity ChargePayment
+    nexus service OrderService
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orderProcessing"
+    nexus endpoint OrderEndpoint
+        options:
+            task_queue: "orderProcessing"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+
+	// Verify WorkerRef resolution links.
+	worker := file.Definitions[3].(*ast.WorkerDef)
+	if worker.Name != "orderWorker" {
+		t.Fatalf("expected worker 'orderWorker', got %q", worker.Name)
+	}
+
+	// Workflow ref should resolve to ProcessOrder.
+	if len(worker.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow ref, got %d", len(worker.Workflows))
+	}
+	wfRef := worker.Workflows[0]
+	if wfRef.Resolved == nil {
+		t.Error("workflow ref not resolved")
+	} else {
+		wfDef, ok := wfRef.Resolved.(*ast.WorkflowDef)
+		if !ok {
+			t.Errorf("workflow ref resolved to wrong type: %T", wfRef.Resolved)
+		} else if wfDef.Name != "ProcessOrder" {
+			t.Errorf("workflow ref resolved to %q, expected 'ProcessOrder'", wfDef.Name)
+		}
+	}
+
+	// Activity ref should resolve to ChargePayment.
+	if len(worker.Activities) != 1 {
+		t.Fatalf("expected 1 activity ref, got %d", len(worker.Activities))
+	}
+	actRef := worker.Activities[0]
+	if actRef.Resolved == nil {
+		t.Error("activity ref not resolved")
+	} else {
+		actDef, ok := actRef.Resolved.(*ast.ActivityDef)
+		if !ok {
+			t.Errorf("activity ref resolved to wrong type: %T", actRef.Resolved)
+		} else if actDef.Name != "ChargePayment" {
+			t.Errorf("activity ref resolved to %q, expected 'ChargePayment'", actDef.Name)
+		}
+	}
+
+	// Service ref should resolve to OrderService.
+	if len(worker.Services) != 1 {
+		t.Fatalf("expected 1 service ref, got %d", len(worker.Services))
+	}
+	svcRef := worker.Services[0]
+	if svcRef.Resolved == nil {
+		t.Error("service ref not resolved")
+	} else {
+		svcDef, ok := svcRef.Resolved.(*ast.NexusServiceDef)
+		if !ok {
+			t.Errorf("service ref resolved to wrong type: %T", svcRef.Resolved)
+		} else if svcDef.Name != "OrderService" {
+			t.Errorf("service ref resolved to %q, expected 'OrderService'", svcDef.Name)
+		}
+	}
+}
+
+func TestNamespaceWorkerResolution(t *testing.T) {
+	input := `workflow Foo(x: int) -> (int):
+    return x
+
+worker myWorker:
+    workflow Foo
+
+namespace myNs:
+    worker myWorker
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+
+	// Verify NamespaceWorker resolution link.
+	ns := file.Definitions[2].(*ast.NamespaceDef)
+	if ns.Name != "myNs" {
+		t.Fatalf("expected namespace 'myNs', got %q", ns.Name)
+	}
+	if len(ns.Workers) != 1 {
+		t.Fatalf("expected 1 worker in namespace, got %d", len(ns.Workers))
+	}
+
+	nw := ns.Workers[0]
+	if nw.ResolvedWorker == nil {
+		t.Error("namespace worker not resolved")
+	} else if nw.ResolvedWorker.Name != "myWorker" {
+		t.Errorf("namespace worker resolved to %q, expected 'myWorker'", nw.ResolvedWorker.Name)
 	}
 }
 

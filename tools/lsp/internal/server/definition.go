@@ -43,6 +43,14 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Resolved != nil {
 			return n.Resolved
 		}
+	case *ast.NexusCall:
+		// Prefer service definition as the primary go-to-definition target.
+		if n.ResolvedService != nil {
+			return n.ResolvedService
+		}
+		if n.ResolvedEndpoint != nil {
+			return n.ResolvedEndpoint
+		}
 	case *ast.AwaitStmt:
 		// Check which type of await and return appropriate resolved reference
 		if n.Signal != "" && n.SignalResolved != nil {
@@ -57,6 +65,20 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Workflow != "" && n.WorkflowResolved != nil {
 			return n.WorkflowResolved
 		}
+		if n.Nexus != "" && n.NexusResolvedService != nil {
+			return n.NexusResolvedService
+		}
+		if n.Nexus != "" && n.NexusResolvedEndpoint != nil {
+			return n.NexusResolvedEndpoint
+		}
+	case *ast.WorkerRef:
+		if n.Resolved != nil {
+			return n.Resolved
+		}
+	case *ast.NamespaceWorker:
+		if n.ResolvedWorker != nil {
+			return n.ResolvedWorker
+		}
 	case *ast.AwaitOneCase:
 		// Check which type of case and return appropriate resolved reference
 		if n.Signal != "" && n.SignalResolved != nil {
@@ -70,6 +92,12 @@ func resolvedTarget(node ast.Node) ast.Node {
 		}
 		if n.Workflow != "" && n.WorkflowResolved != nil {
 			return n.WorkflowResolved
+		}
+		if n.Nexus != "" && n.NexusResolvedService != nil {
+			return n.NexusResolvedService
+		}
+		if n.Nexus != "" && n.NexusResolvedEndpoint != nil {
+			return n.NexusResolvedEndpoint
 		}
 	}
 	return nil

@@ -87,6 +87,56 @@ func findNodeAtLine(file *ast.File, line int) ast.Node {
 			if n := findNodeInStmts(d.Body, line); n != nil {
 				return n
 			}
+
+		case *ast.NexusServiceDef:
+			if d.Line == line {
+				return d
+			}
+			// Check operations for sync operation bodies.
+			for _, op := range d.Operations {
+				if op.OpType == ast.NexusOpSync {
+					if n := findNodeInStmts(op.Body, line); n != nil {
+						return n
+					}
+				}
+			}
+
+		case *ast.WorkerDef:
+			if d.Line == line {
+				return d
+			}
+			for i := range d.Workflows {
+				if d.Workflows[i].Line == line {
+					return &d.Workflows[i]
+				}
+			}
+			for i := range d.Activities {
+				if d.Activities[i].Line == line {
+					return &d.Activities[i]
+				}
+			}
+			for i := range d.Services {
+				if d.Services[i].Line == line {
+					return &d.Services[i]
+				}
+			}
+
+		case *ast.NamespaceDef:
+			if d.Line == line {
+				return d
+			}
+			// Check namespace worker entries.
+			for i := range d.Workers {
+				if d.Workers[i].Line == line {
+					return &d.Workers[i]
+				}
+			}
+			// Check namespace endpoint entries.
+			for i := range d.Endpoints {
+				if d.Endpoints[i].Line == line {
+					return &d.Endpoints[i]
+				}
+			}
 		}
 	}
 	return nil
@@ -109,6 +159,10 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 			return s
 		}
 	case *ast.WorkflowCall:
+		if s.Line == line {
+			return s
+		}
+	case *ast.NexusCall:
 		if s.Line == line {
 			return s
 		}
@@ -155,6 +209,10 @@ func findNodeInStmt(stmt ast.Statement, line int) ast.Node {
 		if n := findNodeInStmts(s.Body, line); n != nil {
 			return n
 		}
+	case *ast.PromiseStmt:
+		if s.Line == line {
+			return s
+		}
 	case *ast.ReturnStmt:
 		if s.Line == line {
 			return s
@@ -198,12 +256,106 @@ func signatureFor(node ast.Node) string {
 			prefix = "detach workflow"
 		}
 		return fmt.Sprintf("%s %s(%s)", prefix, n.Name, n.Args)
+	case *ast.WorkerDef:
+		sig := fmt.Sprintf("worker %s", n.Name)
+		if len(n.Workflows) > 0 || len(n.Activities) > 0 || len(n.Services) > 0 {
+			var parts []string
+			for _, ref := range n.Workflows {
+				parts = append(parts, fmt.Sprintf("  workflow %s", ref.Name))
+			}
+			for _, ref := range n.Activities {
+				parts = append(parts, fmt.Sprintf("  activity %s", ref.Name))
+			}
+			for _, ref := range n.Services {
+				parts = append(parts, fmt.Sprintf("  nexus service %s", ref.Name))
+			}
+			sig += "\n" + strings.Join(parts, "\n")
+		}
+		return sig
+	case *ast.WorkerRef:
+		if n.Resolved != nil {
+			return signatureFor(n.Resolved)
+		}
+		return fmt.Sprintf("ref %s (unresolved)", n.Name)
+	case *ast.NamespaceWorker:
+		sig := fmt.Sprintf("worker %s", n.WorkerName)
+		tq := extractWorkerTaskQueue(n)
+		if tq != "" {
+			sig += fmt.Sprintf("\n  task_queue: %s", tq)
+		}
+		if n.ResolvedWorker != nil {
+			var parts []string
+			for _, ref := range n.ResolvedWorker.Workflows {
+				parts = append(parts, fmt.Sprintf("  workflow %s", ref.Name))
+			}
+			for _, ref := range n.ResolvedWorker.Activities {
+				parts = append(parts, fmt.Sprintf("  activity %s", ref.Name))
+			}
+			for _, ref := range n.ResolvedWorker.Services {
+				parts = append(parts, fmt.Sprintf("  nexus service %s", ref.Name))
+			}
+			if len(parts) > 0 {
+				sig += "\n" + strings.Join(parts, "\n")
+			}
+		}
+		return sig
+	case *ast.NamespaceDef:
+		sig := fmt.Sprintf("namespace %s", n.Name)
+		var parts []string
+		for _, w := range n.Workers {
+			tq := extractWorkerTaskQueue(&w)
+			if tq != "" {
+				parts = append(parts, fmt.Sprintf("  worker %s (task_queue: %s)", w.WorkerName, tq))
+			} else {
+				parts = append(parts, fmt.Sprintf("  worker %s", w.WorkerName))
+			}
+		}
+		for _, ep := range n.Endpoints {
+			tq := extractEndpointTaskQueue(&ep)
+			if tq != "" {
+				parts = append(parts, fmt.Sprintf("  nexus endpoint %s (task_queue: %s)", ep.EndpointName, tq))
+			} else {
+				parts = append(parts, fmt.Sprintf("  nexus endpoint %s", ep.EndpointName))
+			}
+		}
+		if len(parts) > 0 {
+			sig += "\n" + strings.Join(parts, "\n")
+		}
+		return sig
+	case *ast.NamespaceEndpoint:
+		sig := fmt.Sprintf("nexus endpoint %s", n.EndpointName)
+		tq := extractEndpointTaskQueue(n)
+		if tq != "" {
+			sig += fmt.Sprintf("\n  task_queue: %s", tq)
+		}
+		return sig
 	case *ast.NexusCall:
 		prefix := "nexus"
 		if n.Detach {
 			prefix = "detach nexus"
 		}
-		return fmt.Sprintf("%s %s %s.%s(%s)", prefix, n.Endpoint, n.Service, n.Operation, n.Args)
+		sig := fmt.Sprintf("%s %s %s.%s(%s)", prefix, n.Endpoint, n.Service, n.Operation, n.Args)
+		if n.ResolvedEndpoint != nil {
+			tq := extractEndpointTaskQueue(n.ResolvedEndpoint)
+			if tq != "" {
+				sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, n.ResolvedEndpointNamespace)
+			}
+		}
+		return sig
+	case *ast.NexusServiceDef:
+		var ops []string
+		for _, op := range n.Operations {
+			if op.OpType == ast.NexusOpAsync {
+				ops = append(ops, fmt.Sprintf("  async %s workflow %s", op.Name, op.WorkflowName))
+			} else {
+				ops = append(ops, fmt.Sprintf("  sync %s(%s) -> (%s)", op.Name, op.Params, op.ReturnType))
+			}
+		}
+		sig := fmt.Sprintf("nexus service %s", n.Name)
+		if len(ops) > 0 {
+			sig += "\n" + strings.Join(ops, "\n")
+		}
+		return sig
 	case *ast.AwaitStmt:
 		switch n.AwaitKind() {
 		case "timer":
@@ -232,6 +384,18 @@ func signatureFor(node ast.Node) string {
 				return fmt.Sprintf("%s %s(%s) -> %s", prefix, n.Workflow, n.WorkflowArgs, n.WorkflowResult)
 			}
 			return fmt.Sprintf("%s %s(%s)", prefix, n.Workflow, n.WorkflowArgs)
+		case "nexus":
+			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", n.Nexus, n.NexusService, n.NexusOperation, n.NexusArgs)
+			if n.NexusResult != "" {
+				sig += " -> " + n.NexusResult
+			}
+			if n.NexusResolvedEndpoint != nil {
+				tq := extractEndpointTaskQueue(n.NexusResolvedEndpoint)
+				if tq != "" {
+					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, n.NexusResolvedEndpointNamespace)
+				}
+			}
+			return sig
 		}
 		return "await"
 	default:
@@ -255,4 +419,30 @@ func activitySig(a *ast.ActivityDef) string {
 		parts = append(parts, "-> ("+a.ReturnType+")")
 	}
 	return strings.Join(parts, " ")
+}
+
+// extractEndpointTaskQueue returns the task_queue value from a namespace endpoint's options.
+func extractEndpointTaskQueue(ep *ast.NamespaceEndpoint) string {
+	if ep == nil || ep.Options == nil {
+		return ""
+	}
+	for _, e := range ep.Options.Entries {
+		if e.Key == "task_queue" {
+			return e.Value
+		}
+	}
+	return ""
+}
+
+// extractWorkerTaskQueue returns the task_queue value from a namespace worker's options.
+func extractWorkerTaskQueue(nw *ast.NamespaceWorker) string {
+	if nw == nil || nw.Options == nil {
+		return ""
+	}
+	for _, e := range nw.Options.Entries {
+		if e.Key == "task_queue" {
+			return e.Value
+		}
+	}
+	return ""
 }

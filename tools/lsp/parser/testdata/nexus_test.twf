@@ -1,0 +1,114 @@
+# Nexus Support Test File
+
+# ===== NEXUS SERVICE DEFINITIONS =====
+
+nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+    sync GetStatus(orderId: string) -> (Status):
+        activity FetchStatus(orderId) -> status
+        close complete(status)
+
+nexus service NotificationService:
+    async SendEmail workflow EmailWorkflow
+    async SendSMS workflow SMSWorkflow
+
+# ===== WORKFLOW DEFINITIONS =====
+
+workflow ProcessOrder(order: Order) -> (Result):
+    activity ValidateOrder(order) -> validated
+    activity ChargePayment(order) -> payment
+    close complete(Result{validated, payment})
+
+workflow EmailWorkflow(email: Email) -> (Result):
+    activity SendEmailActivity(email) -> result
+    close complete(result)
+
+workflow SMSWorkflow(sms: SMS) -> (Result):
+    activity SendSMSActivity(sms) -> result
+    close complete(result)
+
+workflow Caller(order: Order) -> (Result):
+    # Direct nexus call
+    nexus OrderEndpoint OrderService.PlaceOrder(order) -> result
+
+    # Nexus call with options
+    nexus OrderEndpoint OrderService.GetStatus(order.id) -> status
+        options:
+            schedule_to_close_timeout: 30s
+
+    # Detach nexus call
+    detach nexus NotificationEndpoint NotificationService.SendEmail(order.email)
+
+    # Promise nexus call
+    promise bgResult <- nexus OrderEndpoint OrderService.PlaceOrder(order)
+
+    # Await nexus call
+    await nexus OrderEndpoint OrderService.GetStatus(order.id) -> status2
+
+    close complete(Result{result, status})
+
+workflow AwaitOneNexusTest():
+    await one:
+        nexus OrderEndpoint OrderService.PlaceOrder(order) -> result:
+            activity HandleResult(result)
+        timer(5m):
+            activity HandleTimeout()
+
+# ===== ACTIVITY DEFINITIONS =====
+
+activity ValidateOrder(order: Order) -> (Validation):
+    return validate(order)
+
+activity ChargePayment(order: Order) -> (Payment):
+    return charge(order)
+
+activity FetchStatus(orderId: string) -> (Status):
+    return getStatus(orderId)
+
+activity SendEmailActivity(email: Email) -> (Result):
+    return send(email)
+
+activity SendSMSActivity(sms: SMS) -> (Result):
+    return send(sms)
+
+activity HandleResult(result: Result):
+    handle(result)
+
+activity HandleTimeout():
+    handleTimeout()
+
+# ===== WORKER DEFINITIONS =====
+
+worker OrderWorker:
+    workflow ProcessOrder
+    workflow Caller
+    workflow AwaitOneNexusTest
+    activity ValidateOrder
+    activity ChargePayment
+    activity FetchStatus
+    activity HandleResult
+    activity HandleTimeout
+    nexus service OrderService
+
+worker NotificationWorker:
+    workflow EmailWorkflow
+    workflow SMSWorkflow
+    activity SendEmailActivity
+    activity SendSMSActivity
+    nexus service NotificationService
+
+# ===== NAMESPACE DEFINITIONS =====
+
+namespace Orders:
+    worker OrderWorker
+        options:
+            task_queue: "orders"
+    worker NotificationWorker
+        options:
+            task_queue: "notifications"
+    nexus endpoint OrderEndpoint
+        options:
+            task_queue: "orders"
+    nexus endpoint NotificationEndpoint
+        options:
+            task_queue: "notifications"

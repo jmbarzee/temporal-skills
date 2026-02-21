@@ -1,5 +1,16 @@
 # Source: nexus.md
-# Patterns: cross-namespace calls via nexus: child, promise, detach
+# Patterns: nexus service definitions, endpoint routing, cross-namespace calls
+
+# --- Nexus service definition ---
+
+nexus service PaymentsService:
+    async ProcessPayment workflow ProcessPaymentWorkflow
+    sync GetPaymentStatus(paymentId: string) -> (PaymentStatus):
+        activity LookupPayment(paymentId) -> status
+        close complete(status)
+
+nexus service NotificationsService:
+    async SendConfirmation workflow SendConfirmationWorkflow
 
 # --- Caller workflow using nexus ---
 
@@ -7,41 +18,45 @@ workflow OrderWorkflow(order: Order) -> (OrderResult):
     # Validate locally
     activity ValidateOrder(order)
 
-    # Call into payments namespace via Nexus (child call)
-    nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
+    # Call into payments via Nexus endpoint (child call)
+    nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> paymentResult
 
-    # Call into notifications namespace (fire-and-forget)
-    detach nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
+    # Call into notifications (fire-and-forget)
+    detach nexus NotificationsEndpoint NotificationsService.SendConfirmation(order.customer, paymentResult)
 
     close complete(OrderResult{paymentId: paymentResult.id})
 
-# --- Spawn nexus workflow (async) ---
+# --- Async nexus call (promise) ---
 
 workflow AsyncNexusCaller(data: Data) -> (Result):
-    # Run nexus call and local work in parallel
-    await all:
-        nexus "processing" workflow ProcessAsync(data) -> processResult
-        activity DoLocalWork(data) -> localResult
+    # Start nexus call, get promise
+    promise paymentHandle <- nexus PaymentsEndpoint PaymentsService.ProcessPayment(data.payment)
 
-    close complete(Result{localResult, processResult})
+    # Do other work in parallel
+    activity DoLocalWork(data) -> localResult
 
-# --- Multiple nexus calls ---
+    # Wait for nexus result when needed
+    await paymentHandle -> paymentResult
 
-workflow MultiNamespaceWorkflow(request: Request) -> (AggregateResult):
-    # Call different namespaces
-    nexus "inventory" workflow CheckInventory(request.items) -> inventoryResult
-    nexus "pricing" workflow CalculatePrice(request.items) -> priceResult
-    nexus "shipping" workflow EstimateShipping(request.destination) -> shippingResult
-
-    close complete(AggregateResult{inventoryResult, priceResult, shippingResult})
+    close complete(Result{localResult, paymentResult})
 
 # --- Nexus with options ---
 
 workflow NexusWithOptions(payment: Payment) -> (PaymentResult):
-    nexus "payments" workflow ChargeCard(payment) -> result
+    nexus PaymentsEndpoint PaymentsService.ProcessPayment(payment) -> result
         options:
-            workflow_execution_timeout: 5m
+            schedule_to_close_timeout: 5m
     close complete(PaymentResult{result})
+
+# --- Nexus error handling with await one ---
+
+workflow NexusWithTimeout(data: Data) -> (Result):
+    await one:
+        nexus PaymentsEndpoint PaymentsService.ProcessPayment(data) -> result:
+            close complete(Result{success: true, data: result})
+        timer(5m):
+            activity AlertTimeout(data)
+            close fail(Result{success: false, error: "timeout"})
 
 # --- Supporting local activities ---
 
@@ -51,37 +66,23 @@ activity ValidateOrder(order: Order):
 activity DoLocalWork(data: Data) -> (LocalResult):
     return process(data)
 
-# --- Target namespace workflows (would be in separate files in practice) ---
+activity AlertTimeout(data: Data):
+    alert(data)
 
-workflow ProcessPayment(payment: Payment) -> (PaymentResult):
+activity LookupPayment(paymentId: string) -> (PaymentStatus):
+    return lookup(paymentId)
+
+# --- Target workflows ---
+
+workflow ProcessPaymentWorkflow(payment: Payment) -> (PaymentResult):
     activity ValidatePaymentDetails(payment)
     activity ChargePaymentMethod(payment) -> result
     activity RecordTransaction(result)
     close complete(PaymentResult{id: result.id})
 
-workflow SendConfirmation(customer: Customer, paymentResult: PaymentResult):
+workflow SendConfirmationWorkflow(customer: Customer, paymentResult: PaymentResult):
     activity SendEmail(customer.email, paymentResult)
     close complete
-
-workflow ProcessAsync(data: Data) -> (ProcessResult):
-    activity ProcessData(data) -> result
-    close complete(ProcessResult{result})
-
-workflow CheckInventory(items: []Item) -> (InventoryResult):
-    activity CheckStock(items) -> stock
-    close complete(InventoryResult{stock})
-
-workflow CalculatePrice(items: []Item) -> (PriceResult):
-    activity ComputePrice(items) -> price
-    close complete(PriceResult{price})
-
-workflow EstimateShipping(destination: Address) -> (ShippingResult):
-    activity CalcShipping(destination) -> estimate
-    close complete(ShippingResult{estimate})
-
-workflow ChargeCard(payment: Payment) -> (ChargeResult):
-    activity ProcessCharge(payment) -> result
-    close complete(ChargeResult{result})
 
 # --- Supporting activities for target workflows ---
 
@@ -97,17 +98,43 @@ activity RecordTransaction(result: ChargeResult):
 activity SendEmail(email: string, data: PaymentResult):
     send(email, data)
 
-activity ProcessData(data: Data) -> (Result):
-    return process(data)
+# --- Worker and namespace definitions ---
 
-activity CheckStock(items: []Item) -> (StockInfo):
-    return check(items)
+worker paymentWorker:
+    workflow ProcessPaymentWorkflow
+    activity ValidatePaymentDetails
+    activity ChargePaymentMethod
+    activity RecordTransaction
+    activity LookupPayment
+    nexus service PaymentsService
 
-activity ComputePrice(items: []Item) -> (Price):
-    return compute(items)
+worker notificationWorker:
+    workflow SendConfirmationWorkflow
+    activity SendEmail
+    nexus service NotificationsService
 
-activity CalcShipping(destination: Address) -> (Estimate):
-    return calculate(destination)
+worker orderWorker:
+    workflow OrderWorkflow
+    workflow AsyncNexusCaller
+    workflow NexusWithOptions
+    workflow NexusWithTimeout
+    activity ValidateOrder
+    activity DoLocalWork
+    activity AlertTimeout
 
-activity ProcessCharge(payment: Payment) -> (ChargeResult):
-    return charge(payment)
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orders"
+    worker paymentWorker
+        options:
+            task_queue: "payments"
+    worker notificationWorker
+        options:
+            task_queue: "notifications"
+    nexus endpoint PaymentsEndpoint
+        options:
+            task_queue: "payments"
+    nexus endpoint NotificationsEndpoint
+        options:
+            task_queue: "notifications"

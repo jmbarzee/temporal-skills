@@ -48,13 +48,14 @@ func init() {
 		token.ACTIVITY:  parseActivityDef,
 		token.WORKER:    parseWorkerDef,
 		token.NAMESPACE: parseNamespaceDef,
+		token.NEXUS:     parseNexusTopLevel,
 	}
 
 	workflowStmtParsers = map[token.TokenType]stmtParser{
 		token.ACTIVITY:        parseActivityCall,
 		token.WORKFLOW:        parseWorkflowCall,
-		token.DETACH:          parseWorkflowCall,
-		token.NEXUS:           parseWorkflowCall,
+		token.DETACH:          parseWorkflowCallOrNexus,
+		token.NEXUS:           parseNexusCall,
 		token.AWAIT:           parseAwaitStmt, // handles both single await and await blocks
 		token.PROMISE:         parsePromiseStmt,
 		token.SET:             parseSetStmt,
@@ -87,6 +88,8 @@ var temporalKeywords = map[token.TokenType]bool{
 	token.UPDATE:          true,
 	token.DETACH:          true,
 	token.NEXUS:           true,
+	token.SYNC:            true,
+	token.ASYNC:           true,
 	token.PROMISE:         true,
 	token.CONDITION:       true,
 	token.SET:             true,

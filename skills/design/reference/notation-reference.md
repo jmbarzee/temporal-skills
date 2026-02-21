@@ -4,7 +4,9 @@
 |--------|---------|
 | `activity Name(args) -> result` | Call activity, bind result |
 | `workflow Name(args) -> result` | Call child workflow, bind result |
-| `nexus "namespace" workflow Name(args) -> result` | Cross-namespace workflow call |
+| `nexus Endpoint Service.Op(args) -> result` | Nexus service operation call |
+| `detach nexus Endpoint Service.Op(args)` | Fire-and-forget nexus call |
+| `promise p <- nexus Endpoint Service.Op(args)` | Start async nexus call |
 | `promise p <- activity Name(args)` | Start async activity |
 | `promise p <- workflow Name(args)` | Start async child workflow |
 | `promise p <- timer(duration)` | Start async timer |
@@ -16,13 +18,13 @@
 | `unset name` | Set condition false |
 | `await name` | Await condition |
 | `detach workflow Name(args)` | Fire-and-forget child workflow |
-| `detach nexus "ns" workflow Name(args)` | Fire-and-forget nexus call |
 | `await timer(duration)` | Durable sleep |
 | `await signal Name` | Wait for signal |
 | `await update Name` | Wait for update |
+| `await nexus Endpoint Service.Op(args) -> result` | Wait for nexus call |
 | `await one:` | Race: first to complete wins |
 | `await all:` | Join: wait for all |
-| `options: key: value` | Options block for activity/workflow calls |
+| `options: key: value` | Options block for activity/workflow/nexus calls |
 | `-> (Type)` | Return type (always parenthesized) |
 | `-> result` | Bind preceding result |
 | `close complete\|fail\|continue_as_new(Value)` | End workflow with result, failure, or continuation |
@@ -34,7 +36,12 @@
 | `signal Name(params):` | Signal handler (in workflow, before body) |
 | `query Name(params) -> (Type):` | Query handler (in workflow, before body) |
 | `update Name(params) -> (Type):` | Update handler (in workflow, before body) |
-| `worker name:` | Worker type set definition (workflows + activities) |
-| `namespace name:` | Namespace definition (worker deployment with options) |
+| `nexus service Name:` | Nexus service definition (top-level) |
+| `async OpName workflow WorkflowName` | Async nexus operation (in service body) |
+| `sync OpName(params) -> (Type):` | Sync nexus operation (in service body) |
+| `worker name:` | Worker type set definition |
+| `nexus service Name` (in worker) | Register nexus service on worker |
+| `namespace name:` | Namespace definition (deployment with options) |
+| `nexus endpoint Name` (in namespace) | Nexus endpoint instantiation with task_queue |
 
-Full grammar: [`LANGUAGE.md`](../lsp/LANGUAGE.md).
+Full grammar: [`LANGUAGE.md`](../../tools/lsp/LANGUAGE.md).

@@ -94,6 +94,10 @@ func (l *Lexer) NextToken() token.Token {
 			l.advance()
 			l.advance()
 
+		case ch == '.':
+			tok = l.makeToken(token.DOT, ".")
+			l.advance()
+
 		case isDigit(ch):
 			tok = l.scanNumber()
 

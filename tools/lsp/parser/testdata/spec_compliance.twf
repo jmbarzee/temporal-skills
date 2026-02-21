@@ -98,8 +98,8 @@ workflow SpecCompliance(input: Input) -> (Result):
     # Test: Detach workflow
     detach workflow FireAndForget(data)
 
-    # Test: Nexus workflow
-    nexus "external-service" workflow ExternalTask(data) -> extResult
+    # Test: Nexus call
+    nexus ExternalEndpoint ExternalService.ExternalTask(data) -> extResult
 
     # ===== TIMERS =====
     await timer(5m)
@@ -257,6 +257,14 @@ activity Compute(value: int, flag: bool) -> (Result):
 activity ComplexOptions(input: Input) -> (Result):
     return Result{input: input}
 
+activity Test():
+    doTest()
+
+# ===== NEXUS SERVICE DEFINITIONS =====
+
+nexus service ExternalService:
+    async ExternalTask workflow ExternalTask
+
 # ===== WORKER DEFINITIONS =====
 
 worker specWorker:
@@ -291,10 +299,15 @@ worker specWorker:
     activity TestNested
     activity Compute
     activity ComplexOptions
+    activity Test
+    nexus service ExternalService
 
 # ===== NAMESPACE DEFINITIONS =====
 
 namespace specTests:
     worker specWorker
+        options:
+            task_queue: "specQueue"
+    nexus endpoint ExternalEndpoint
         options:
             task_queue: "specQueue"

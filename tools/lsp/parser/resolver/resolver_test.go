@@ -552,3 +552,337 @@ activity ValidateAddr(addr: string) -> (bool):
 		t.Errorf("resolved to %q, expected 'ValidateAddr'", updBody.Resolved.Name)
 	}
 }
+
+// ===== NEXUS RESOLVER TESTS =====
+
+func TestNexusResolutionSuccess(t *testing.T) {
+	input := `nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+
+workflow ProcessOrder(order: Order) -> (Result):
+    close complete(Result{})
+
+workflow Caller():
+    nexus OrderEndpoint OrderService.PlaceOrder(order) -> result
+    close complete(result)
+
+activity Dummy():
+    pass()
+
+worker w:
+    workflow ProcessOrder
+    workflow Caller
+    activity Dummy
+    nexus service OrderService
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint OrderEndpoint
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		t.Errorf("unexpected error: %v (severity: %s)", e, e.Severity)
+	}
+
+	// Verify resolution links on NexusCall.
+	caller := file.Definitions[2].(*ast.WorkflowDef)
+	call := caller.Body[0].(*ast.NexusCall)
+	if call.ResolvedService == nil {
+		t.Error("nexus call service not resolved")
+	} else if call.ResolvedService.Name != "OrderService" {
+		t.Errorf("resolved service %q, expected 'OrderService'", call.ResolvedService.Name)
+	}
+	if call.ResolvedOperation == nil {
+		t.Error("nexus call operation not resolved")
+	} else if call.ResolvedOperation.Name != "PlaceOrder" {
+		t.Errorf("resolved operation %q, expected 'PlaceOrder'", call.ResolvedOperation.Name)
+	}
+}
+
+func TestNexusDuplicateService(t *testing.T) {
+	input := `nexus service Svc:
+    async Op workflow W
+
+nexus service Svc:
+    async Op workflow W
+
+workflow W():
+    close complete(Result{})
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "duplicate nexus service definition: Svc") {
+		t.Error("expected error about duplicate nexus service definition")
+	}
+}
+
+func TestNexusDuplicateEndpoint(t *testing.T) {
+	input := `worker w:
+    workflow W
+
+workflow W():
+    close complete(Result{})
+
+namespace ns1:
+    worker w
+        options:
+            task_queue: "q1"
+    nexus endpoint Ep
+        options:
+            task_queue: "q1"
+
+namespace ns2:
+    worker w
+        options:
+            task_queue: "q2"
+    nexus endpoint Ep
+        options:
+            task_queue: "q2"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "duplicate nexus endpoint name") {
+		t.Error("expected error about duplicate nexus endpoint name")
+	}
+}
+
+func TestNexusUndefinedEndpoint(t *testing.T) {
+	input := `nexus service Svc:
+    async Op workflow W
+
+workflow W():
+    nexus MissingEndpoint Svc.Op(x) -> result
+    close complete(result)
+
+worker w:
+    workflow W
+    nexus service Svc
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint RealEndpoint
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "undefined nexus endpoint: MissingEndpoint") {
+		t.Error("expected error about undefined nexus endpoint")
+	}
+}
+
+func TestNexusUndefinedService(t *testing.T) {
+	input := `nexus service RealService:
+    async Op workflow W
+
+workflow W():
+    nexus Ep MissingService.Op(x) -> result
+    close complete(result)
+
+worker w:
+    workflow W
+    nexus service RealService
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint Ep
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "undefined nexus service: MissingService") {
+		t.Error("expected error about undefined nexus service")
+	}
+}
+
+func TestNexusUndefinedOperation(t *testing.T) {
+	input := `nexus service Svc:
+    async RealOp workflow W
+
+workflow W():
+    nexus Ep Svc.MissingOp(x) -> result
+    close complete(result)
+
+worker w:
+    workflow W
+    nexus service Svc
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint Ep
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "nexus service Svc has no operation MissingOp") {
+		t.Error("expected error about missing operation")
+	}
+}
+
+func TestNexusDetachWithResult(t *testing.T) {
+	// The parser itself rejects detach nexus with a result binding.
+	input := `workflow W():
+    detach nexus Ep Svc.Op(x) -> result
+`
+	_, err := parser.ParseFile(input)
+	if err == nil {
+		t.Fatal("expected parse error for detach nexus with result")
+	}
+	if !strings.Contains(err.Error(), "detach nexus call cannot have a result") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestNexusAsyncUndefinedWorkflow(t *testing.T) {
+	input := `nexus service Svc:
+    async Op workflow MissingWorkflow
+
+workflow W():
+    close complete(Result{})
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "async operation Op references undefined workflow: MissingWorkflow") {
+		t.Error("expected error about async op referencing undefined workflow")
+	}
+}
+
+func TestNexusWorkerUndefinedService(t *testing.T) {
+	input := `workflow W():
+    close complete(Result{})
+
+worker w:
+    workflow W
+    nexus service MissingService
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "undefined nexus service: MissingService") {
+		t.Error("expected error about worker referencing undefined nexus service")
+	}
+}
+
+func TestNexusEndpointMissingTaskQueue(t *testing.T) {
+	input := `worker w:
+    workflow W
+
+workflow W():
+    close complete(Result{})
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint Ep
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "nexus endpoint Ep in namespace ns missing required task_queue option") {
+		t.Error("expected error about endpoint missing task_queue")
+	}
+}
+
+func TestNexusEndpointServiceLinkage(t *testing.T) {
+	input := `nexus service Svc:
+    async Op workflow W
+
+workflow W():
+    nexus Ep Svc.Op(x) -> result
+    close complete(result)
+
+worker w:
+    workflow W
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+    nexus endpoint Ep
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, "no worker on that queue has service Svc") {
+		t.Error("expected error about endpoint-service linkage")
+	}
+}
+
+func TestNexusServiceNotOnWorker(t *testing.T) {
+	input := `nexus service UnusedService:
+    async Op workflow W
+
+workflow W():
+    close complete(Result{})
+
+worker w:
+    workflow W
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "nexus service UnusedService is not referenced by any worker") {
+		t.Error("expected warning about nexus service not on any worker")
+	}
+}
+
+func TestNexusCallNoEndpointsDefined(t *testing.T) {
+	input := `workflow W():
+    nexus Ep Svc.Op(x) -> result
+    close complete(result)
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "unresolved nexus endpoint: Ep") {
+		t.Error("expected warning about unresolved endpoint (no endpoints defined)")
+	}
+}
+
+func TestNexusCallNoServicesDefined(t *testing.T) {
+	input := `workflow W():
+    nexus Ep Svc.Op(x) -> result
+    close complete(result)
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "unresolved nexus service: Svc") {
+		t.Error("expected warning about unresolved service (no services defined)")
+	}
+}
+
+// hasError checks if any non-warning error contains the given substring.
+func hasError(errs []*ResolveError, substr string) bool {
+	for _, e := range errs {
+		if e.Severity != "warning" && strings.Contains(e.Msg, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasWarning checks if any warning contains the given substring.
+func hasWarning(errs []*ResolveError, substr string) bool {
+	for _, e := range errs {
+		if e.Severity == "warning" && strings.Contains(e.Msg, substr) {
+			return true
+		}
+	}
+	return false
+}

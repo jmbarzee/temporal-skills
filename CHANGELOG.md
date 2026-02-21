@@ -1,5 +1,58 @@
 # TWF Language Changelog
 
+## v0.7.0 - Full Nexus Support
+
+**Breaking change** — The old `nexus "namespace" workflow Name(args)` syntax is replaced with a structured nexus model.
+
+### What changed
+
+Nexus is now a first-class concept with service definitions, endpoint instantiations, and typed operation calls.
+
+### New constructs
+
+- **Nexus service definitions** (top-level): `nexus service Name:` with `async` and `sync` operations
+- **Nexus endpoint instantiations** (in namespace blocks): `nexus endpoint Name` with `task_queue` routing
+- **Nexus service references** (in worker blocks): `nexus service Name`
+- **Nexus call syntax** (in workflow bodies): `nexus Endpoint Service.Operation(args) -> result`
+- **New tokens**: `sync`, `async`, `.` (dot)
+
+### Before (v0.6.0)
+
+```twf
+workflow Caller(order: Order) -> (Result):
+    nexus "payments" workflow ProcessPayment(order.payment) -> result
+    detach nexus "notifications" workflow SendEmail(order.email)
+```
+
+### After (v0.7.0)
+
+```twf
+nexus service PaymentsService:
+    async ProcessPayment workflow ProcessPaymentWorkflow
+
+workflow Caller(order: Order) -> (Result):
+    nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> result
+    detach nexus NotificationsEndpoint NotificationsService.SendEmail(order.email)
+
+worker orderWorker:
+    workflow Caller
+    nexus service PaymentsService
+
+namespace orders:
+    worker orderWorker
+        options:
+            task_queue: "orders"
+    nexus endpoint PaymentsEndpoint
+        options:
+            task_queue: "payments"
+```
+
+### Resolver additions
+
+10 new error types and 3 new warning types for comprehensive nexus validation including duplicate service/endpoint checks, endpoint-service linkage, and external reference warnings.
+
+---
+
 ## v0.6.0 - Namespace Blocks & Worker Refactor
 
 **Breaking change** — Workers are now reusable type sets. Deployment configuration (namespace, task_queue) has been moved to namespace blocks.

@@ -73,6 +73,26 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 				p.advance()
 			}
 
+		case token.NEXUS:
+			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
+			p.advance() // consume NEXUS
+			// Expect IDENT "service"
+			if p.current.Type != token.IDENT || p.current.Literal != "service" {
+				return nil, p.errorf("expected 'service' after 'nexus' in worker block, got %s %q", p.current.Type, p.current.Literal)
+			}
+			p.advance() // consume "service"
+			svcName, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			worker.Services = append(worker.Services, ast.WorkerRef{
+				Pos:  refPos,
+				Name: svcName.Literal,
+			})
+			if p.current.Type == token.NEWLINE {
+				p.advance()
+			}
+
 		default:
 			return nil, p.errorf("unexpected %s in worker block", p.current.Type)
 		}

@@ -50,30 +50,10 @@ func parseActivityCall(p *Parser) (ast.Statement, error) {
 	}, nil
 }
 
-// parseWorkflowCall parses:
-// [ DETACH ] [ NEXUS STRING ] WORKFLOW IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ]
+// parseWorkflowCall parses: WORKFLOW IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ]
 func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-
-	mode := ast.CallChild
-	if p.current.Type == token.DETACH {
-		mode = ast.CallDetach
-		p.advance()
-	}
-
-	var namespace string
-	if p.current.Type == token.NEXUS {
-		p.advance()
-		ns, err := p.expect(token.STRING)
-		if err != nil {
-			return nil, err
-		}
-		namespace = ns.Literal
-	}
-
-	if _, err := p.expect(token.WORKFLOW); err != nil {
-		return nil, err
-	}
+	p.advance() // consume WORKFLOW
 
 	name, err := p.expect(token.IDENT)
 	if err != nil {
@@ -95,15 +75,6 @@ func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 		result = res.Literal
 	}
 
-	// Validate: detach + arrow = error
-	if mode == ast.CallDetach && result != "" {
-		return nil, &ParseError{
-			Msg:    "detach workflow call cannot have a result (-> identifier)",
-			Line:   pos.Line,
-			Column: pos.Column,
-		}
-	}
-
 	if p.current.Type == token.NEWLINE {
 		p.advance()
 	}
@@ -114,13 +85,12 @@ func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.WorkflowCall{
-		Pos:       pos,
-		Mode:      mode,
-		Namespace: namespace,
-		Name:      name.Literal,
-		Args:      args.Literal,
-		Result:    result,
-		Options:   options,
+		Pos:     pos,
+		Mode:    ast.CallChild,
+		Name:    name.Literal,
+		Args:    args.Literal,
+		Result:  result,
+		Options: options,
 	}, nil
 }
 
@@ -220,39 +190,120 @@ func parseSingleAwait(p *Parser, pos ast.Pos) (*ast.AwaitStmt, error) {
 		}
 
 	case token.DETACH, token.WORKFLOW:
-		// await [detach] workflow Name(args) [-> result]
+		// await [detach] [nexus Endpoint Service.Op(args) | workflow Name(args)] [-> result]
 		mode := ast.CallChild
 		if p.current.Type == token.DETACH {
 			mode = ast.CallDetach
 			p.advance()
 		}
-		stmt.WorkflowMode = mode
 
-		// Optional nexus namespace
 		if p.current.Type == token.NEXUS {
+			// await [detach] nexus Endpoint Service.Op(args) [-> result]
 			p.advance()
-			ns, err := p.expect(token.STRING)
+			endpoint, err := p.expect(token.IDENT)
 			if err != nil {
 				return nil, err
 			}
-			stmt.WorkflowNamespace = ns.Literal
+			service, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(token.DOT); err != nil {
+				return nil, err
+			}
+			operation, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			args, err := p.expect(token.ARGS)
+			if err != nil {
+				return nil, err
+			}
+			stmt.Nexus = endpoint.Literal
+			stmt.NexusService = service.Literal
+			stmt.NexusOperation = operation.Literal
+			stmt.NexusArgs = args.Literal
+			stmt.NexusDetach = mode == ast.CallDetach
+
+			if p.current.Type == token.ARROW {
+				p.advance()
+				result, err := p.expect(token.IDENT)
+				if err != nil {
+					return nil, err
+				}
+				stmt.NexusResult = result.Literal
+			}
+
+			if stmt.NexusDetach && stmt.NexusResult != "" {
+				return nil, &ParseError{
+					Msg:    "detach nexus call cannot have a result (-> identifier)",
+					Line:   pos.Line,
+					Column: pos.Column,
+				}
+			}
+		} else {
+			// await [detach] workflow Name(args) [-> result]
+			stmt.WorkflowMode = mode
+			if _, err := p.expect(token.WORKFLOW); err != nil {
+				return nil, err
+			}
+
+			name, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			stmt.Workflow = name.Literal
+
+			args, err := p.expect(token.ARGS)
+			if err != nil {
+				return nil, err
+			}
+			stmt.WorkflowArgs = args.Literal
+
+			if p.current.Type == token.ARROW {
+				p.advance()
+				result, err := p.expect(token.IDENT)
+				if err != nil {
+					return nil, err
+				}
+				stmt.WorkflowResult = result.Literal
+			}
+
+			if mode == ast.CallDetach && stmt.WorkflowResult != "" {
+				return nil, &ParseError{
+					Msg:    "detach workflow cannot have a result (-> identifier)",
+					Line:   pos.Line,
+					Column: pos.Column,
+				}
+			}
 		}
 
-		if _, err := p.expect(token.WORKFLOW); err != nil {
-			return nil, err
-		}
-
-		name, err := p.expect(token.IDENT)
+	case token.NEXUS:
+		// await nexus Endpoint Service.Op(args) [-> result]
+		p.advance()
+		endpoint, err := p.expect(token.IDENT)
 		if err != nil {
 			return nil, err
 		}
-		stmt.Workflow = name.Literal
-
+		service, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.DOT); err != nil {
+			return nil, err
+		}
+		operation, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
 		args, err := p.expect(token.ARGS)
 		if err != nil {
 			return nil, err
 		}
-		stmt.WorkflowArgs = args.Literal
+		stmt.Nexus = endpoint.Literal
+		stmt.NexusService = service.Literal
+		stmt.NexusOperation = operation.Literal
+		stmt.NexusArgs = args.Literal
 
 		if p.current.Type == token.ARROW {
 			p.advance()
@@ -260,16 +311,7 @@ func parseSingleAwait(p *Parser, pos ast.Pos) (*ast.AwaitStmt, error) {
 			if err != nil {
 				return nil, err
 			}
-			stmt.WorkflowResult = result.Literal
-		}
-
-		// Validate: detach + arrow = error
-		if mode == ast.CallDetach && stmt.WorkflowResult != "" {
-			return nil, &ParseError{
-				Msg:    "detach workflow cannot have a result (-> identifier)",
-				Line:   pos.Line,
-				Column: pos.Column,
-			}
+			stmt.NexusResult = result.Literal
 		}
 
 	case token.IDENT:
@@ -287,7 +329,7 @@ func parseSingleAwait(p *Parser, pos ast.Pos) (*ast.AwaitStmt, error) {
 		}
 
 	default:
-		return nil, p.errorf("expected timer, signal, update, activity, workflow, or identifier after 'await', got %s", p.current.Type)
+		return nil, p.errorf("expected timer, signal, update, activity, workflow, nexus, or identifier after 'await', got %s", p.current.Type)
 	}
 
 	if p.current.Type == token.NEWLINE {
@@ -505,55 +547,91 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 		return c, nil
 
 	case token.DETACH, token.WORKFLOW:
-		// [detach] workflow Name(args) [-> result]: [body]
+		// [detach] [nexus Endpoint Service.Op(args) | workflow Name(args)] [-> result]: [body]
 		mode := ast.CallChild
 		if p.current.Type == token.DETACH {
 			mode = ast.CallDetach
 			p.advance()
 		}
-		c.WorkflowMode = mode
 
-		// Optional nexus namespace
 		if p.current.Type == token.NEXUS {
+			// [detach] nexus Endpoint Service.Op(args) [-> result]:
 			p.advance()
-			ns, err := p.expect(token.STRING)
+			endpoint, err := p.expect(token.IDENT)
 			if err != nil {
 				return nil, err
 			}
-			c.WorkflowNamespace = ns.Literal
-		}
-
-		if _, err := p.expect(token.WORKFLOW); err != nil {
-			return nil, err
-		}
-
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		c.Workflow = name.Literal
-
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		c.WorkflowArgs = args.Literal
-
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
+			service, err := p.expect(token.IDENT)
 			if err != nil {
 				return nil, err
 			}
-			c.WorkflowResult = result.Literal
-		}
+			if _, err := p.expect(token.DOT); err != nil {
+				return nil, err
+			}
+			operation, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			args, err := p.expect(token.ARGS)
+			if err != nil {
+				return nil, err
+			}
+			c.Nexus = endpoint.Literal
+			c.NexusService = service.Literal
+			c.NexusOperation = operation.Literal
+			c.NexusArgs = args.Literal
+			c.NexusDetach = mode == ast.CallDetach
 
-		// Validate: detach + arrow = error
-		if mode == ast.CallDetach && c.WorkflowResult != "" {
-			return nil, &ParseError{
-				Msg:    "detach workflow cannot have a result (-> identifier)",
-				Line:   pos.Line,
-				Column: pos.Column,
+			if p.current.Type == token.ARROW {
+				p.advance()
+				result, err := p.expect(token.IDENT)
+				if err != nil {
+					return nil, err
+				}
+				c.NexusResult = result.Literal
+			}
+
+			if c.NexusDetach && c.NexusResult != "" {
+				return nil, &ParseError{
+					Msg:    "detach nexus call cannot have a result (-> identifier)",
+					Line:   pos.Line,
+					Column: pos.Column,
+				}
+			}
+		} else {
+			// [detach] workflow Name(args) [-> result]:
+			c.WorkflowMode = mode
+			if _, err := p.expect(token.WORKFLOW); err != nil {
+				return nil, err
+			}
+
+			name, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			c.Workflow = name.Literal
+
+			args, err := p.expect(token.ARGS)
+			if err != nil {
+				return nil, err
+			}
+			c.WorkflowArgs = args.Literal
+
+			if p.current.Type == token.ARROW {
+				p.advance()
+				result, err := p.expect(token.IDENT)
+				if err != nil {
+					return nil, err
+				}
+				c.WorkflowResult = result.Literal
+			}
+
+			if mode == ast.CallDetach && c.WorkflowResult != "" {
+				return nil, &ParseError{
+					Msg:    "detach workflow cannot have a result (-> identifier)",
+					Line:   pos.Line,
+					Column: pos.Column,
+				}
 			}
 		}
 
@@ -561,7 +639,53 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 			return nil, err
 		}
 
-		// Parse optional body
+		body, err := parseOptionalCaseBody(p)
+		if err != nil {
+			return nil, err
+		}
+		c.Body = body
+		return c, nil
+
+	case token.NEXUS:
+		// nexus Endpoint Service.Op(args) [-> result]:
+		p.advance()
+		endpoint, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		service, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.DOT); err != nil {
+			return nil, err
+		}
+		operation, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		c.Nexus = endpoint.Literal
+		c.NexusService = service.Literal
+		c.NexusOperation = operation.Literal
+		c.NexusArgs = args.Literal
+
+		if p.current.Type == token.ARROW {
+			p.advance()
+			result, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, err
+			}
+			c.NexusResult = result.Literal
+		}
+
+		if _, err := p.expect(token.COLON); err != nil {
+			return nil, err
+		}
+
 		body, err := parseOptionalCaseBody(p)
 		if err != nil {
 			return nil, err
@@ -608,7 +732,7 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 		return c, nil
 
 	default:
-		return nil, p.errorf("unexpected token %s in await one case (expected signal, update, timer, activity, workflow, identifier, or await)", p.current.Type)
+		return nil, p.errorf("unexpected token %s in await one case (expected signal, update, timer, activity, workflow, nexus, identifier, or await)", p.current.Type)
 	}
 }
 
@@ -640,7 +764,7 @@ func parseOptionalCaseBody(p *Parser) ([]ast.Statement, error) {
 func isCaseKeyword(t token.TokenType) bool {
 	return t == token.SIGNAL || t == token.UPDATE || t == token.TIMER ||
 		t == token.ACTIVITY || t == token.WORKFLOW ||
-		t == token.DETACH || t == token.AWAIT || t == token.IDENT
+		t == token.DETACH || t == token.NEXUS || t == token.AWAIT || t == token.IDENT
 }
 
 // parsePromiseStmt parses: PROMISE IDENT LEFT_ARROW async_target NEWLINE
@@ -702,21 +826,8 @@ func parsePromiseStmt(p *Parser) (ast.Statement, error) {
 		}
 		stmt.ActivityArgs = args.Literal
 
-	case token.WORKFLOW, token.NEXUS:
-		// Optional nexus namespace
-		if p.current.Type == token.NEXUS {
-			p.advance()
-			ns, err := p.expect(token.STRING)
-			if err != nil {
-				return nil, err
-			}
-			stmt.WorkflowNamespace = ns.Literal
-		}
-
-		if _, err := p.expect(token.WORKFLOW); err != nil {
-			return nil, err
-		}
-
+	case token.WORKFLOW:
+		p.advance() // consume WORKFLOW
 		wfName, err := p.expect(token.IDENT)
 		if err != nil {
 			return nil, err
@@ -729,8 +840,34 @@ func parsePromiseStmt(p *Parser) (ast.Statement, error) {
 		}
 		stmt.WorkflowArgs = args.Literal
 
+	case token.NEXUS:
+		p.advance() // consume NEXUS
+		endpoint, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		service, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.DOT); err != nil {
+			return nil, err
+		}
+		operation, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		args, err := p.expect(token.ARGS)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Nexus = endpoint.Literal
+		stmt.NexusService = service.Literal
+		stmt.NexusOperation = operation.Literal
+		stmt.NexusArgs = args.Literal
+
 	default:
-		return nil, p.errorf("expected timer, signal, update, activity, or workflow after '<-', got %s", p.current.Type)
+		return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
 	}
 
 	if p.current.Type == token.NEWLINE {

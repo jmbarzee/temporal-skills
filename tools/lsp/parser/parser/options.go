@@ -12,6 +12,8 @@ const (
 	OptionsContextActivity OptionsContext = iota
 	OptionsContextWorkflow
 	OptionsContextWorker
+	OptionsContextNexusCall
+	OptionsContextEndpoint
 )
 
 // optionSchema describes the expected value type for an option key.
@@ -75,6 +77,16 @@ var workflowOptionSchema = map[string]*optionSchema{
 	"priority":                     {valueType: "nested", nested: prioritySchema},
 }
 
+var nexusCallOptionSchema = map[string]*optionSchema{
+	"schedule_to_close_timeout": {valueType: "duration"},
+	"retry_policy":              {valueType: "nested", nested: retryPolicySchema},
+	"priority":                  {valueType: "nested", nested: prioritySchema},
+}
+
+var endpointOptionSchema = map[string]*optionSchema{
+	"task_queue": {valueType: "string"},
+}
+
 func schemaForContext(ctx OptionsContext) map[string]*optionSchema {
 	switch ctx {
 	case OptionsContextActivity:
@@ -83,6 +95,10 @@ func schemaForContext(ctx OptionsContext) map[string]*optionSchema {
 		return workflowOptionSchema
 	case OptionsContextWorker:
 		return workerOptionSchema
+	case OptionsContextNexusCall:
+		return nexusCallOptionSchema
+	case OptionsContextEndpoint:
+		return endpointOptionSchema
 	default:
 		return nil
 	}

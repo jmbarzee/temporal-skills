@@ -299,27 +299,36 @@ func TestWorkflowCallDetach(t *testing.T) {
 	}
 }
 
-func TestWorkflowCallNexus(t *testing.T) {
+func TestNexusCallBasic(t *testing.T) {
 	input := `workflow Foo(x: int) -> (Result):
-    nexus "payments" workflow Charge(card) -> chargeResult
+    nexus PaymentEndpoint PaymentService.Charge(card) -> chargeResult
 `
 	file, err := ParseFile(input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	wf := file.Definitions[0].(*ast.WorkflowDef)
-	call := wf.Body[0].(*ast.WorkflowCall)
-	if call.Mode != ast.CallChild {
-		t.Errorf("expected CallChild, got %d", call.Mode)
+	call, ok := wf.Body[0].(*ast.NexusCall)
+	if !ok {
+		t.Fatalf("expected NexusCall, got %T", wf.Body[0])
 	}
-	if call.Namespace != "payments" {
-		t.Errorf("expected namespace 'payments', got %q", call.Namespace)
+	if call.Endpoint != "PaymentEndpoint" {
+		t.Errorf("expected endpoint 'PaymentEndpoint', got %q", call.Endpoint)
 	}
-	if call.Name != "Charge" {
-		t.Errorf("expected name 'Charge', got %q", call.Name)
+	if call.Service != "PaymentService" {
+		t.Errorf("expected service 'PaymentService', got %q", call.Service)
+	}
+	if call.Operation != "Charge" {
+		t.Errorf("expected operation 'Charge', got %q", call.Operation)
+	}
+	if call.Args != "card" {
+		t.Errorf("expected args 'card', got %q", call.Args)
 	}
 	if call.Result != "chargeResult" {
 		t.Errorf("expected result 'chargeResult', got %q", call.Result)
+	}
+	if call.Detach {
+		t.Error("expected detach false")
 	}
 }
 
@@ -1242,7 +1251,7 @@ func TestFullWorkflow(t *testing.T) {
     workflow ShipOrder(order) -> shipResult
     promise asyncResult <- workflow ProcessAsync(data)
     detach workflow SendNotification(order.customer)
-    nexus "payments" workflow Charge(card) -> chargeResult
+    nexus PaymentEndpoint PaymentService.Charge(card) -> chargeResult
 
     switch (order.type):
         case "invoice":
@@ -1614,5 +1623,310 @@ namespace orders:
 	}
 	if ns.Workers[0].Options != nil {
 		t.Errorf("expected no options, got %v", ns.Workers[0].Options)
+	}
+}
+
+// ===== NEXUS TESTS =====
+
+func TestNexusServiceDef(t *testing.T) {
+	input := `nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+    sync GetStatus(orderId: string) -> (Status):
+        activity FetchStatus(orderId) -> status
+        close complete(status)
+
+workflow ProcessOrder(order: Order) -> (Result):
+    close complete(Result{})
+
+activity FetchStatus(orderId: string) -> (Status):
+    return getStatus(orderId)
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	svc, ok := file.Definitions[0].(*ast.NexusServiceDef)
+	if !ok {
+		t.Fatalf("expected NexusServiceDef, got %T", file.Definitions[0])
+	}
+	if svc.Name != "OrderService" {
+		t.Errorf("expected name 'OrderService', got %q", svc.Name)
+	}
+	if len(svc.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(svc.Operations))
+	}
+
+	asyncOp := svc.Operations[0]
+	if asyncOp.OpType != ast.NexusOpAsync {
+		t.Errorf("expected async operation, got %d", asyncOp.OpType)
+	}
+	if asyncOp.Name != "PlaceOrder" {
+		t.Errorf("expected name 'PlaceOrder', got %q", asyncOp.Name)
+	}
+	if asyncOp.WorkflowName != "ProcessOrder" {
+		t.Errorf("expected workflow 'ProcessOrder', got %q", asyncOp.WorkflowName)
+	}
+
+	syncOp := svc.Operations[1]
+	if syncOp.OpType != ast.NexusOpSync {
+		t.Errorf("expected sync operation, got %d", syncOp.OpType)
+	}
+	if syncOp.Name != "GetStatus" {
+		t.Errorf("expected name 'GetStatus', got %q", syncOp.Name)
+	}
+	if syncOp.Params != "orderId: string" {
+		t.Errorf("expected params 'orderId: string', got %q", syncOp.Params)
+	}
+	if syncOp.ReturnType != "Status" {
+		t.Errorf("expected return type 'Status', got %q", syncOp.ReturnType)
+	}
+	if len(syncOp.Body) != 2 {
+		t.Fatalf("expected 2 body statements, got %d", len(syncOp.Body))
+	}
+}
+
+func TestNexusServiceDefEmptyBody(t *testing.T) {
+	input := `nexus service EmptyService:
+    # just a comment
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	svc := file.Definitions[0].(*ast.NexusServiceDef)
+	if len(svc.Operations) != 0 {
+		t.Errorf("expected 0 operations, got %d", len(svc.Operations))
+	}
+}
+
+func TestNexusCallDetach(t *testing.T) {
+	input := `workflow Foo():
+    detach nexus Endpoint Svc.Op(args)
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	call, ok := wf.Body[0].(*ast.NexusCall)
+	if !ok {
+		t.Fatalf("expected NexusCall, got %T", wf.Body[0])
+	}
+	if !call.Detach {
+		t.Error("expected detach true")
+	}
+	if call.Endpoint != "Endpoint" {
+		t.Errorf("expected endpoint 'Endpoint', got %q", call.Endpoint)
+	}
+	if call.Service != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", call.Service)
+	}
+	if call.Operation != "Op" {
+		t.Errorf("expected operation 'Op', got %q", call.Operation)
+	}
+	if call.Result != "" {
+		t.Errorf("expected no result, got %q", call.Result)
+	}
+}
+
+func TestNexusCallWithOptions(t *testing.T) {
+	input := `workflow Foo():
+    nexus Endpoint Svc.Op(args) -> result
+        options:
+            schedule_to_close_timeout: 30s
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	call := wf.Body[0].(*ast.NexusCall)
+	if call.Options == nil {
+		t.Fatal("expected options block")
+	}
+	if len(call.Options.Entries) != 1 {
+		t.Fatalf("expected 1 option entry, got %d", len(call.Options.Entries))
+	}
+	if call.Options.Entries[0].Key != "schedule_to_close_timeout" {
+		t.Errorf("expected key 'schedule_to_close_timeout', got %q", call.Options.Entries[0].Key)
+	}
+}
+
+func TestNexusCallPromise(t *testing.T) {
+	input := `workflow Foo():
+    promise p <- nexus Endpoint Svc.Op(args)
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	promise, ok := wf.Body[0].(*ast.PromiseStmt)
+	if !ok {
+		t.Fatalf("expected PromiseStmt, got %T", wf.Body[0])
+	}
+	if promise.Name != "p" {
+		t.Errorf("expected name 'p', got %q", promise.Name)
+	}
+	if promise.Nexus != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", promise.Nexus)
+	}
+	if promise.NexusService != "Svc" {
+		t.Errorf("expected nexus service 'Svc', got %q", promise.NexusService)
+	}
+	if promise.NexusOperation != "Op" {
+		t.Errorf("expected nexus operation 'Op', got %q", promise.NexusOperation)
+	}
+	if promise.NexusArgs != "args" {
+		t.Errorf("expected nexus args 'args', got %q", promise.NexusArgs)
+	}
+}
+
+func TestNexusCallAwait(t *testing.T) {
+	input := `workflow Foo():
+    await nexus Endpoint Svc.Op(args) -> result
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	await, ok := wf.Body[0].(*ast.AwaitStmt)
+	if !ok {
+		t.Fatalf("expected AwaitStmt, got %T", wf.Body[0])
+	}
+	if await.AwaitKind() != "nexus" {
+		t.Errorf("expected kind 'nexus', got %q", await.AwaitKind())
+	}
+	if await.Nexus != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", await.Nexus)
+	}
+	if await.NexusService != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", await.NexusService)
+	}
+	if await.NexusOperation != "Op" {
+		t.Errorf("expected operation 'Op', got %q", await.NexusOperation)
+	}
+	if await.NexusResult != "result" {
+		t.Errorf("expected result 'result', got %q", await.NexusResult)
+	}
+}
+
+func TestNexusCallAwaitOne(t *testing.T) {
+	input := `workflow Foo():
+    await one:
+        nexus Endpoint Svc.Op(args) -> result:
+            activity HandleResult(result)
+        timer(5m):
+            activity HandleTimeout()
+
+activity HandleResult(result: Result):
+    handle(result)
+
+activity HandleTimeout():
+    handleTimeout()
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wf := file.Definitions[0].(*ast.WorkflowDef)
+	awaitOne, ok := wf.Body[0].(*ast.AwaitOneBlock)
+	if !ok {
+		t.Fatalf("expected AwaitOneBlock, got %T", wf.Body[0])
+	}
+	if len(awaitOne.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(awaitOne.Cases))
+	}
+	nexusCase := awaitOne.Cases[0]
+	if nexusCase.CaseKind() != "nexus" {
+		t.Errorf("expected kind 'nexus', got %q", nexusCase.CaseKind())
+	}
+	if nexusCase.Nexus != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", nexusCase.Nexus)
+	}
+	if nexusCase.NexusService != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", nexusCase.NexusService)
+	}
+	if nexusCase.NexusOperation != "Op" {
+		t.Errorf("expected operation 'Op', got %q", nexusCase.NexusOperation)
+	}
+	if nexusCase.NexusResult != "result" {
+		t.Errorf("expected result 'result', got %q", nexusCase.NexusResult)
+	}
+	if len(nexusCase.Body) != 1 {
+		t.Fatalf("expected 1 body statement, got %d", len(nexusCase.Body))
+	}
+}
+
+func TestWorkerDefWithNexusService(t *testing.T) {
+	input := `worker OrderWorker:
+    workflow ProcessOrder
+    activity ChargePayment
+    nexus service OrderService
+
+workflow ProcessOrder(order: Order) -> (Result):
+    close complete(Result{})
+
+activity ChargePayment(order: Order) -> (Payment):
+    return charge(order)
+
+nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	worker, ok := file.Definitions[0].(*ast.WorkerDef)
+	if !ok {
+		t.Fatalf("expected WorkerDef, got %T", file.Definitions[0])
+	}
+	if len(worker.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(worker.Services))
+	}
+	if worker.Services[0].Name != "OrderService" {
+		t.Errorf("expected service 'OrderService', got %q", worker.Services[0].Name)
+	}
+}
+
+func TestNamespaceDefWithEndpoint(t *testing.T) {
+	input := `worker OrderWorker:
+    workflow ProcessOrder
+
+namespace Orders:
+    worker OrderWorker
+        options:
+            task_queue: "orders"
+    nexus endpoint OrderEndpoint
+        options:
+            task_queue: "orders"
+
+workflow ProcessOrder(order: Order) -> (Result):
+    close complete(Result{})
+`
+	file, err := ParseFile(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ns := file.Definitions[1].(*ast.NamespaceDef)
+	if len(ns.Endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(ns.Endpoints))
+	}
+	ep := ns.Endpoints[0]
+	if ep.EndpointName != "OrderEndpoint" {
+		t.Errorf("expected endpoint 'OrderEndpoint', got %q", ep.EndpointName)
+	}
+	if ep.Options == nil {
+		t.Fatal("expected endpoint options")
+	}
+	if len(ep.Options.Entries) != 1 {
+		t.Fatalf("expected 1 option entry, got %d", len(ep.Options.Entries))
+	}
+	if ep.Options.Entries[0].Key != "task_queue" {
+		t.Errorf("expected key 'task_queue', got %q", ep.Options.Entries[0].Key)
+	}
+	if ep.Options.Entries[0].Value != "orders" {
+		t.Errorf("expected value 'orders', got %q", ep.Options.Entries[0].Value)
 	}
 }

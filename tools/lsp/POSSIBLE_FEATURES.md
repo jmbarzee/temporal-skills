@@ -4,45 +4,40 @@ Unimplemented features, consolidated from design testing and ongoing use.
 
 ---
 
-## Infrastructure Blocks
+## Naming Conventions
 
-### Worker Block
+### UpperCamelCase for All Top-Level Primitives
 
-Top-level block for worker configuration: interceptors, codecs, worker settings.
-
-```twf
-worker "my-worker":
-    interceptor LoggingInterceptor
-    codec EncryptionCodec(keyId: "key-1")
-    task_queue "my-queue"
-```
-
-**Open questions:** How much deployment topology belongs in a design DSL? Workers are infrastructure, not workflow logic. Could be out of scope if TWF stays purely orchestration-focused.
-
-### Namespace Block
-
-Formal namespace declaration beyond `nexus "name"` syntax.
+Worker type set names and namespace names currently use lowerCamelCase, while workflows/activities use UpperCamelCase. All top-level definitions should consistently use UpperCamelCase.
 
 ```twf
-namespace "orders":
-    # config? routing? defaults?
+# Current:
+worker orderTypes:
+namespace orders:
+
+# Proposed:
+worker OrderTypes:
+namespace Orders:
 ```
 
-**Open questions:** What goes here besides the name? Retention policies, search attribute schemas, default timeouts? Or is `nexus "name"` sufficient for cross-namespace references?
+**Why deferred:** Requires updating all existing examples, test data, topic files, and the LANGUAGE.md spec. Should be done as a standalone cleanup.
 
-### Task Queue Syntax
+---
 
-`task_queue` appears in primitives-reference.md and has a topic file, but no formal language syntax exists. Workers poll task queues, activities/workflows can target specific queues.
+## Nexus Extensions
+
+### List Workflows in Sync Operations
+
+Sync nexus operation handlers can list/query workflows as part of their implementation. No current syntax for representing a "list workflows" primitive in the DSL.
 
 ```twf
-workflow ProcessOrder(order: Order) -> (Result):
-    # Route heavy work to GPU workers
-    activity RenderImage(order.image)
-        options:
-            task_queue: "gpu-workers"
+nexus service OrderService:
+    sync ListActiveOrders(filter: Filter) -> (OrderList):
+        list ProcessOrder(filter) -> orders
+        close complete(orders)
 ```
 
-**Open questions:** Is `options: task_queue: ...` sufficient, or does the DSL need a top-level `task_queue` declaration block?
+**Open questions:** What does the syntax look like? `list WorkflowType(filter)` as a primitive? How does it relate to Temporal's visibility/list APIs? Is this a workflow-body primitive or nexus-operation-only?
 
 ---
 
@@ -160,6 +155,31 @@ signal Deposit(amount: decimal):
 
 await thresholdReached
 ```
+
+### SDK Language Specification
+
+Optional declaration of which Temporal SDK language a worker, workflow, activity, or other definition targets. Useful for polyglot codebases where different services or teams own different languages.
+
+```twf
+# At the worker level — applies to all contained definitions
+worker OrderTypes (go):
+    workflow ProcessOrder
+    activity ChargePayment
+
+# At the individual definition level
+workflow ProcessOrder(order: Order) -> (Result) (go):
+    activity ChargePayment(order) -> payment
+    activity RunFraudModel(order) -> score (python)
+    activity NotifyCustomer(order, payment) (typescript)
+
+# At the namespace level
+namespace Orders (go):
+    workflow ProcessOrder
+```
+
+**Why needed:** Polyglot Temporal deployments are common — a Go workflow may call Python ML activities and TypeScript frontend services. Making the SDK language a first-class part of the syntax (rather than an annotation) enables clearer design-time intent, code generation targeting the correct SDK, ownership boundaries, and better onboarding context.
+
+**Open questions:** Should the language be a fixed enum of supported SDKs (`go`, `python`, `typescript`, `java`, `dotnet`, `php`) or freeform? Should a parent declaration (e.g. on a `worker`) propagate as a default to children, with per-definition overrides? How does it interact with Nexus boundaries where language differences are already implicit? How does this relate to `@lang` annotations — should both exist, or should one replace the other?
 
 ### Promise Composition
 

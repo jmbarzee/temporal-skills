@@ -2,7 +2,7 @@
 
 > **Example:** [`nexus.twf`](./nexus.twf)
 
-Nexus enables workflows in one Temporal namespace to call workflows in another namespace, with proper authorization and abstraction.
+Nexus enables workflows in one Temporal namespace to call operations in another namespace, with proper authorization and abstraction.
 
 ## When to Use Nexus
 
@@ -21,188 +21,143 @@ Nexus enables workflows in one Temporal namespace to call workflows in another n
 ### Architecture
 
 ```text
-┌─────────────────────────────────────┐
-│           Caller Namespace          │
-│  ┌─────────────────────────────┐   │
-│  │       Caller Workflow       │   │
-│  │  nexus target/Operation()   │───┼──┐
-│  └─────────────────────────────┘   │  │
-└─────────────────────────────────────┘  │
-                                         │ Nexus
-┌─────────────────────────────────────┐  │
-│          Target Namespace           │  │
-│  ┌─────────────────────────────┐   │  │
-│  │    Nexus Endpoint Handler   │◄──┼──┘
-│  │  → starts target workflow   │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │      Target Workflow        │   │
-│  └─────────────────────────────┘   │
-└─────────────────────────────────────┘
+Caller Namespace
+  Caller Workflow
+    nexus Endpoint Service.Operation(args) -> result
+      |
+      v
+Target Namespace
+  Nexus Endpoint (task_queue routing)
+    Nexus Service Definition
+      async Operation -> starts target workflow
+      sync Operation  -> runs inline body
 ```
 
 ### Components
 
-| Component | Description |
-|-----------|-------------|
-| **Nexus Endpoint** | Named entry point in target namespace |
-| **Nexus Operation** | Specific operation exposed by endpoint |
-| **Nexus Service** | Collection of operations (like an API) |
-| **Caller** | Workflow invoking the Nexus operation |
-| **Handler** | Code that receives and processes Nexus call |
+| Component | TWF Construct | Description |
+|-----------|--------------|-------------|
+| **Nexus Service** | `nexus service Name:` | Top-level definition with operations |
+| **Async Operation** | `async OpName workflow WorkflowName` | Delegates to a named workflow |
+| **Sync Operation** | `sync OpName(params) -> (Type):` | Runs inline with a body |
+| **Nexus Endpoint** | `nexus endpoint Name` (in namespace) | Deployment routing with `task_queue` |
+| **Service Reference** | `nexus service Name` (in worker) | Links service to worker |
+| **Nexus Call** | `nexus Endpoint Service.Op(args)` | Invokes an operation |
 
 ---
 
-## Basic Nexus Pattern
+## Nexus Service Definition
 
-### Caller Side
+Define a nexus service with typed operations:
 
 ```twf
-workflow OrderWorkflow(order: Order) -> OrderResult:
-    # Validate locally
-    activity ValidateOrder(order)
+nexus service PaymentsService:
+    async ProcessPayment workflow ProcessPaymentWorkflow
+    sync GetPaymentStatus(paymentId: string) -> (PaymentStatus):
+        activity LookupPayment(paymentId) -> status
+        close complete(status)
+```
 
-    # Call into payments namespace via Nexus
-    nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
+- **Async operations** delegate to a named workflow (one-liner, no body)
+- **Sync operations** have a body using the workflow statement set
+
+### Deployment
+
+Register services on workers and expose via endpoints in namespaces:
+
+```twf
+worker paymentWorker:
+    workflow ProcessPaymentWorkflow
+    activity LookupPayment
+    nexus service PaymentsService
+
+namespace orders:
+    worker paymentWorker
         options:
-            timeout: 5m
-
-    # Call into notifications namespace
-    nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
-
-    close complete(OrderResult{paymentId: paymentResult.id})
-```
-
-### Target Side (Handler)
-
-> Note: Nexus handler definitions use conceptual pseudo-code, not TWF notation. The handler-side API is SDK-specific.
-
-```pseudo
-nexus_service PaymentsService:
-    
-    operation ProcessPayment(payment: Payment) -> PaymentResult:
-        # Start a workflow in this namespace to handle the request
-        return workflow ProcessPaymentWorkflow(payment):
-            workflow_id: "payment-{payment.id}"
-
-workflow ProcessPaymentWorkflow(payment: Payment) -> PaymentResult:
-    activity ValidatePayment(payment)
-    result = activity ChargeCard(payment)
-    activity RecordTransaction(result)
-    return result
+            task_queue: "payments"
+    nexus endpoint PaymentsEndpoint
+        options:
+            task_queue: "payments"
 ```
 
 ---
 
-## Authorization
+## Nexus Call Syntax
 
-### Configuring Allowed Callers
+### Basic Call
 
-> Note: Endpoint configuration is SDK/platform-specific, not TWF notation.
-
-```yaml
-nexus_endpoint PaymentsEndpoint:
-    target_namespace: payments
-    target_task_queue: payments-worker
-    allowed_caller_namespaces:
-        - orders
-        - subscriptions
-        - admin
+```twf
+nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> result
 ```
 
-### Request Validation in Handler
+Three identifiers: `Endpoint Service.Operation(args)` — endpoint name, then service and operation separated by a dot.
 
-```pseudo
-nexus_service PaymentsService:
-    
-    operation ProcessPayment(payment: Payment) -> PaymentResult:
-        # Validate caller context
-        caller = get_nexus_caller_info()
-        
-        if caller.namespace not in allowed_namespaces:
-            raise UnauthorizedError("Caller not allowed")
-        
-        # Validate request
-        if payment.amount <= 0:
-            raise InvalidArgumentError("Amount must be positive")
-        
-        return workflow ProcessPaymentWorkflow(payment)
+### With Options
+
+```twf
+nexus PaymentsEndpoint PaymentsService.ProcessPayment(payment) -> result
+    options:
+        schedule_to_close_timeout: 5m
 ```
+
+Options: `schedule_to_close_timeout`, `retry_policy`, `priority`.
 
 ---
 
-## Execution Modes: Synchronous, `promise`, `detach`
+## Execution Modes
 
 Nexus calls support the same three execution modes as child workflows:
 
 | Mode | Syntax | Behavior |
 |------|--------|----------|
-| **Synchronous** | `nexus "ns" workflow Name(args) -> result` | Caller blocks until operation completes |
-| **Async (promise)** | `promise p <- nexus "ns" workflow Name(args)` | Caller continues, awaits promise later |
-| **Fire-and-forget (detach)** | `detach nexus "ns" workflow Name(args)` | Caller continues, never waits |
+| **Synchronous** | `nexus Ep Svc.Op(args) -> result` | Caller blocks until operation completes |
+| **Async (promise)** | `promise p <- nexus Ep Svc.Op(args)` | Caller continues, awaits promise later |
+| **Fire-and-forget** | `detach nexus Ep Svc.Op(args)` | Caller continues, never waits |
 
 ### Synchronous (Default)
 
-Caller waits for operation to complete:
-
 ```twf
-workflow Caller() -> Result:
-    # Blocks until ProcessPayment completes
-    nexus "payments" workflow ProcessPayment(payment) -> result
+workflow Caller(order: Order) -> (Result):
+    nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> result
     close complete(Result{paymentId: result.id})
 ```
 
-### Asynchronous
-
-Start operation with `promise`, continue without waiting, await the promise later:
+### Asynchronous (Promise)
 
 ```twf
-workflow Caller() -> Result:
-    # Start operation, get promise
-    promise handle <- nexus "payments" workflow ProcessPayment(payment)
-
-    # Do other work
-    activity DoOtherWork()
-
-    # Wait for result when needed
-    await handle -> result
-    close complete(Result{paymentId: result.id})
+workflow Caller(data: Data) -> (Result):
+    promise handle <- nexus PaymentsEndpoint PaymentsService.ProcessPayment(data.payment)
+    activity DoOtherWork(data) -> localResult
+    await handle -> paymentResult
+    close complete(Result{localResult, paymentResult})
 ```
 
-### Fire-and-Forget
-
-Start operation with `detach`, never wait:
+### Fire-and-Forget (Detach)
 
 ```twf
-workflow Caller() -> Result:
-    # Start and don't wait
-    detach nexus "notifications" workflow SendEmail(email)
-
+workflow Caller(order: Order) -> (Result):
+    detach nexus NotificationsEndpoint NotificationsService.SendConfirmation(order.customer)
     close complete(Result{status: "initiated"})
 ```
 
 ---
 
-## Error Handling
+## Await Patterns
 
-### Error Types
-
-| Error | Meaning | Handling |
-|-------|---------|----------|
-| `NexusOperationError` | Operation failed (application error) | Handle based on error type |
-| `NexusTimeoutError` | Operation timed out | Retry or fail |
-| `NexusUnauthorizedError` | Caller not allowed | Configuration issue |
-| `NexusNotFoundError` | Endpoint/operation doesn't exist | Configuration issue |
-
-### Error Handling Pattern
-
-> Note: Error handling is SDK-specific. The nexus call will fail the workflow if the operation fails. Use retry policies and timeouts to control failure behavior. A timeout can be expressed with `await one:`.
+### Await Nexus
 
 ```twf
-workflow Caller(data: Data) -> Result:
-    # Race nexus call against a deadline
+await nexus PaymentsEndpoint PaymentsService.GetStatus(id) -> status
+```
+
+### Await One with Nexus
+
+Race a nexus call against a timeout:
+
+```twf
+workflow Caller(data: Data) -> (Result):
     await one:
-        nexus "target" workflow Operation(data) -> result:
+        nexus PaymentsEndpoint PaymentsService.ProcessPayment(data) -> result:
             close complete(Result{success: true, data: result})
         timer(5m):
             activity AlertTimeout(data)
@@ -211,91 +166,32 @@ workflow Caller(data: Data) -> Result:
 
 ---
 
-## Nexus vs Alternatives
+## Resolution
 
-### Nexus vs Direct Activity Call
+The resolver validates all nexus references:
 
-```twf
-# Direct activity: tight coupling, same namespace
-workflow OrderWorkflow(order: Order):
-    activity ProcessPayment(order.payment)  # Activity in same worker
+### Errors
 
-# Nexus: loose coupling, cross-namespace
-workflow OrderWorkflow(order: Order):
-    nexus "payments" workflow ProcessPayment(order.payment)  # Separate namespace/team
-```
+| Condition | Error |
+|-----------|-------|
+| Duplicate `nexus service` name | `duplicate nexus service definition: X` |
+| Duplicate endpoint name across namespaces | `duplicate nexus endpoint name "X"` |
+| Endpoint not found (endpoints exist) | `undefined nexus endpoint: X` |
+| Service not found (services exist) | `undefined nexus service: X` |
+| Operation not found on service | `nexus service X has no operation Y` |
+| `detach nexus ... -> result` | `detach nexus call cannot have a result` |
+| Async op references missing workflow | `async operation Y references undefined workflow: Z` |
+| Worker refs missing service | `worker W references undefined nexus service: X` |
+| Endpoint missing `task_queue` | `nexus endpoint X missing required task_queue option` |
+| Endpoint task queue has no worker with service | `no worker on that queue has service S` |
 
-### Nexus vs Signal
+### Warnings
 
-> Note: `temporal.signal()` is an SDK-level API call, not TWF notation.
-
-```pseudo
-# Signal: fire-and-forget to known workflow (SDK call)
-temporal.signal("workflow-b-id", DoSomething, data)
-```
-
-```twf
-# Nexus: request-response to service endpoint
-workflow A():
-    nexus "service" workflow Operation(data) -> result  # Get response back
-```
-
-### Nexus vs HTTP
-
-```twf
-# HTTP from activity: loses Temporal guarantees
-workflow A():
-    activity CallExternalAPI(data) -> result  # You handle retries, failures
-
-# Nexus: Temporal-native, durable, retryable
-workflow A():
-    nexus "external" workflow Operation(data) -> result  # Temporal handles failures
-```
-
----
-
-## Design Patterns
-
-### Service Gateway Pattern
-
-Expose multiple operations through a single Nexus endpoint:
-
-```pseudo
-nexus_service OrdersGateway:
-    operation CreateOrder(order: Order) -> OrderResult
-    operation GetOrder(orderId: string) -> Order
-    operation CancelOrder(orderId: string) -> CancelResult
-    operation UpdateOrder(orderId: string, updates: Updates) -> Order
-```
-
-### Request Routing
-
-Route to different workflows based on input:
-
-```pseudo
-nexus_service ProcessingService:
-    
-    operation Process(request: Request) -> Result:
-        # Route based on request type
-        if request.type == "fast":
-            return workflow FastProcessing(request)
-        elif request.type == "batch":
-            return workflow BatchProcessing(request)
-        else:
-            return workflow StandardProcessing(request)
-```
-
-### Multi-Tenant Routing
-
-```pseudo
-nexus_service TenantService:
-    
-    operation ProcessForTenant(tenantId: string, data: Data) -> Result:
-        # Route to tenant-specific task queue
-        return workflow TenantWorkflow(data):
-            task_queue: "tenant-{tenantId}"
-            workflow_id: "tenant-{tenantId}-{data.id}"
-```
+| Condition | Warning |
+|-----------|---------|
+| Service not on any worker (namespaces exist) | `nexus service X is not referenced by any worker` |
+| Endpoint not found (no endpoints defined) | `unresolved nexus endpoint: X (may be external)` |
+| Service not found (no services defined) | `unresolved nexus service: X (may be external)` |
 
 ---
 
@@ -306,65 +202,25 @@ nexus_service TenantService:
 ```twf
 # BAD: Nexus overhead for local calls
 workflow A():
-    nexus "local" workflow Operation(data)  # Same namespace!
+    nexus LocalEndpoint LocalService.Operation(data) -> result
 
 # GOOD: Child workflow for same namespace
 workflow A():
-    workflow OperationWorkflow(data)
+    workflow OperationWorkflow(data) -> result
 ```
 
-### Ignoring Authorization
-
-```pseudo
-# BAD: No caller validation
-nexus_service OpenService:
-    operation SensitiveOperation(data):
-        return workflow DoSensitiveThing(data)
-
-# GOOD: Validate caller
-nexus_service SecureService:
-    operation SensitiveOperation(data):
-        if not authorized(get_caller_info()):
-            raise UnauthorizedError()
-        return workflow DoSensitiveThing(data)
-```
-
-### Missing Timeout Configuration
+### Missing Timeout
 
 ```twf
 # BAD: No deadline
 workflow A():
-    nexus "target" workflow SlowOperation(data)  # May hang indefinitely
+    nexus Endpoint Svc.SlowOperation(data) -> result
 
 # GOOD: Explicit deadline via await one
 workflow A():
     await one:
-        nexus "target" workflow SlowOperation(data) -> result:
+        nexus Endpoint Svc.SlowOperation(data) -> result:
+            close complete(Result{result})
         timer(5m):
             close fail(Result{error: "timeout"})
 ```
-
----
-
-## Monitoring and Debugging
-
-### Tracing Across Namespaces
-
-Nexus preserves trace context across namespace boundaries:
-
-```text
-Caller workflow (namespace A)
-└─ nexus call
-   └─ Handler (namespace B)
-      └─ Target workflow (namespace B)
-         └─ activities
-```
-
-### Debugging Tips
-
-| Issue | Check |
-|-------|-------|
-| "Operation not found" | Endpoint exists? Operation registered? |
-| "Unauthorized" | Caller namespace in allowed list? |
-| Timeout | Target workflow stuck? Task queue has workers? |
-| Unexpected error | Check target workflow history |

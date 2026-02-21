@@ -29,6 +29,8 @@ const (
 	// Keywords -- workflow call modifiers
 	DETACH
 	NEXUS
+	SYNC
+	ASYNC
 
 	// Keywords -- promises and conditions
 	PROMISE
@@ -69,6 +71,7 @@ const (
 	COLON      // :
 	ARROW      // ->
 	LEFT_ARROW // <-
+	DOT        // .
 
 	// Literals
 	NUMBER   // numeric literal (e.g. 3, 2.0)
@@ -76,7 +79,7 @@ const (
 
 	// Values
 	IDENT    // non-keyword identifiers
-	STRING   // quoted string (for nexus namespaces)
+	STRING   // quoted string
 	ARGS     // raw content between ( and ), no nested parens
 	COMMENT  // text after #
 	RAW_TEXT // anything else
@@ -97,6 +100,8 @@ var tokenNames = map[TokenType]string{
 	UPDATE:          "UPDATE",
 	DETACH:          "DETACH",
 	NEXUS:           "NEXUS",
+	SYNC:            "SYNC",
+	ASYNC:           "ASYNC",
 	PROMISE:         "PROMISE",
 	CONDITION:       "CONDITION",
 	SET:             "SET",
@@ -123,6 +128,7 @@ var tokenNames = map[TokenType]string{
 	COLON:           "COLON",
 	ARROW:           "ARROW",
 	LEFT_ARROW:      "LEFT_ARROW",
+	DOT:             "DOT",
 	NUMBER:          "NUMBER",
 	DURATION:        "DURATION",
 	IDENT:           "IDENT",
@@ -165,6 +171,8 @@ var keywords = map[string]TokenType{
 	"update":          UPDATE,
 	"detach":          DETACH,
 	"nexus":           NEXUS,
+	"sync":            SYNC,
+	"async":           ASYNC,
 	"promise":         PROMISE,
 	"condition":       CONDITION,
 	"set":             SET,

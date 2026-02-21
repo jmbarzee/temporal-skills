@@ -71,6 +71,7 @@ type WorkerDef struct {
 	Name       string
 	Workflows  []WorkerRef
 	Activities []WorkerRef
+	Services   []WorkerRef // nexus service references
 }
 
 func (*WorkerDef) defNode() {}
@@ -82,11 +83,19 @@ type NamespaceWorker struct {
 	Options    *OptionsBlock
 }
 
+// NamespaceEndpoint is a nexus endpoint instantiation inside a namespace block.
+type NamespaceEndpoint struct {
+	Pos
+	EndpointName string
+	Options      *OptionsBlock
+}
+
 // NamespaceDef is a namespace definition that instantiates workers with options.
 type NamespaceDef struct {
 	Pos
-	Name    string
-	Workers []NamespaceWorker
+	Name      string
+	Workers   []NamespaceWorker
+	Endpoints []NamespaceEndpoint
 }
 
 func (*NamespaceDef) defNode() {}
@@ -149,13 +158,12 @@ const (
 
 type WorkflowCall struct {
 	Pos
-	Mode      WorkflowCallMode
-	Namespace string // optional, from nexus "ns"
-	Name      string
-	Args      string
-	Result    string // optional
-	Options   *OptionsBlock
-	Resolved  *WorkflowDef
+	Mode     WorkflowCallMode
+	Name     string
+	Args     string
+	Result   string // optional
+	Options  *OptionsBlock
+	Resolved *WorkflowDef
 }
 
 func (*WorkflowCall) stmtNode() {}
@@ -183,12 +191,19 @@ type AwaitStmt struct {
 	ActivityResolved *ActivityDef
 
 	// Workflow await
-	Workflow string // workflow name
-	WorkflowMode WorkflowCallMode
-	WorkflowNamespace string // optional nexus namespace
-	WorkflowArgs string
+	Workflow        string // workflow name
+	WorkflowMode   WorkflowCallMode
+	WorkflowArgs   string
 	WorkflowResult string // optional result binding
 	WorkflowResolved *WorkflowDef
+
+	// Nexus await
+	Nexus          string // endpoint name
+	NexusService   string
+	NexusOperation string
+	NexusArgs      string
+	NexusResult    string
+	NexusDetach    bool
 
 	// Ident await (promise or condition reference)
 	Ident       string // promise or condition name
@@ -208,6 +223,8 @@ func (a *AwaitStmt) AwaitKind() string {
 		return "activity"
 	case a.Workflow != "":
 		return "workflow"
+	case a.Nexus != "":
+		return "nexus"
 	case a.Ident != "":
 		return "ident"
 	default:
@@ -250,12 +267,19 @@ type AwaitOneCase struct {
 	ActivityResolved *ActivityDef
 
 	// Workflow case
-	Workflow string // workflow name
-	WorkflowMode WorkflowCallMode // spawn/detach/child
-	WorkflowNamespace string // optional nexus namespace
-	WorkflowArgs string
+	Workflow        string // workflow name
+	WorkflowMode   WorkflowCallMode // spawn/detach/child
+	WorkflowArgs   string
 	WorkflowResult string // optional result binding
 	WorkflowResolved *WorkflowDef
+
+	// Nexus case
+	Nexus          string // endpoint name
+	NexusService   string
+	NexusOperation string
+	NexusArgs      string
+	NexusResult    string
+	NexusDetach    bool
 
 	// Await all case (nested)
 	AwaitAll *AwaitAllBlock
@@ -280,6 +304,8 @@ func (c *AwaitOneCase) CaseKind() string {
 		return "activity"
 	case c.Workflow != "":
 		return "workflow"
+	case c.Nexus != "":
+		return "nexus"
 	case c.AwaitAll != nil:
 		return "await_all"
 	case c.Ident != "":
@@ -416,12 +442,16 @@ type PromiseStmt struct {
 	Update       string
 	UpdateParams string
 
-	Activity       string
-	ActivityArgs   string
+	Activity     string
+	ActivityArgs string
 
-	Workflow          string
-	WorkflowNamespace string
-	WorkflowArgs      string
+	Workflow     string
+	WorkflowArgs string
+
+	Nexus          string // endpoint name
+	NexusService   string
+	NexusOperation string
+	NexusArgs      string
 }
 
 func (*PromiseStmt) stmtNode() {}
@@ -441,6 +471,55 @@ type UnsetStmt struct {
 }
 
 func (*UnsetStmt) stmtNode() {}
+
+// ---------------------------------------------------------------------------
+// Nexus definitions and calls
+// ---------------------------------------------------------------------------
+
+// NexusOperationType distinguishes async vs sync nexus operations.
+type NexusOperationType int
+
+const (
+	NexusOpAsync NexusOperationType = iota
+	NexusOpSync
+)
+
+// NexusOperation is an operation inside a nexus service definition.
+type NexusOperation struct {
+	Pos
+	OpType       NexusOperationType
+	Name         string
+	WorkflowName string      // async only: backing workflow
+	Params       string      // sync only
+	ReturnType   string      // sync only
+	Body         []Statement // sync only
+}
+
+// NexusServiceDef is a top-level nexus service definition.
+type NexusServiceDef struct {
+	Pos
+	Name       string
+	Operations []*NexusOperation
+}
+
+func (*NexusServiceDef) defNode() {}
+
+// NexusCall is a nexus service operation call inside a workflow body.
+type NexusCall struct {
+	Pos
+	Detach    bool
+	Endpoint  string
+	Service   string
+	Operation string
+	Args      string
+	Result    string // optional
+	Options   *OptionsBlock
+	// Resolution links
+	ResolvedService   *NexusServiceDef
+	ResolvedOperation *NexusOperation
+}
+
+func (*NexusCall) stmtNode() {}
 
 // ---------------------------------------------------------------------------
 // Options blocks

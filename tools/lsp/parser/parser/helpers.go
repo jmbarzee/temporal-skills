@@ -44,7 +44,8 @@ func (p *Parser) addError(err *ParseError) {
 func (p *Parser) recoverTopLevel() {
 	for p.current.Type != token.EOF {
 		if (p.current.Type == token.WORKFLOW || p.current.Type == token.ACTIVITY ||
-			p.current.Type == token.WORKER || p.current.Type == token.NAMESPACE) && p.current.Column == 1 {
+			p.current.Type == token.WORKER || p.current.Type == token.NAMESPACE ||
+			p.current.Type == token.NEXUS) && p.current.Column == 1 {
 			return
 		}
 		p.advance()

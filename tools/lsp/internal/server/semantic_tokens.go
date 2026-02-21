@@ -126,7 +126,8 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int, i
 		token.SIGNAL, token.QUERY, token.UPDATE,
 		token.TIMER,
 		token.PROMISE, token.STATE, token.CONDITION, token.SET, token.UNSET,
-		token.CLOSE, token.COMPLETE, token.FAIL, token.CONTINUE_AS_NEW:
+		token.CLOSE, token.COMPLETE, token.FAIL, token.CONTINUE_AS_NEW,
+		token.SYNC, token.ASYNC:
 		return semType, 0, true
 
 	// OPTIONS / config keywords: muted (property).
@@ -158,7 +159,7 @@ func classifyToken(tok token.Token, prevType token.TokenType, indentLevel int, i
 	case token.COMMENT:
 		return semComment, 0, true
 
-	case token.COLON, token.ARROW:
+	case token.COLON, token.ARROW, token.DOT:
 		return semOperator, 0, true
 
 	case token.ARGS:
@@ -201,6 +202,14 @@ func classifyIdent(prevType token.TokenType, indentLevel int) (tokenType uint32,
 			return semFunction, modDeclaration, true
 		}
 		return semFunction, 0, true
+
+	case token.NEXUS:
+		// After NEXUS: endpoint name in call, or soft keyword ("service"/"endpoint")
+		return semFunction, 0, true
+
+	case token.SYNC, token.ASYNC:
+		// After SYNC/ASYNC: operation name declaration
+		return semFunction, modDeclaration, true
 
 	case token.TASK_QUEUE:
 		return semVariable, 0, true

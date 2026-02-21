@@ -34,6 +34,8 @@ func marshalDefinition(def Definition) (json.RawMessage, error) {
 		return json.Marshal(d)
 	case *NamespaceDef:
 		return json.Marshal(d)
+	case *NexusServiceDef:
+		return json.Marshal(d)
 	default:
 		return json.Marshal(def)
 	}
@@ -243,6 +245,7 @@ type WorkerDefJSON struct {
 	Name       string          `json:"name"`
 	Workflows  []WorkerRefJSON `json:"workflows,omitempty"`
 	Activities []WorkerRefJSON `json:"activities,omitempty"`
+	Services   []WorkerRefJSON `json:"services,omitempty"`
 }
 
 func (w *WorkerDef) MarshalJSON() ([]byte, error) {
@@ -266,6 +269,13 @@ func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 			Column: ref.Column,
 		})
 	}
+	for _, ref := range w.Services {
+		wj.Services = append(wj.Services, WorkerRefJSON{
+			Name:   ref.Name,
+			Line:   ref.Line,
+			Column: ref.Column,
+		})
+	}
 	return json.Marshal(wj)
 }
 
@@ -277,13 +287,22 @@ type NamespaceWorkerJSON struct {
 	Options    *OptionsBlockJSON `json:"options,omitempty"`
 }
 
+// NamespaceEndpointJSON is the JSON representation of a nexus endpoint in a namespace.
+type NamespaceEndpointJSON struct {
+	EndpointName string            `json:"endpointName"`
+	Line         int               `json:"line"`
+	Column       int               `json:"column"`
+	Options      *OptionsBlockJSON `json:"options,omitempty"`
+}
+
 // NamespaceDefJSON is the JSON representation of NamespaceDef.
 type NamespaceDefJSON struct {
-	Type    string                `json:"type"`
-	Line    int                   `json:"line"`
-	Column  int                   `json:"column"`
-	Name    string                `json:"name"`
-	Workers []NamespaceWorkerJSON `json:"workers,omitempty"`
+	Type      string                  `json:"type"`
+	Line      int                     `json:"line"`
+	Column    int                     `json:"column"`
+	Name      string                  `json:"name"`
+	Workers   []NamespaceWorkerJSON   `json:"workers,omitempty"`
+	Endpoints []NamespaceEndpointJSON `json:"endpoints,omitempty"`
 }
 
 func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
@@ -299,6 +318,14 @@ func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
 			Line:       w.Line,
 			Column:     w.Column,
 			Options:    marshalOptionsBlock(w.Options),
+		})
+	}
+	for _, ep := range n.Endpoints {
+		nj.Endpoints = append(nj.Endpoints, NamespaceEndpointJSON{
+			EndpointName: ep.EndpointName,
+			Line:         ep.Line,
+			Column:       ep.Column,
+			Options:      marshalOptionsBlock(ep.Options),
 		})
 	}
 	return json.Marshal(nj)
@@ -349,37 +376,41 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 		})
 	case *WorkflowCall:
 		return json.Marshal(workflowCallJSON{
-			Type:      "workflowCall",
-			Line:      s.Line,
-			Column:    s.Column,
-			Mode:      workflowCallModeString(s.Mode),
-			Namespace: s.Namespace,
-			Name:      s.Name,
-			Args:      s.Args,
-			Result:    s.Result,
-			Options:   marshalOptionsBlock(s.Options),
+			Type:    "workflowCall",
+			Line:    s.Line,
+			Column:  s.Column,
+			Mode:    workflowCallModeString(s.Mode),
+			Name:    s.Name,
+			Args:    s.Args,
+			Result:  s.Result,
+			Options: marshalOptionsBlock(s.Options),
 		})
 	case *AwaitStmt:
 		return json.Marshal(awaitStmtJSON{
-			Type:          "await",
-			Line:          s.Line,
-			Column:        s.Column,
-			Kind:          s.AwaitKind(),
-			Timer:         s.Timer,
-			Signal:        s.Signal,
-			SignalParams:  s.SignalParams,
-			Update:        s.Update,
-			UpdateParams:  s.UpdateParams,
-			Activity:      s.Activity,
-			ActivityArgs:  s.ActivityArgs,
+			Type:           "await",
+			Line:           s.Line,
+			Column:         s.Column,
+			Kind:           s.AwaitKind(),
+			Timer:          s.Timer,
+			Signal:         s.Signal,
+			SignalParams:   s.SignalParams,
+			Update:         s.Update,
+			UpdateParams:   s.UpdateParams,
+			Activity:       s.Activity,
+			ActivityArgs:   s.ActivityArgs,
 			ActivityResult: s.ActivityResult,
-			Workflow:      s.Workflow,
-			WorkflowMode:  workflowCallModeString(s.WorkflowMode),
-			WorkflowNamespace: s.WorkflowNamespace,
-			WorkflowArgs:  s.WorkflowArgs,
+			Workflow:       s.Workflow,
+			WorkflowMode:   workflowCallModeString(s.WorkflowMode),
+			WorkflowArgs:   s.WorkflowArgs,
 			WorkflowResult: s.WorkflowResult,
-			Ident:         s.Ident,
-			IdentResult:   s.IdentResult,
+			Nexus:          s.Nexus,
+			NexusService:   s.NexusService,
+			NexusOperation: s.NexusOperation,
+			NexusArgs:      s.NexusArgs,
+			NexusResult:    s.NexusResult,
+			NexusDetach:    s.NexusDetach,
+			Ident:          s.Ident,
+			IdentResult:    s.IdentResult,
 		})
 	case *AwaitAllBlock:
 		body := make([]json.RawMessage, 0, len(s.Body))
@@ -416,26 +447,31 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				awaitAllData = data
 			}
 			cases = append(cases, awaitOneCaseJSON{
-				Line:              c.Line,
-				Column:            c.Column,
-				Kind:              c.CaseKind(),
-				Signal:            c.Signal,
-				SignalParams:      c.SignalParams,
-				Update:            c.Update,
-				UpdateParams:      c.UpdateParams,
-				Timer:             c.Timer,
-				Activity:          c.Activity,
-				ActivityArgs:      c.ActivityArgs,
-				ActivityResult:    c.ActivityResult,
-				Workflow:          c.Workflow,
-				WorkflowMode:      workflowCallModeString(c.WorkflowMode),
-				WorkflowNamespace: c.WorkflowNamespace,
-				WorkflowArgs:      c.WorkflowArgs,
-				WorkflowResult:    c.WorkflowResult,
-				AwaitAll:          awaitAllData,
-				Ident:             c.Ident,
-				IdentResult:       c.IdentResult,
-				Body:              caseBody,
+				Line:           c.Line,
+				Column:         c.Column,
+				Kind:           c.CaseKind(),
+				Signal:         c.Signal,
+				SignalParams:   c.SignalParams,
+				Update:         c.Update,
+				UpdateParams:   c.UpdateParams,
+				Timer:          c.Timer,
+				Activity:       c.Activity,
+				ActivityArgs:   c.ActivityArgs,
+				ActivityResult: c.ActivityResult,
+				Workflow:       c.Workflow,
+				WorkflowMode:   workflowCallModeString(c.WorkflowMode),
+				WorkflowArgs:   c.WorkflowArgs,
+				WorkflowResult: c.WorkflowResult,
+				Nexus:          c.Nexus,
+				NexusService:   c.NexusService,
+				NexusOperation: c.NexusOperation,
+				NexusArgs:      c.NexusArgs,
+				NexusResult:    c.NexusResult,
+				NexusDetach:    c.NexusDetach,
+				AwaitAll:       awaitAllData,
+				Ident:          c.Ident,
+				IdentResult:    c.IdentResult,
+				Body:           caseBody,
 			})
 		}
 		return json.Marshal(awaitOneBlockJSON{
@@ -565,20 +601,36 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 		})
 	case *PromiseStmt:
 		return json.Marshal(promiseStmtJSON{
-			Type:              "promise",
-			Line:              s.Line,
-			Column:            s.Column,
-			Name:              s.Name,
-			Timer:             s.Timer,
-			Signal:            s.Signal,
-			SignalParams:      s.SignalParams,
-			Update:            s.Update,
-			UpdateParams:      s.UpdateParams,
-			Activity:          s.Activity,
-			ActivityArgs:      s.ActivityArgs,
-			Workflow:          s.Workflow,
-			WorkflowNamespace: s.WorkflowNamespace,
-			WorkflowArgs:      s.WorkflowArgs,
+			Type:           "promise",
+			Line:           s.Line,
+			Column:         s.Column,
+			Name:           s.Name,
+			Timer:          s.Timer,
+			Signal:         s.Signal,
+			SignalParams:   s.SignalParams,
+			Update:         s.Update,
+			UpdateParams:   s.UpdateParams,
+			Activity:       s.Activity,
+			ActivityArgs:   s.ActivityArgs,
+			Workflow:       s.Workflow,
+			WorkflowArgs:   s.WorkflowArgs,
+			Nexus:          s.Nexus,
+			NexusService:   s.NexusService,
+			NexusOperation: s.NexusOperation,
+			NexusArgs:      s.NexusArgs,
+		})
+	case *NexusCall:
+		return json.Marshal(nexusCallJSON{
+			Type:      "nexusCall",
+			Line:      s.Line,
+			Column:    s.Column,
+			Detach:    s.Detach,
+			Endpoint:  s.Endpoint,
+			Service:   s.Service,
+			Operation: s.Operation,
+			Args:      s.Args,
+			Result:    s.Result,
+			Options:   marshalOptionsBlock(s.Options),
 		})
 	case *SetStmt:
 		return json.Marshal(setStmtJSON{
@@ -635,37 +687,41 @@ type activityCallJSON struct {
 }
 
 type workflowCallJSON struct {
-	Type      string            `json:"type"`
-	Line      int               `json:"line"`
-	Column    int               `json:"column"`
-	Mode      string            `json:"mode"`
-	Namespace string            `json:"namespace,omitempty"`
-	Name      string            `json:"name"`
-	Args      string            `json:"args"`
-	Result    string            `json:"result,omitempty"`
-	Options   *OptionsBlockJSON `json:"options,omitempty"`
+	Type    string            `json:"type"`
+	Line    int               `json:"line"`
+	Column  int               `json:"column"`
+	Mode    string            `json:"mode"`
+	Name    string            `json:"name"`
+	Args    string            `json:"args"`
+	Result  string            `json:"result,omitempty"`
+	Options *OptionsBlockJSON `json:"options,omitempty"`
 }
 
 type awaitStmtJSON struct {
-	Type              string `json:"type"`
-	Line              int    `json:"line"`
-	Column            int    `json:"column"`
-	Kind              string `json:"kind"`
-	Timer             string `json:"timer,omitempty"`
-	Signal            string `json:"signal,omitempty"`
-	SignalParams      string `json:"signalParams,omitempty"`
-	Update            string `json:"update,omitempty"`
-	UpdateParams      string `json:"updateParams,omitempty"`
-	Activity          string `json:"activity,omitempty"`
-	ActivityArgs      string `json:"activityArgs,omitempty"`
-	ActivityResult    string `json:"activityResult,omitempty"`
-	Workflow          string `json:"workflow,omitempty"`
-	WorkflowMode      string `json:"workflowMode,omitempty"`
-	WorkflowNamespace string `json:"workflowNamespace,omitempty"`
-	WorkflowArgs      string `json:"workflowArgs,omitempty"`
-	WorkflowResult    string `json:"workflowResult,omitempty"`
-	Ident             string `json:"ident,omitempty"`
-	IdentResult       string `json:"identResult,omitempty"`
+	Type           string `json:"type"`
+	Line           int    `json:"line"`
+	Column         int    `json:"column"`
+	Kind           string `json:"kind"`
+	Timer          string `json:"timer,omitempty"`
+	Signal         string `json:"signal,omitempty"`
+	SignalParams   string `json:"signalParams,omitempty"`
+	Update         string `json:"update,omitempty"`
+	UpdateParams   string `json:"updateParams,omitempty"`
+	Activity       string `json:"activity,omitempty"`
+	ActivityArgs   string `json:"activityArgs,omitempty"`
+	ActivityResult string `json:"activityResult,omitempty"`
+	Workflow       string `json:"workflow,omitempty"`
+	WorkflowMode   string `json:"workflowMode,omitempty"`
+	WorkflowArgs   string `json:"workflowArgs,omitempty"`
+	WorkflowResult string `json:"workflowResult,omitempty"`
+	Nexus          string `json:"nexus,omitempty"`
+	NexusService   string `json:"nexusService,omitempty"`
+	NexusOperation string `json:"nexusOperation,omitempty"`
+	NexusArgs      string `json:"nexusArgs,omitempty"`
+	NexusResult    string `json:"nexusResult,omitempty"`
+	NexusDetach    bool   `json:"nexusDetach,omitempty"`
+	Ident          string `json:"ident,omitempty"`
+	IdentResult    string `json:"identResult,omitempty"`
 }
 
 type awaitAllBlockJSON struct {
@@ -676,26 +732,31 @@ type awaitAllBlockJSON struct {
 }
 
 type awaitOneCaseJSON struct {
-	Line              int               `json:"line"`
-	Column            int               `json:"column"`
-	Kind              string            `json:"kind"`
-	Signal            string            `json:"signal,omitempty"`
-	SignalParams      string            `json:"signalParams,omitempty"`
-	Update            string            `json:"update,omitempty"`
-	UpdateParams      string            `json:"updateParams,omitempty"`
-	Timer             string            `json:"timer,omitempty"`
-	Activity          string            `json:"activity,omitempty"`
-	ActivityArgs      string            `json:"activityArgs,omitempty"`
-	ActivityResult    string            `json:"activityResult,omitempty"`
-	Workflow          string            `json:"workflow,omitempty"`
-	WorkflowMode      string            `json:"workflowMode,omitempty"`
-	WorkflowNamespace string            `json:"workflowNamespace,omitempty"`
-	WorkflowArgs      string            `json:"workflowArgs,omitempty"`
-	WorkflowResult    string            `json:"workflowResult,omitempty"`
-	AwaitAll          json.RawMessage   `json:"awaitAll,omitempty"`
-	Ident             string            `json:"ident,omitempty"`
-	IdentResult       string            `json:"identResult,omitempty"`
-	Body              []json.RawMessage `json:"body"`
+	Line           int               `json:"line"`
+	Column         int               `json:"column"`
+	Kind           string            `json:"kind"`
+	Signal         string            `json:"signal,omitempty"`
+	SignalParams   string            `json:"signalParams,omitempty"`
+	Update         string            `json:"update,omitempty"`
+	UpdateParams   string            `json:"updateParams,omitempty"`
+	Timer          string            `json:"timer,omitempty"`
+	Activity       string            `json:"activity,omitempty"`
+	ActivityArgs   string            `json:"activityArgs,omitempty"`
+	ActivityResult string            `json:"activityResult,omitempty"`
+	Workflow       string            `json:"workflow,omitempty"`
+	WorkflowMode   string            `json:"workflowMode,omitempty"`
+	WorkflowArgs   string            `json:"workflowArgs,omitempty"`
+	WorkflowResult string            `json:"workflowResult,omitempty"`
+	Nexus          string            `json:"nexus,omitempty"`
+	NexusService   string            `json:"nexusService,omitempty"`
+	NexusOperation string            `json:"nexusOperation,omitempty"`
+	NexusArgs      string            `json:"nexusArgs,omitempty"`
+	NexusResult    string            `json:"nexusResult,omitempty"`
+	NexusDetach    bool              `json:"nexusDetach,omitempty"`
+	AwaitAll       json.RawMessage   `json:"awaitAll,omitempty"`
+	Ident          string            `json:"ident,omitempty"`
+	IdentResult    string            `json:"identResult,omitempty"`
+	Body           []json.RawMessage `json:"body"`
 }
 
 type awaitOneBlockJSON struct {
@@ -783,20 +844,23 @@ type commentJSON struct {
 }
 
 type promiseStmtJSON struct {
-	Type              string `json:"type"`
-	Line              int    `json:"line"`
-	Column            int    `json:"column"`
-	Name              string `json:"name"`
-	Timer             string `json:"timer,omitempty"`
-	Signal            string `json:"signal,omitempty"`
-	SignalParams      string `json:"signalParams,omitempty"`
-	Update            string `json:"update,omitempty"`
-	UpdateParams      string `json:"updateParams,omitempty"`
-	Activity          string `json:"activity,omitempty"`
-	ActivityArgs      string `json:"activityArgs,omitempty"`
-	Workflow          string `json:"workflow,omitempty"`
-	WorkflowNamespace string `json:"workflowNamespace,omitempty"`
-	WorkflowArgs      string `json:"workflowArgs,omitempty"`
+	Type           string `json:"type"`
+	Line           int    `json:"line"`
+	Column         int    `json:"column"`
+	Name           string `json:"name"`
+	Timer          string `json:"timer,omitempty"`
+	Signal         string `json:"signal,omitempty"`
+	SignalParams   string `json:"signalParams,omitempty"`
+	Update         string `json:"update,omitempty"`
+	UpdateParams   string `json:"updateParams,omitempty"`
+	Activity       string `json:"activity,omitempty"`
+	ActivityArgs   string `json:"activityArgs,omitempty"`
+	Workflow       string `json:"workflow,omitempty"`
+	WorkflowArgs   string `json:"workflowArgs,omitempty"`
+	Nexus          string `json:"nexus,omitempty"`
+	NexusService   string `json:"nexusService,omitempty"`
+	NexusOperation string `json:"nexusOperation,omitempty"`
+	NexusArgs      string `json:"nexusArgs,omitempty"`
 }
 
 type setStmtJSON struct {
@@ -811,4 +875,71 @@ type unsetStmtJSON struct {
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 	Name   string `json:"name"`
+}
+
+type nexusCallJSON struct {
+	Type      string            `json:"type"`
+	Line      int               `json:"line"`
+	Column    int               `json:"column"`
+	Detach    bool              `json:"detach,omitempty"`
+	Endpoint  string            `json:"endpoint"`
+	Service   string            `json:"service"`
+	Operation string            `json:"operation"`
+	Args      string            `json:"args"`
+	Result    string            `json:"result,omitempty"`
+	Options   *OptionsBlockJSON `json:"options,omitempty"`
+}
+
+// NexusOperationJSON is the JSON representation of a nexus operation.
+type NexusOperationJSON struct {
+	OpType       string            `json:"opType"`
+	Line         int               `json:"line"`
+	Column       int               `json:"column"`
+	Name         string            `json:"name"`
+	WorkflowName string            `json:"workflowName,omitempty"`
+	Params       string            `json:"params,omitempty"`
+	ReturnType   string            `json:"returnType,omitempty"`
+	Body         []json.RawMessage `json:"body,omitempty"`
+}
+
+// NexusServiceDefJSON is the JSON representation of NexusServiceDef.
+type NexusServiceDefJSON struct {
+	Type       string                `json:"type"`
+	Line       int                   `json:"line"`
+	Column     int                   `json:"column"`
+	Name       string                `json:"name"`
+	Operations []*NexusOperationJSON `json:"operations,omitempty"`
+}
+
+func (n *NexusServiceDef) MarshalJSON() ([]byte, error) {
+	nj := NexusServiceDefJSON{
+		Type:   "nexusServiceDef",
+		Line:   n.Line,
+		Column: n.Column,
+		Name:   n.Name,
+	}
+	for _, op := range n.Operations {
+		opj := &NexusOperationJSON{
+			Line:         op.Line,
+			Column:       op.Column,
+			Name:         op.Name,
+			WorkflowName: op.WorkflowName,
+			Params:       op.Params,
+			ReturnType:   op.ReturnType,
+		}
+		if op.OpType == NexusOpAsync {
+			opj.OpType = "async"
+		} else {
+			opj.OpType = "sync"
+		}
+		for _, stmt := range op.Body {
+			data, err := marshalStatement(stmt)
+			if err != nil {
+				return nil, err
+			}
+			opj.Body = append(opj.Body, data)
+		}
+		nj.Operations = append(nj.Operations, opj)
+	}
+	return json.Marshal(nj)
 }

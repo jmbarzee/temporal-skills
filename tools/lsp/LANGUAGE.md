@@ -8,7 +8,7 @@ A TWF file consists of zero or more top-level definitions:
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def | worker_def | namespace_def
+definition ::= workflow_def | activity_def | worker_def | namespace_def | nexus_service_def
 ```
 
 ## Workflow Definitions
@@ -118,9 +118,10 @@ worker_def ::= 'worker' IDENT ':' NEWLINE
 
 worker_entry ::= 'workflow' IDENT NEWLINE
                | 'activity' IDENT NEWLINE
+               | 'nexus' 'service' IDENT NEWLINE
 ```
 
-Worker names use lowerCamelCase convention. Workers contain only workflow and activity references — deployment configuration (task_queue, etc.) is specified when the worker is instantiated in a namespace block.
+Worker names use lowerCamelCase convention. Workers contain workflow, activity, and nexus service references — deployment configuration (task_queue, etc.) is specified when the worker is instantiated in a namespace block.
 
 **Example:**
 ```
@@ -129,6 +130,7 @@ worker orderTypes:
     workflow CancelOrder
     activity ChargePayment
     activity SendNotification
+    nexus service OrderService
 ```
 
 ## Namespace Definitions
@@ -142,9 +144,10 @@ namespace_def ::= 'namespace' IDENT ':' NEWLINE
                   DEDENT
 
 namespace_entry ::= 'worker' IDENT NEWLINE [options_line]
+                  | 'nexus' 'endpoint' IDENT NEWLINE [options_line]
 ```
 
-Each worker instantiation inside a namespace requires a `task_queue` option. Additional worker configuration options are available.
+Each worker instantiation inside a namespace requires a `task_queue` option. Nexus endpoint instantiations also require a `task_queue` option for routing.
 
 **Example:**
 ```
@@ -153,6 +156,9 @@ namespace orders:
         options:
             task_queue: "orderProcessing"
             max_concurrent_activity_executions: 50
+    nexus endpoint OrderEndpoint
+        options:
+            task_queue: "orderProcessing"
 ```
 
 The same worker type set can be instantiated in multiple namespaces with different options:
@@ -186,17 +192,66 @@ Worker instantiation options (all snake_case):
 | `worker_shutdown_timeout` | duration |
 | `local_activity_only_mode` | bool |
 
+### Endpoint Options
+
+Nexus endpoint instantiation options:
+
+| Key | Type |
+|-----|------|
+| `task_queue` | string (required) |
+
 ### Resolution
 
-The resolver validates workers and namespaces:
-- Worker references to undefined workflows or activities produce errors
-- Duplicate worker or namespace names produce errors
+The resolver validates workers, namespaces, and nexus definitions:
+- Worker references to undefined workflows, activities, or nexus services produce errors
+- Duplicate worker, namespace, or nexus service names produce errors
+- Duplicate nexus endpoint names across namespaces produce errors
 - Namespace references to undefined workers produce errors
 - Worker instantiations missing `task_queue` option produce errors
+- Nexus endpoint instantiations missing `task_queue` option produce errors
 - Workers on the same task queue (within a namespace) with different type sets produce errors
 - Workers on the same task queue with identical type sets produce warnings (redundant)
+- Nexus endpoint routing to a task queue where no worker registers the service produces errors
 - Defined workflows/activities not on any instantiated worker produce warnings (when namespaces exist)
+- Defined nexus services not referenced by any worker produce warnings (when namespaces exist)
 - Defined workers not instantiated in any namespace produce warnings (when namespaces exist)
+
+## Nexus Service Definitions
+
+Nexus services define typed operation groups for cross-namespace communication:
+
+```
+nexus_service_def ::= 'nexus' 'service' IDENT ':' NEWLINE
+                      INDENT nexus_operation* DEDENT
+
+nexus_operation ::= async_operation | sync_operation
+
+async_operation ::= 'async' IDENT 'workflow' IDENT NEWLINE
+
+sync_operation  ::= 'sync' IDENT params '->' return_type ':' NEWLINE
+                    INDENT statement* DEDENT
+```
+
+- `service` is a soft keyword (IDENT checked contextually after `nexus`)
+- `sync` and `async` are hard keyword tokens
+- **Async operations** delegate to a named workflow (one-liner, no body)
+- **Sync operations** have a body using the workflow statement set (activities, queries, control flow, close)
+
+**Example:**
+```
+nexus service OrderService:
+    async PlaceOrder workflow ProcessOrder
+    sync GetStatus(orderId: string) -> (Status):
+        activity FetchStatus(orderId) -> status
+        close complete(status)
+```
+
+### Resolution
+
+The resolver validates nexus service definitions:
+- Duplicate nexus service names produce errors
+- Async operations referencing undefined workflows produce errors
+- Sync operation bodies are resolved like workflow bodies
 
 ## Statements
 
@@ -207,6 +262,7 @@ Available in workflow context (workflow definitions and signal/update handlers):
 ```
 statement ::= activity_call
             | workflow_call
+            | nexus_call
             | promise_stmt
             | set_stmt
             | unset_stmt
@@ -291,12 +347,34 @@ activity ChargePayment(order) -> payment
 ### Workflow Call
 
 ```
-workflow_call ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] [NEWLINE options_line]
+workflow_call ::= ['detach'] 'workflow' IDENT args ['->' result] [NEWLINE options_line]
 ```
 
 Modifiers:
 - `detach`: Fire-and-forget child workflow (no result)
-- `nexus STRING`: Cross-namespace workflow call
+
+### Nexus Call
+
+```
+nexus_call ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result] [NEWLINE options_line]
+```
+
+Calls a nexus service operation. The three IDENTs are: Endpoint, Service.Operation (dot-separated).
+
+- `detach`: Fire-and-forget nexus call (no result)
+- Endpoint: The nexus endpoint name (defined in a namespace block)
+- Service.Operation: The nexus service and operation name (dot-separated)
+
+**Nexus call options:** `schedule_to_close_timeout`, `retry_policy`, `priority`
+
+**Examples:**
+```
+nexus OrderEndpoint OrderService.PlaceOrder(order) -> result
+nexus OrderEndpoint OrderService.GetStatus(order.id) -> status
+    options:
+        schedule_to_close_timeout: 30s
+detach nexus NotificationEndpoint NotificationService.SendEmail(email)
+```
 
 ### Promise Statement
 
@@ -308,6 +386,9 @@ async_target ::= timer_target
                | update_target
                | activity_target
                | workflow_target
+               | nexus_target
+
+nexus_target ::= 'nexus' IDENT IDENT '.' IDENT args
 ```
 
 Declares a non-blocking async operation. The `<-` operator visually distinguishes async declaration from sync result binding (`->`). Use `await` to wait for the promise later.
@@ -319,6 +400,7 @@ promise report <- workflow BuildReport(data)
 promise timeout <- timer(5m)
 promise approved <- signal Approved
 promise addr <- update ChangeAddress
+promise result <- nexus OrderEndpoint OrderService.PlaceOrder(order)
 ```
 
 ### Set / Unset Statements
@@ -346,6 +428,7 @@ await_target ::= timer_target
                | update_target
                | activity_target
                | workflow_target
+               | nexus_target
                | ident_target
 
 timer_target ::= 'timer' '(' duration ')'
@@ -356,7 +439,9 @@ update_target ::= 'update' IDENT ['->' params]
 
 activity_target ::= 'activity' IDENT args ['->' result]
 
-workflow_target ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result]
+workflow_target ::= ['detach'] 'workflow' IDENT args ['->' result]
+
+nexus_target ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result]
 
 ident_target ::= IDENT ['->' result]
 
@@ -374,6 +459,7 @@ await signal Approved
 await signal Approved -> (approver, timestamp)
 await activity Process(data) -> result
 await workflow Child(input) -> output
+await nexus OrderEndpoint OrderService.GetStatus(id) -> status
 await myPromise -> result
 await clusterStarted
 ```
@@ -402,6 +488,7 @@ await_one_case ::= signal_case
                  | timer_case
                  | activity_case
                  | workflow_case
+                 | nexus_case
                  | await_all_case
                  | ident_case
 
@@ -417,8 +504,11 @@ timer_case ::= 'timer' '(' duration ')' ':' NEWLINE
 activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE
                   [INDENT statement+ DEDENT]
 
-workflow_case ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE
+workflow_case ::= ['detach'] 'workflow' IDENT args ['->' result] ':' NEWLINE
                   [INDENT statement+ DEDENT]
+
+nexus_case ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result] ':' NEWLINE
+               [INDENT statement+ DEDENT]
 
 await_all_case ::= 'await' 'all' ':' NEWLINE
                    INDENT statement+ DEDENT
@@ -580,8 +670,8 @@ field ::= IDENT ':' expr
 
 **Async workflow operations:**
 - `promise` - Declare a non-blocking async operation (binds with `<-`)
-- `detach` - Fire-and-forget child workflow
-- `nexus` - Cross-namespace call
+- `detach` - Fire-and-forget child workflow or nexus call
+- `nexus` - Nexus service definition (top-level) or nexus call (in workflow body)
 - `await` - Wait for operations (`await timer`, `await signal`, `await all`, `await one`, `await <promise>`, `await <condition>`)
 - `all` - Wait for all operations (used with `await`)
 - `one` - Wait for first operation (used with `await`)
@@ -625,18 +715,27 @@ field ::= IDENT ':' expr
 **Operators:**
 - `and`, `or`, `not` - Logical operators
 
+**Nexus operations:**
+- `sync` - Synchronous nexus operation (in nexus service body)
+- `async` - Asynchronous nexus operation (in nexus service body)
+
 **Worker topology:**
 - `worker` - Worker type set definition (at top level) or worker instantiation (in namespace block)
 - `namespace` - Namespace definition (deployment topology)
 - `task_queue` - Task queue option key (in options blocks)
 
+**Soft keywords** (only special after `nexus`):
+- `service` - Nexus service (in top-level definition or worker reference)
+- `endpoint` - Nexus endpoint (in namespace block)
+
 **Configuration:**
-- `options` - Options block for activity/workflow calls
+- `options` - Options block for activity/workflow/nexus calls
 
 ### Symbols
 
 - `->` - Output binding (result assignment)
 - `<-` - Promise binding (async declaration)
+- `.` - Member access / nexus service.operation separator
 - `:` - Block start
 - `#` - Comment
 
@@ -701,7 +800,8 @@ Certain keywords are only valid in workflow context and produce errors in activi
 - `condition` - Named boolean awaitables
 - `set`, `unset` - Condition mutation
 - `state` - Workflow state block
-- `detach`, `nexus` - Workflow calls
+- `detach`, `nexus` - Workflow/nexus calls
+- `sync`, `async` - Nexus operation types
 - `workflow` - Child workflow calls
 - `timer` - Durable sleep (with `await`)
 - `signal`, `query`, `update` - Handler declarations and await targets
@@ -747,13 +847,24 @@ Common error types:
 - Invalid await targets (e.g., awaiting a query)
 - Condition with result binding (conditions cannot have `-> result`)
 - `set`/`unset` on undefined condition
-- Worker references undefined workflow or activity
-- Duplicate worker or namespace definitions
+- Worker references undefined workflow, activity, or nexus service
+- Duplicate worker, namespace, or nexus service definitions
+- Duplicate nexus endpoint names across namespaces
 - Namespace references undefined worker
 - Worker instantiation missing `task_queue` option
+- Nexus endpoint instantiation missing `task_queue` option
 - Workers on same task queue with different type sets
+- Undefined nexus endpoint (when endpoints exist locally)
+- Undefined nexus service (when services exist locally)
+- Nexus service has no matching operation
+- Detach nexus call with result binding
+- Async nexus operation references undefined workflow
+- Nexus endpoint routes to task queue with no worker registering the service
 - Workflow/activity not registered on any instantiated worker (warning)
+- Nexus service not referenced by any worker (warning)
 - Worker not instantiated in any namespace (warning)
+- Unresolved nexus endpoint when no endpoints defined (warning, may be external)
+- Unresolved nexus service when no services defined (warning, may be external)
 - Unknown option key in `options:` block
 - Wrong value type for option key (e.g., number where duration expected)
 - Invalid enum value for option key
@@ -766,7 +877,7 @@ See the `topics/` directory for complete working examples of all language featur
 
 ```
 file ::= definition*
-definition ::= workflow_def | activity_def | worker_def | namespace_def
+definition ::= workflow_def | activity_def | worker_def | namespace_def | nexus_service_def
 
 workflow_def ::= 'workflow' IDENT params ['->' return_type] ':'
                  NEWLINE INDENT
@@ -782,10 +893,20 @@ worker_def ::= 'worker' IDENT ':' NEWLINE
                INDENT worker_entry* DEDENT
 worker_entry ::= 'workflow' IDENT NEWLINE
                | 'activity' IDENT NEWLINE
+               | 'nexus' 'service' IDENT NEWLINE
 
 namespace_def ::= 'namespace' IDENT ':' NEWLINE
                   INDENT namespace_entry* DEDENT
 namespace_entry ::= 'worker' IDENT NEWLINE [options_line]
+                  | 'nexus' 'endpoint' IDENT NEWLINE [options_line]
+
+nexus_service_def ::= 'nexus' 'service' IDENT ':' NEWLINE
+                      INDENT nexus_operation* DEDENT
+nexus_operation ::= 'async' IDENT 'workflow' IDENT NEWLINE
+                  | 'sync' IDENT params '->' return_type ':' NEWLINE
+                    INDENT statement* DEDENT
+
+nexus_call ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result] [NEWLINE options_line]
 
 options_block ::= 'options' ':' NEWLINE INDENT option_entry+ DEDENT
 option_entry  ::= IDENT ':' value NEWLINE
@@ -801,7 +922,7 @@ signal_decl ::= 'signal' IDENT params ':' NEWLINE INDENT statement* DEDENT
 query_decl ::= 'query' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 update_decl ::= 'update' IDENT params '->' return_type ':' NEWLINE INDENT statement* DEDENT
 
-statement ::= activity_call | workflow_call | promise_stmt | set_stmt | unset_stmt
+statement ::= activity_call | workflow_call | nexus_call | promise_stmt | set_stmt | unset_stmt
             | await_stmt | await_all_block | await_one_block | switch_block
             | if_stmt | for_stmt | close_stmt | return_stmt
             | break_stmt | continue_stmt | assignment
@@ -810,10 +931,11 @@ promise_stmt ::= 'promise' IDENT '<-' async_target NEWLINE
 set_stmt ::= 'set' IDENT NEWLINE
 unset_stmt ::= 'unset' IDENT NEWLINE
 
-await_stmt ::= 'await' (timer_target | signal_target | update_target | activity_target | workflow_target | ident_target) NEWLINE
+await_stmt ::= 'await' (timer_target | signal_target | update_target | activity_target | workflow_target | nexus_target | ident_target) NEWLINE
+nexus_target ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result]
 ident_target ::= IDENT ['->' result]
 
-await_one_case ::= signal_case | update_case | timer_case | activity_case | workflow_case | await_all_case | ident_case
+await_one_case ::= signal_case | update_case | timer_case | activity_case | workflow_case | nexus_case | await_all_case | ident_case
 
 signal_case ::= 'signal' IDENT ['->' params] ':' NEWLINE [INDENT statement+ DEDENT]
 
@@ -823,7 +945,9 @@ timer_case ::= 'timer' '(' duration ')' ':' NEWLINE [INDENT statement+ DEDENT]
 
 activity_case ::= 'activity' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 
-workflow_case ::= ['detach'] ['nexus' STRING] 'workflow' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
+workflow_case ::= ['detach'] 'workflow' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
+
+nexus_case ::= ['detach'] 'nexus' IDENT IDENT '.' IDENT args ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 
 ident_case ::= IDENT ['->' result] ':' NEWLINE [INDENT statement+ DEDENT]
 

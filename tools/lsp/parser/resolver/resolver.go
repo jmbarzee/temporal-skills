@@ -18,6 +18,12 @@ func (e *ResolveError) Error() string {
 	return fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
 }
 
+// endpointInfo tracks which namespace defines a nexus endpoint.
+type endpointInfo struct {
+	namespaceName string
+	endpoint      *ast.NamespaceEndpoint
+}
+
 // Resolve walks the AST, linking calls to their definitions.
 // Returns a list of errors (empty on success).
 func Resolve(file *ast.File) []*ResolveError {
@@ -25,6 +31,7 @@ func Resolve(file *ast.File) []*ResolveError {
 	activities := make(map[string]*ast.ActivityDef)
 	workers := make(map[string]*ast.WorkerDef)
 	namespaces := make(map[string]*ast.NamespaceDef)
+	nexusServices := make(map[string]*ast.NexusServiceDef)
 	var errs []*ResolveError
 
 	// Pass 1: Collect all definitions.
@@ -66,6 +73,31 @@ func Resolve(file *ast.File) []*ResolveError {
 				})
 			}
 			namespaces[d.Name] = d
+		case *ast.NexusServiceDef:
+			if _, exists := nexusServices[d.Name]; exists {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("duplicate nexus service definition: %s", d.Name),
+					Line:   d.Line,
+					Column: d.Column,
+				})
+			}
+			nexusServices[d.Name] = d
+		}
+	}
+
+	// Build global endpoint map across all namespaces.
+	allEndpoints := make(map[string]*endpointInfo)
+	for _, ns := range namespaces {
+		for i := range ns.Endpoints {
+			ep := &ns.Endpoints[i]
+			if existing, exists := allEndpoints[ep.EndpointName]; exists {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("duplicate nexus endpoint name %q: defined in namespace %s and namespace %s", ep.EndpointName, existing.namespaceName, ns.Name),
+					Line:   ep.Line,
+					Column: ep.Column,
+				})
+			}
+			allEndpoints[ep.EndpointName] = &endpointInfo{namespaceName: ns.Name, endpoint: ep}
 		}
 	}
 
@@ -110,13 +142,17 @@ func Resolve(file *ast.File) []*ResolveError {
 		}
 
 		ctx := &resolveCtx{
-			workflows:  workflows,
-			activities: activities,
-			signals:    signals,
-			queries:    queries,
-			updates:    updates,
-			conditions: conditions,
-			promises:   promises,
+			workflows:     workflows,
+			activities:    activities,
+			signals:       signals,
+			queries:       queries,
+			updates:       updates,
+			conditions:    conditions,
+			promises:      promises,
+			nexusServices: nexusServices,
+			allEndpoints:  allEndpoints,
+			workers:       workers,
+			namespaces:    namespaces,
 		}
 
 		// Resolve handler bodies.
@@ -134,17 +170,54 @@ func Resolve(file *ast.File) []*ResolveError {
 		errs = append(errs, ctx.errs...)
 	}
 
+	// Pass 2b: Resolve nexus service operation bodies.
+	for _, def := range file.Definitions {
+		svc, ok := def.(*ast.NexusServiceDef)
+		if !ok {
+			continue
+		}
+		for _, op := range svc.Operations {
+			if op.OpType == ast.NexusOpAsync {
+				// Async operations reference a workflow by name.
+				if _, ok := workflows[op.WorkflowName]; !ok {
+					errs = append(errs, &ResolveError{
+						Msg:    fmt.Sprintf("nexus service %s: async operation %s references undefined workflow: %s", svc.Name, op.Name, op.WorkflowName),
+						Line:   op.Line,
+						Column: op.Column,
+					})
+				}
+			} else if op.OpType == ast.NexusOpSync {
+				// Sync operations have a body — resolve like a workflow body.
+				syncCtx := &resolveCtx{
+					workflows:     workflows,
+					activities:    activities,
+					signals:       make(map[string]*ast.SignalDecl),
+					queries:       make(map[string]*ast.QueryDecl),
+					updates:       make(map[string]*ast.UpdateDecl),
+					conditions:    make(map[string]*ast.ConditionDecl),
+					promises:      make(map[string]*ast.PromiseStmt),
+					nexusServices: nexusServices,
+					allEndpoints:  allEndpoints,
+					workers:       workers,
+					namespaces:    namespaces,
+				}
+				syncCtx.resolveStatements(op.Body)
+				errs = append(errs, syncCtx.errs...)
+			}
+		}
+	}
+
 	// Pass 3: Worker and namespace validation.
-	errs = append(errs, resolveWorkersAndNamespaces(namespaces, workers, workflows, activities)...)
+	errs = append(errs, resolveWorkersAndNamespaces(namespaces, workers, workflows, activities, nexusServices, allEndpoints)...)
 
 	return errs
 }
 
 // resolveWorkersAndNamespaces validates worker type sets and namespace instantiations.
-func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef) []*ResolveError {
+func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, workers map[string]*ast.WorkerDef, workflows map[string]*ast.WorkflowDef, activities map[string]*ast.ActivityDef, nexusServices map[string]*ast.NexusServiceDef, allEndpoints map[string]*endpointInfo) []*ResolveError {
 	var errs []*ResolveError
 
-	// 1. Worker type set validation: refs must point to defined workflows/activities.
+	// 1. Worker type set validation: refs must point to defined workflows/activities/services.
 	for _, w := range workers {
 		for _, ref := range w.Workflows {
 			if _, ok := workflows[ref.Name]; !ok {
@@ -164,10 +237,20 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 				})
 			}
 		}
+		for _, ref := range w.Services {
+			if _, ok := nexusServices[ref.Name]; !ok {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("worker %s references undefined nexus service: %s", w.Name, ref.Name),
+					Line:   ref.Line,
+					Column: ref.Column,
+				})
+			}
+		}
 	}
 
 	// 2. Namespace validation: worker instantiations must ref defined workers,
 	//    and each instantiation must have a task_queue option.
+	//    Endpoint instantiations must have a task_queue option.
 	for _, ns := range namespaces {
 		for _, nw := range ns.Workers {
 			if _, ok := workers[nw.WorkerName]; !ok {
@@ -186,13 +269,24 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 				})
 			}
 		}
+		for _, ep := range ns.Endpoints {
+			tq := extractTaskQueue(ep.Options)
+			if tq == "" {
+				errs = append(errs, &ResolveError{
+					Msg:    fmt.Sprintf("nexus endpoint %s in namespace %s missing required task_queue option", ep.EndpointName, ns.Name),
+					Line:   ep.Line,
+					Column: ep.Column,
+				})
+			}
+		}
 	}
 
 	// 3. Coverage warnings (only when namespaces exist).
 	if len(namespaces) > 0 {
-		// Track which workflows/activities are covered by instantiated workers.
+		// Track which workflows/activities/services are covered by instantiated workers.
 		coveredWorkflows := make(map[string]bool)
 		coveredActivities := make(map[string]bool)
+		coveredServices := make(map[string]bool)
 		instantiatedWorkers := make(map[string]bool)
 
 		for _, ns := range namespaces {
@@ -204,6 +298,9 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 					}
 					for _, ref := range w.Activities {
 						coveredActivities[ref.Name] = true
+					}
+					for _, ref := range w.Services {
+						coveredServices[ref.Name] = true
 					}
 				}
 			}
@@ -225,6 +322,16 @@ func resolveWorkersAndNamespaces(namespaces map[string]*ast.NamespaceDef, worker
 					Msg:      fmt.Sprintf("activity %s is not registered on any instantiated worker", name),
 					Line:     act.Line,
 					Column:   act.Column,
+					Severity: "warning",
+				})
+			}
+		}
+		for name, svc := range nexusServices {
+			if !coveredServices[name] {
+				errs = append(errs, &ResolveError{
+					Msg:      fmt.Sprintf("nexus service %s is not referenced by any worker", name),
+					Line:     svc.Line,
+					Column:   svc.Column,
 					Severity: "warning",
 				})
 			}
@@ -321,14 +428,18 @@ func sameStringSet(a, b map[string]bool) bool {
 }
 
 type resolveCtx struct {
-	workflows  map[string]*ast.WorkflowDef
-	activities map[string]*ast.ActivityDef
-	signals    map[string]*ast.SignalDecl
-	queries    map[string]*ast.QueryDecl
-	updates    map[string]*ast.UpdateDecl
-	conditions map[string]*ast.ConditionDecl
-	promises   map[string]*ast.PromiseStmt
-	errs       []*ResolveError
+	workflows     map[string]*ast.WorkflowDef
+	activities    map[string]*ast.ActivityDef
+	signals       map[string]*ast.SignalDecl
+	queries       map[string]*ast.QueryDecl
+	updates       map[string]*ast.UpdateDecl
+	conditions    map[string]*ast.ConditionDecl
+	promises      map[string]*ast.PromiseStmt
+	nexusServices map[string]*ast.NexusServiceDef
+	allEndpoints  map[string]*endpointInfo
+	workers       map[string]*ast.WorkerDef
+	namespaces    map[string]*ast.NamespaceDef
+	errs          []*ResolveError
 }
 
 func (c *resolveCtx) resolveStatements(stmts []ast.Statement) {
@@ -360,6 +471,11 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				Column: s.Column,
 			})
 		}
+
+	case *ast.NexusCall:
+		svc, op := c.resolveNexusRef(s.Endpoint, s.Service, s.Operation, s.Detach, s.Result, s.Line, s.Column)
+		s.ResolvedService = svc
+		s.ResolvedOperation = op
 
 	case *ast.AwaitAllBlock:
 		c.resolveStatements(s.Body)
@@ -432,6 +548,9 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				})
 			}
 		}
+		if s.Nexus != "" {
+			c.resolveNexusRef(s.Nexus, s.NexusService, s.NexusOperation, s.NexusDetach, s.NexusResult, s.Line, s.Column)
+		}
 		if s.Ident != "" {
 			_, isPromise := c.promises[s.Ident]
 			_, isCondition := c.conditions[s.Ident]
@@ -490,6 +609,9 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 				})
 			}
 		}
+		if s.Nexus != "" {
+			c.resolveNexusRef(s.Nexus, s.NexusService, s.NexusOperation, false, "", s.Line, s.Column)
+		}
 
 	case *ast.SetStmt:
 		if _, ok := c.conditions[s.Name]; !ok {
@@ -509,6 +631,118 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 			})
 		}
 	}
+}
+
+// resolveNexusRef validates a nexus call site (endpoint, service, operation).
+// Used by NexusCall, AwaitStmt nexus, AwaitOneCase nexus, and PromiseStmt nexus.
+func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, detach bool, result string, line, column int) (*ast.NexusServiceDef, *ast.NexusOperation) {
+	// Detach + result is invalid.
+	if detach && result != "" {
+		c.errs = append(c.errs, &ResolveError{
+			Msg:    "detach nexus call cannot have a result (-> identifier)",
+			Line:   line,
+			Column: column,
+		})
+	}
+
+	// Endpoint resolution.
+	if len(c.allEndpoints) > 0 {
+		if _, ok := c.allEndpoints[endpoint]; !ok {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined nexus endpoint: %s", endpoint),
+				Line:   line,
+				Column: column,
+			})
+		}
+	} else {
+		c.errs = append(c.errs, &ResolveError{
+			Msg:      fmt.Sprintf("unresolved nexus endpoint: %s (no endpoints defined — may be external)", endpoint),
+			Line:     line,
+			Column:   column,
+			Severity: "warning",
+		})
+	}
+
+	// Service resolution.
+	var resolvedSvc *ast.NexusServiceDef
+	if len(c.nexusServices) > 0 {
+		svc, ok := c.nexusServices[service]
+		if !ok {
+			c.errs = append(c.errs, &ResolveError{
+				Msg:    fmt.Sprintf("undefined nexus service: %s", service),
+				Line:   line,
+				Column: column,
+			})
+		} else {
+			resolvedSvc = svc
+			// Operation resolution (only when service was found).
+			var resolvedOp *ast.NexusOperation
+			for _, op := range svc.Operations {
+				if op.Name == operation {
+					resolvedOp = op
+					break
+				}
+			}
+			if resolvedOp == nil {
+				c.errs = append(c.errs, &ResolveError{
+					Msg:    fmt.Sprintf("nexus service %s has no operation %s", service, operation),
+					Line:   line,
+					Column: column,
+				})
+			} else {
+				// Check endpoint→task_queue→worker→service linkage.
+				c.checkEndpointServiceLinkage(endpoint, service, line, column)
+				return resolvedSvc, resolvedOp
+			}
+		}
+	} else {
+		c.errs = append(c.errs, &ResolveError{
+			Msg:      fmt.Sprintf("unresolved nexus service: %s (no nexus services defined — may be external)", service),
+			Line:     line,
+			Column:   column,
+			Severity: "warning",
+		})
+	}
+
+	return resolvedSvc, nil
+}
+
+// checkEndpointServiceLinkage verifies that the endpoint's task queue has a worker
+// that registers the given service.
+func (c *resolveCtx) checkEndpointServiceLinkage(endpoint, service string, line, column int) {
+	epInfo, ok := c.allEndpoints[endpoint]
+	if !ok {
+		return // endpoint not found — already reported
+	}
+	tq := extractTaskQueue(epInfo.endpoint.Options)
+	if tq == "" {
+		return // missing task_queue — already reported in Pass 3
+	}
+
+	// Find all workers instantiated on this task queue across all namespaces.
+	for _, ns := range c.namespaces {
+		for _, nw := range ns.Workers {
+			nwTQ := extractTaskQueue(nw.Options)
+			if nwTQ != tq {
+				continue
+			}
+			w, ok := c.workers[nw.WorkerName]
+			if !ok {
+				continue
+			}
+			for _, ref := range w.Services {
+				if ref.Name == service {
+					return // found a worker on the right queue with this service
+				}
+			}
+		}
+	}
+
+	c.errs = append(c.errs, &ResolveError{
+		Msg:    fmt.Sprintf("nexus endpoint %s routes to task queue %q, but no worker on that queue has service %s", endpoint, tq, service),
+		Line:   line,
+		Column: column,
+	})
 }
 
 func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
@@ -556,6 +790,10 @@ func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
 				Column: awaitCase.Column,
 			})
 		}
+	}
+
+	if awaitCase.Nexus != "" {
+		c.resolveNexusRef(awaitCase.Nexus, awaitCase.NexusService, awaitCase.NexusOperation, awaitCase.NexusDetach, awaitCase.NexusResult, awaitCase.Line, awaitCase.Column)
 	}
 
 	if awaitCase.Ident != "" {

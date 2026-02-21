@@ -197,10 +197,13 @@ func signatureFor(node ast.Node) string {
 		if n.Mode == ast.CallDetach {
 			prefix = "detach workflow"
 		}
-		if n.Namespace != "" {
-			prefix += " (nexus " + n.Namespace + ")"
-		}
 		return fmt.Sprintf("%s %s(%s)", prefix, n.Name, n.Args)
+	case *ast.NexusCall:
+		prefix := "nexus"
+		if n.Detach {
+			prefix = "detach nexus"
+		}
+		return fmt.Sprintf("%s %s %s.%s(%s)", prefix, n.Endpoint, n.Service, n.Operation, n.Args)
 	case *ast.AwaitStmt:
 		switch n.AwaitKind() {
 		case "timer":

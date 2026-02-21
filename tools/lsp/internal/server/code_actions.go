@@ -222,49 +222,6 @@ func findCallInStatements(stmts []ast.Statement, name string) *ast.ActivityCall 
 	return nil
 }
 
-func findAwaitOneBlocks(wf *ast.WorkflowDef) []*ast.AwaitOneBlock {
-	var blocks []*ast.AwaitOneBlock
-	var visit func([]ast.Statement)
-	visit = func(stmts []ast.Statement) {
-		for _, stmt := range stmts {
-			switch s := stmt.(type) {
-			case *ast.AwaitOneBlock:
-				blocks = append(blocks, s)
-			case *ast.IfStmt:
-				visit(s.Body)
-				visit(s.ElseBody)
-			case *ast.ForStmt:
-				visit(s.Body)
-			}
-		}
-	}
-	visit(wf.Body)
-	return blocks
-}
-
-func findSignalsThatModify(wf *ast.WorkflowDef, varName string) []string {
-	var signals []string
-	for _, sig := range wf.Signals {
-		// Check if signal body contains assignment to varName
-		if containsAssignment(sig.Body, varName) {
-			signals = append(signals, sig.Name)
-		}
-	}
-	return signals
-}
-
-func containsAssignment(stmts []ast.Statement, varName string) bool {
-	for _, stmt := range stmts {
-		if raw, ok := stmt.(*ast.RawStmt); ok {
-			// Check if raw statement contains assignment like "varName = ..."
-			if strings.Contains(raw.Text, varName+" =") || strings.Contains(raw.Text, varName+"=") {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func findReturnStatements(stmts []ast.Statement) []*ast.ReturnStmt {
 	var returns []*ast.ReturnStmt
 	var visit func([]ast.Statement)

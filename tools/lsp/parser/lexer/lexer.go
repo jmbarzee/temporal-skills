@@ -1,8 +1,6 @@
 package lexer
 
 import (
-	"fmt"
-
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/token"
 )
 
@@ -336,13 +334,3 @@ func isDigit(ch byte) bool {
 	return ch >= '0' && ch <= '9'
 }
 
-// LexError represents a lexer error with position.
-type LexError struct {
-	Msg    string
-	Line   int
-	Column int
-}
-
-func (e *LexError) Error() string {
-	return fmt.Sprintf("lexer error at %d:%d: %s", e.Line, e.Column, e.Msg)
-}

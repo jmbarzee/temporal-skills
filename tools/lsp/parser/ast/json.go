@@ -32,6 +32,22 @@ func (f *File) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fj)
 }
 
+// marshalStatements marshals a slice of statements into JSON.
+func marshalStatements(stmts []Statement) ([]json.RawMessage, error) {
+	if len(stmts) == 0 {
+		return nil, nil
+	}
+	out := make([]json.RawMessage, 0, len(stmts))
+	for _, stmt := range stmts {
+		data, err := marshalStatement(stmt)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, data)
+	}
+	return out, nil
+}
+
 func marshalDefinition(def Definition) (json.RawMessage, error) {
 	switch d := def.(type) {
 	case *WorkflowDef:
@@ -152,12 +168,9 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 			Name:   s.Name,
 			Params: s.Params,
 		}
-		for _, stmt := range s.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			sj.Body = append(sj.Body, data)
+		var err error
+		if sj.Body, err = marshalStatements(s.Body); err != nil {
+			return nil, err
 		}
 		wj.Signals = append(wj.Signals, sj)
 	}
@@ -170,12 +183,9 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 			Params:     q.Params,
 			ReturnType: q.ReturnType,
 		}
-		for _, stmt := range q.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			qj.Body = append(qj.Body, data)
+		var err error
+		if qj.Body, err = marshalStatements(q.Body); err != nil {
+			return nil, err
 		}
 		wj.Queries = append(wj.Queries, qj)
 	}
@@ -188,21 +198,15 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 			Params:     u.Params,
 			ReturnType: u.ReturnType,
 		}
-		for _, stmt := range u.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			uj.Body = append(uj.Body, data)
+		var err error
+		if uj.Body, err = marshalStatements(u.Body); err != nil {
+			return nil, err
 		}
 		wj.Updates = append(wj.Updates, uj)
 	}
-	for _, stmt := range w.Body {
-		data, err := marshalStatement(stmt)
-		if err != nil {
-			return nil, err
-		}
-		wj.Body = append(wj.Body, data)
+	var err error
+	if wj.Body, err = marshalStatements(w.Body); err != nil {
+		return nil, err
 	}
 	return json.Marshal(wj)
 }
@@ -226,14 +230,10 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 		Name:       a.Name,
 		Params:     a.Params,
 		ReturnType: a.ReturnType,
-		Body:       make([]json.RawMessage, 0, len(a.Body)),
 	}
-	for _, stmt := range a.Body {
-		data, err := marshalStatement(stmt)
-		if err != nil {
-			return nil, err
-		}
-		aj.Body = append(aj.Body, data)
+	var err error
+	if aj.Body, err = marshalStatements(a.Body); err != nil {
+		return nil, err
 	}
 	return json.Marshal(aj)
 }
@@ -244,6 +244,30 @@ type WorkerRefJSON struct {
 	Line     int              `json:"line"`
 	Column   int              `json:"column"`
 	Resolved *resolvedRefJSON `json:"resolved,omitempty"`
+}
+
+// marshalWorkerRefs converts a slice of WorkerRef to JSON form.
+func marshalWorkerRefs(refs []WorkerRef) []WorkerRefJSON {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]WorkerRefJSON, 0, len(refs))
+	for _, ref := range refs {
+		rj := WorkerRefJSON{
+			Name:   ref.Name,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+		if ref.Resolved != nil {
+			rj.Resolved = &resolvedRefJSON{
+				Name:   ref.Name,
+				Line:   ref.Resolved.NodeLine(),
+				Column: ref.Resolved.NodeColumn(),
+			}
+		}
+		out = append(out, rj)
+	}
+	return out
 }
 
 // WorkerDefJSON is the JSON representation of WorkerDef.
@@ -259,43 +283,13 @@ type WorkerDefJSON struct {
 
 func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 	wj := WorkerDefJSON{
-		Type:   "workerDef",
-		Line:   w.Line,
-		Column: w.Column,
-		Name:   w.Name,
-	}
-	for _, ref := range w.Workflows {
-		rj := WorkerRefJSON{
-			Name:   ref.Name,
-			Line:   ref.Line,
-			Column: ref.Column,
-		}
-		if ref.Resolved != nil {
-			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
-		}
-		wj.Workflows = append(wj.Workflows, rj)
-	}
-	for _, ref := range w.Activities {
-		rj := WorkerRefJSON{
-			Name:   ref.Name,
-			Line:   ref.Line,
-			Column: ref.Column,
-		}
-		if ref.Resolved != nil {
-			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
-		}
-		wj.Activities = append(wj.Activities, rj)
-	}
-	for _, ref := range w.Services {
-		rj := WorkerRefJSON{
-			Name:   ref.Name,
-			Line:   ref.Line,
-			Column: ref.Column,
-		}
-		if ref.Resolved != nil {
-			rj.Resolved = &resolvedRefJSON{Name: ref.Name, Line: ref.Resolved.NodeLine(), Column: ref.Resolved.NodeColumn()}
-		}
-		wj.Services = append(wj.Services, rj)
+		Type:       "workerDef",
+		Line:       w.Line,
+		Column:     w.Column,
+		Name:       w.Name,
+		Workflows:  marshalWorkerRefs(w.Workflows),
+		Activities: marshalWorkerRefs(w.Activities),
+		Services:   marshalWorkerRefs(w.Services),
 	}
 	return json.Marshal(wj)
 }
@@ -420,13 +414,9 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 		}
 		return json.Marshal(aj)
 	case *AwaitAllBlock:
-		body := make([]json.RawMessage, 0, len(s.Body))
-		for _, stmt := range s.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			body = append(body, data)
+		body, err := marshalStatements(s.Body)
+		if err != nil {
+			return nil, err
 		}
 		return json.Marshal(awaitAllBlockJSON{
 			Type:   "awaitAll",
@@ -437,18 +427,14 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 	case *AwaitOneBlock:
 		cases := make([]awaitOneCaseJSON, 0, len(s.Cases))
 		for _, c := range s.Cases {
-			caseBody := make([]json.RawMessage, 0, len(c.Body))
-			for _, stmt := range c.Body {
-				data, err := marshalStatement(stmt)
-				if err != nil {
-					return nil, err
-				}
-				caseBody = append(caseBody, data)
+			caseBody, err := marshalStatements(c.Body)
+			if err != nil {
+				return nil, err
 			}
 			cj := awaitOneCaseJSON{
-				Line: c.Line,
+				Line:   c.Line,
 				Column: c.Column,
-				Body: caseBody,
+				Body:   caseBody,
 			}
 			if c.AwaitAll != nil {
 				cj.Kind = "await_all"
@@ -471,13 +457,9 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 	case *SwitchBlock:
 		cases := make([]switchCaseJSON, 0, len(s.Cases))
 		for _, c := range s.Cases {
-			caseBody := make([]json.RawMessage, 0, len(c.Body))
-			for _, stmt := range c.Body {
-				data, err := marshalStatement(stmt)
-				if err != nil {
-					return nil, err
-				}
-				caseBody = append(caseBody, data)
+			caseBody, err := marshalStatements(c.Body)
+			if err != nil {
+				return nil, err
 			}
 			cases = append(cases, switchCaseJSON{
 				Line:   c.Line,
@@ -486,13 +468,9 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 				Body:   caseBody,
 			})
 		}
-		var defaultBody []json.RawMessage
-		for _, stmt := range s.Default {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			defaultBody = append(defaultBody, data)
+		defaultBody, err := marshalStatements(s.Default)
+		if err != nil {
+			return nil, err
 		}
 		return json.Marshal(switchBlockJSON{
 			Type:    "switch",
@@ -503,21 +481,13 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Default: defaultBody,
 		})
 	case *IfStmt:
-		body := make([]json.RawMessage, 0, len(s.Body))
-		for _, stmt := range s.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			body = append(body, data)
+		body, err := marshalStatements(s.Body)
+		if err != nil {
+			return nil, err
 		}
-		var elseBody []json.RawMessage
-		for _, stmt := range s.ElseBody {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			elseBody = append(elseBody, data)
+		elseBody, err := marshalStatements(s.ElseBody)
+		if err != nil {
+			return nil, err
 		}
 		return json.Marshal(ifStmtJSON{
 			Type:      "if",
@@ -528,13 +498,9 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			ElseBody:  elseBody,
 		})
 	case *ForStmt:
-		body := make([]json.RawMessage, 0, len(s.Body))
-		for _, stmt := range s.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			body = append(body, data)
+		body, err := marshalStatements(s.Body)
+		if err != nil {
+			return nil, err
 		}
 		return json.Marshal(forStmtJSON{
 			Type:      "for",
@@ -609,18 +575,8 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Result:    s.Result,
 			Options:   marshalOptionsBlock(s.Options),
 		}
-		if s.ResolvedEndpoint != nil {
-			nj.ResolvedEndpoint = &resolvedRefJSON{Name: s.ResolvedEndpoint.EndpointName, Line: s.ResolvedEndpoint.Line, Column: s.ResolvedEndpoint.Column}
-		}
-		if s.ResolvedEndpointNamespace != "" {
-			nj.ResolvedEndpointNamespace = s.ResolvedEndpointNamespace
-		}
-		if s.ResolvedService != nil {
-			nj.ResolvedService = &resolvedRefJSON{Name: s.ResolvedService.Name, Line: s.ResolvedService.Line, Column: s.ResolvedService.Column}
-		}
-		if s.ResolvedOperation != nil {
-			nj.ResolvedOperation = &resolvedRefJSON{Name: s.ResolvedOperation.Name, Line: s.ResolvedOperation.Line, Column: s.ResolvedOperation.Column}
-		}
+		nj.ResolvedEndpoint, nj.ResolvedService, nj.ResolvedOperation, nj.ResolvedEndpointNamespace =
+			marshalNexusResolved(s.ResolvedEndpoint, s.ResolvedEndpointNamespace, s.ResolvedService, s.ResolvedOperation)
 		return json.Marshal(nj)
 	case *SetStmt:
 		return json.Marshal(setStmtJSON{
@@ -687,6 +643,23 @@ type workflowCallJSON struct {
 	Options *OptionsBlockJSON `json:"options,omitempty"`
 }
 
+// marshalNexusResolved converts nexus resolution fields to JSON reference form.
+func marshalNexusResolved(ep *NamespaceEndpoint, epNS string, svc *NexusServiceDef, op *NexusOperation) (
+	epRef, svcRef, opRef *resolvedRefJSON, ns string,
+) {
+	if ep != nil {
+		epRef = &resolvedRefJSON{Name: ep.EndpointName, Line: ep.Line, Column: ep.Column}
+	}
+	ns = epNS
+	if svc != nil {
+		svcRef = &resolvedRefJSON{Name: svc.Name, Line: svc.Line, Column: svc.Column}
+	}
+	if op != nil {
+		opRef = &resolvedRefJSON{Name: op.Name, Line: op.Line, Column: op.Column}
+	}
+	return
+}
+
 // asyncTargetFieldsJSON holds the flat JSON fields for an async target.
 // Embedded in awaitStmtJSON, awaitOneCaseJSON, and promiseStmtJSON
 // to maintain backward-compatible flat JSON format.
@@ -746,18 +719,8 @@ func marshalAsyncTargetFields(target AsyncTarget) asyncTargetFieldsJSON {
 		f.NexusArgs = t.Args
 		f.NexusResult = t.Result
 		f.NexusDetach = t.Detach
-		if t.ResolvedEndpoint != nil {
-			f.NexusResolvedEndpoint = &resolvedRefJSON{Name: t.ResolvedEndpoint.EndpointName, Line: t.ResolvedEndpoint.Line, Column: t.ResolvedEndpoint.Column}
-		}
-		if t.ResolvedEndpointNamespace != "" {
-			f.NexusResolvedEndpointNamespace = t.ResolvedEndpointNamespace
-		}
-		if t.ResolvedService != nil {
-			f.NexusResolvedService = &resolvedRefJSON{Name: t.ResolvedService.Name, Line: t.ResolvedService.Line, Column: t.ResolvedService.Column}
-		}
-		if t.ResolvedOperation != nil {
-			f.NexusResolvedOperation = &resolvedRefJSON{Name: t.ResolvedOperation.Name, Line: t.ResolvedOperation.Line, Column: t.ResolvedOperation.Column}
-		}
+		f.NexusResolvedEndpoint, f.NexusResolvedService, f.NexusResolvedOperation, f.NexusResolvedEndpointNamespace =
+			marshalNexusResolved(t.ResolvedEndpoint, t.ResolvedEndpointNamespace, t.ResolvedService, t.ResolvedOperation)
 	case *IdentTarget:
 		f.Ident = t.Name
 		f.IdentResult = t.Result
@@ -953,12 +916,9 @@ func (n *NexusServiceDef) MarshalJSON() ([]byte, error) {
 		} else {
 			opj.OpType = "sync"
 		}
-		for _, stmt := range op.Body {
-			data, err := marshalStatement(stmt)
-			if err != nil {
-				return nil, err
-			}
-			opj.Body = append(opj.Body, data)
+		var err error
+		if opj.Body, err = marshalStatements(op.Body); err != nil {
+			return nil, err
 		}
 		nj.Operations = append(nj.Operations, opj)
 	}

@@ -224,17 +224,11 @@ func collectRefsInStmts(stmts []ast.Statement, name, kind string, refs []ast.Nod
 			if kind == "nexus_endpoint" && n.Endpoint == name {
 				refs = append(refs, n)
 			}
-		case *ast.AwaitStmt:
-			if matchesAsyncTarget(n.Target, name, kind) {
-				refs = append(refs, n)
-			}
-		case *ast.AwaitOneCase:
-			if matchesAsyncTarget(n.Target, name, kind) {
-				refs = append(refs, n)
-			}
-		case *ast.PromiseStmt:
-			if matchesAsyncTarget(n.Target, name, kind) {
-				refs = append(refs, n)
+		default:
+			if target := ast.AsyncTargetOf(s); target != nil {
+				if matchesAsyncTarget(target, name, kind) {
+					refs = append(refs, s)
+				}
 			}
 		}
 		return true

@@ -220,6 +220,33 @@ func TestWalkStatementsEmpty(t *testing.T) {
 	}
 }
 
+func TestAsyncTargetOf(t *testing.T) {
+	timer := &TimerTarget{Duration: "5m"}
+	signal := &SignalTarget{Signal: Ref[*SignalDecl]{Name: "s"}}
+	activity := &ActivityTarget{Activity: Ref[*ActivityDef]{Name: "a"}}
+
+	tests := []struct {
+		name string
+		stmt Statement
+		want AsyncTarget
+	}{
+		{"AwaitStmt", &AwaitStmt{Target: timer}, timer},
+		{"AwaitOneCase", &AwaitOneCase{Target: signal}, signal},
+		{"PromiseStmt", &PromiseStmt{Target: activity}, activity},
+		{"AwaitOneCase nil target", &AwaitOneCase{}, nil},
+		{"RawStmt", &RawStmt{}, nil},
+		{"IfStmt", &IfStmt{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := AsyncTargetOf(tt.stmt)
+			if got != tt.want {
+				t.Errorf("AsyncTargetOf(%T) = %v, want %v", tt.stmt, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAsyncTargetKind(t *testing.T) {
 	tests := []struct {
 		target AsyncTarget

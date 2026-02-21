@@ -13,6 +13,26 @@ func WalkStatements(stmts []Statement, fn func(Statement) bool) bool {
 	return true
 }
 
+// AsyncTargetOf returns the AsyncTarget embedded in a statement, or nil.
+// Statements that contain an AsyncTarget: AwaitStmt, AwaitOneCase, PromiseStmt.
+func AsyncTargetOf(s Statement) AsyncTarget {
+	switch n := s.(type) {
+	case *AwaitStmt:
+		return n.Target
+	case *AwaitOneCase:
+		return n.Target
+	case *PromiseStmt:
+		return n.Target
+	}
+	return nil
+}
+
+// walkStatement visits a single statement and recursively visits its children.
+//
+// Note: AwaitOneCase implements Statement and is visited directly because each
+// case has a distinct AsyncTarget that callers may need to inspect by line.
+// SwitchCase does not implement Statement — it is a sub-structure of SwitchBlock,
+// and its body statements are visited via SwitchBlock's recursion.
 func walkStatement(stmt Statement, fn func(Statement) bool) bool {
 	if !fn(stmt) {
 		return false

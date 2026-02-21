@@ -321,14 +321,10 @@ func (v *validationCtx) walkStatements(stmts []ast.Statement, callingWorkflow st
 			v.checkCallRouting("workflow", n.Workflow.Name, n.Options, callingWorkflow, n.Line, n.Column)
 		case *ast.NexusCall:
 			v.checkEndpointServiceLinkage(n.Endpoint, n.Service, n.Line, n.Column)
-		case *ast.AwaitStmt:
-			v.walkAsyncTarget(n.Target, n.Line, n.Column)
-		case *ast.AwaitOneCase:
-			if n.Target != nil {
-				v.walkAsyncTarget(n.Target, n.Line, n.Column)
+		default:
+			if target := ast.AsyncTargetOf(s); target != nil {
+				v.walkAsyncTarget(target, s.NodeLine(), s.NodeColumn())
 			}
-		case *ast.PromiseStmt:
-			v.walkAsyncTarget(n.Target, n.Line, n.Column)
 		}
 		return true
 	})

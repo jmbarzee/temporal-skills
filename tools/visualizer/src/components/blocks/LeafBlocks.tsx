@@ -77,8 +77,9 @@ export function PromiseBlock({ stmt }: { stmt: PromiseStmt }) {
   if (stmt.activity) {
     target = `activity ${stmt.activity}(${stmt.activityArgs || ''})`
   } else if (stmt.workflow) {
-    const ns = stmt.workflowNamespace ? `nexus "${stmt.workflowNamespace}" ` : ''
-    target = `${ns}workflow ${stmt.workflow}(${stmt.workflowArgs || ''})`
+    target = `workflow ${stmt.workflow}(${stmt.workflowArgs || ''})`
+  } else if (stmt.nexus) {
+    target = `nexus ${stmt.nexus} ${stmt.nexusService || ''}.${stmt.nexusOperation || ''}(${stmt.nexusArgs || ''})`
   } else if (stmt.timer) {
     target = `timer(${stmt.timer})`
   } else if (stmt.signal) {

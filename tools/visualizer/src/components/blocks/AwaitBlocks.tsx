@@ -12,7 +12,7 @@ import { StatementBlock } from './StatementBlock'
 
 // Shared await target display - both getAwaitStmtDisplay and getAwaitOneCaseDisplay delegate here
 function getAwaitTargetDisplay(
-  target: { kind: string; timer?: string; signal?: string; signalParams?: string; update?: string; updateParams?: string; activity?: string; activityArgs?: string; activityResult?: string; workflow?: string; workflowMode?: string; workflowArgs?: string; workflowResult?: string; ident?: string; identResult?: string },
+  target: { kind: string; timer?: string; signal?: string; signalParams?: string; update?: string; updateParams?: string; activity?: string; activityArgs?: string; activityResult?: string; workflow?: string; workflowMode?: string; workflowArgs?: string; workflowResult?: string; nexus?: string; nexusService?: string; nexusOperation?: string; nexusArgs?: string; nexusResult?: string; nexusDetach?: boolean; ident?: string; identResult?: string },
   context: { activities: Map<string, any>; workflows: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
 ): { icon: string; keyword: string; signature: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
@@ -44,6 +44,12 @@ function getAwaitTargetDisplay(
       const def = context.workflows.get(target.workflow || '')
       return { icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
     }
+    case 'nexus': {
+      const detachPrefix = target.nexusDetach ? 'detach ' : ''
+      const sig = `${target.nexus || ''} ${target.nexusService || ''}.${target.nexusOperation || ''}(${target.nexusArgs || ''})`
+      const result = target.nexusResult ? ` → ${target.nexusResult}` : ''
+      return { icon: '⬡', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, isUnresolved: false }
+    }
     case 'ident': {
       const name = target.ident || ''
       const result = target.identResult ? ` → ${target.identResult}` : ''
@@ -63,8 +69,8 @@ function getAwaitStmtDisplay(
   const target = getAwaitTargetDisplay(stmt, context, handlers)
   return {
     ...target,
-    // Activity/workflow use SVG icons at block level, not text icons
-    icon: (stmt.kind === 'activity' || stmt.kind === 'workflow') ? '' : target.icon,
+    // Activity/workflow/nexus use SVG icons at block level, not text icons
+    icon: (stmt.kind === 'activity' || stmt.kind === 'workflow' || stmt.kind === 'nexus') ? '' : target.icon,
     keyword: target.keyword ? `await ${target.keyword}` : 'await',
     blockClass: `block-await-stmt block-await-stmt-${stmt.kind}`,
   }

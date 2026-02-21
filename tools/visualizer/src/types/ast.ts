@@ -29,7 +29,6 @@ export interface WorkflowDef extends Position {
   name: string
   params: string
   returnType?: string
-  options?: string
   state?: StateBlock
   signals: SignalDecl[]
   queries: QueryDecl[]
@@ -54,7 +53,6 @@ export interface ActivityDef extends Position {
   name: string
   params: string
   returnType?: string
-  options?: string
   body: Statement[]
   // Source file path (added by extension)
   sourceFile?: string
@@ -91,6 +89,7 @@ export interface UpdateDecl extends Position {
 export type Statement =
   | ActivityCall
   | WorkflowCall
+  | NexusCall
   | AwaitStmt
   | AwaitAllBlock
   | AwaitOneBlock
@@ -120,15 +119,38 @@ export type WorkflowCallMode = 'child' | 'detach'
 export interface WorkflowCall extends Position {
   type: 'workflowCall'
   mode: WorkflowCallMode
-  namespace?: string
   name: string
   args: string
   result?: string
   options?: string
 }
 
-// Single await statement: await timer/signal/update/activity/workflow/ident
-export type AwaitStmtKind = 'timer' | 'signal' | 'update' | 'activity' | 'workflow' | 'ident'
+// Options block (key-value pairs used by nexus calls, namespaces, etc.)
+export interface OptionEntry {
+  key: string
+  value?: string
+  valueType?: string
+  nested?: OptionEntry[]
+}
+
+export interface OptionsBlock {
+  entries: OptionEntry[]
+}
+
+// Nexus call - calls a nexus service operation
+export interface NexusCall extends Position {
+  type: 'nexusCall'
+  detach: boolean
+  endpoint: string
+  service: string
+  operation: string
+  args: string
+  result?: string
+  options?: OptionsBlock
+}
+
+// Single await statement: await timer/signal/update/activity/workflow/nexus/ident
+export type AwaitStmtKind = 'timer' | 'signal' | 'update' | 'activity' | 'workflow' | 'nexus' | 'ident'
 
 export interface AwaitStmt extends Position {
   type: 'await'
@@ -143,9 +165,15 @@ export interface AwaitStmt extends Position {
   activityResult?: string
   workflow?: string
   workflowMode?: string
-  workflowNamespace?: string
   workflowArgs?: string
   workflowResult?: string
+  // Nexus await
+  nexus?: string
+  nexusService?: string
+  nexusOperation?: string
+  nexusArgs?: string
+  nexusResult?: string
+  nexusDetach?: boolean
   // Ident await (promise or condition reference)
   ident?: string
   identResult?: string
@@ -158,7 +186,7 @@ export interface AwaitAllBlock extends Position {
 }
 
 // await one case: signal, update, timer, activity, workflow, nested await all, or ident
-export type AwaitOneCaseKind = 'signal' | 'update' | 'timer' | 'activity' | 'workflow' | 'await_all' | 'ident'
+export type AwaitOneCaseKind = 'signal' | 'update' | 'timer' | 'activity' | 'workflow' | 'nexus' | 'await_all' | 'ident'
 
 export interface AwaitOneCase extends Position {
   kind: AwaitOneCaseKind
@@ -177,9 +205,15 @@ export interface AwaitOneCase extends Position {
   // Workflow case
   workflow?: string
   workflowMode?: string
-  workflowNamespace?: string
   workflowArgs?: string
   workflowResult?: string
+  // Nexus case
+  nexus?: string
+  nexusService?: string
+  nexusOperation?: string
+  nexusArgs?: string
+  nexusResult?: string
+  nexusDetach?: boolean
   // Await all case (nested)
   awaitAll?: AwaitAllBlock
   // Ident case (promise or condition reference)
@@ -267,8 +301,12 @@ export interface PromiseStmt extends Position {
   activity?: string
   activityArgs?: string
   workflow?: string
-  workflowNamespace?: string
   workflowArgs?: string
+  // Nexus target
+  nexus?: string
+  nexusService?: string
+  nexusOperation?: string
+  nexusArgs?: string
 }
 
 // Set a condition to true

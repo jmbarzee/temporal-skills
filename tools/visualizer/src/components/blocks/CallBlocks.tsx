@@ -1,5 +1,5 @@
 import React from 'react'
-import type { ActivityCall, WorkflowCall } from '../../types/ast'
+import type { ActivityCall, WorkflowCall, NexusCall } from '../../types/ast'
 import { DefinitionContext } from '../WorkflowCanvas'
 import { WorkflowContent } from './WorkflowContent'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
@@ -73,6 +73,24 @@ export function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
           <WorkflowContent def={workflowDef} />
         </div>
       )}
+    </div>
+  )
+}
+
+// Nexus Call - calls a nexus service operation
+export function NexusCallBlock({ stmt }: { stmt: NexusCall }) {
+  const modePrefix = stmt.detach ? 'detach ' : ''
+  const signature = `${stmt.endpoint} ${stmt.service}.${stmt.operation}(${stmt.args})`
+  const result = stmt.result ? ` → ${stmt.result}` : ''
+
+  return (
+    <div className={`block block-nexus-call ${stmt.detach ? 'block-mode-detach' : ''} collapsed`}>
+      <div className="block-header">
+        <span className="block-toggle-placeholder" />
+        <span className="block-icon">⬡</span>
+        <span className="block-keyword">{modePrefix}nexus</span>
+        <span className="block-signature">{signature}{result}</span>
+      </div>
     </div>
   )
 }

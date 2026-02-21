@@ -55,6 +55,10 @@
   --block-raw-border: #E2E8F0;
   --block-raw-text: #64748B;
 
+  --block-nexus-bg: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 100%);
+  --block-nexus-border: #F9A8D4;
+  --block-nexus-text: #831843;
+
   --block-promise-bg: linear-gradient(135deg, #E0F7FA 0%, #CCF2F6 100%);
   --block-promise-border: #67D6E4;
   --block-promise-text: #155E63;
@@ -135,6 +139,10 @@
   --block-raw-bg: #1E2024;
   --block-raw-border: #3D4550;
   --block-raw-text: #A0AEC0;
+
+  --block-nexus-bg: linear-gradient(135deg, #3D1E30 0%, #4A2538 100%);
+  --block-nexus-border: #C86DA5;
+  --block-nexus-text: #F5A8D4;
 
   --block-promise-bg: linear-gradient(135deg, #1A3035 0%, #20383E 100%);
   --block-promise-border: #3DA5B0;
@@ -373,6 +381,20 @@
   border-style: dashed;
 }
 
+/* Nexus Call - Pink */
+.block-nexus-call {
+  background: var(--block-nexus-bg);
+  border: 1px solid var(--block-nexus-border);
+}
+
+.block-nexus-call>.block-header {
+  color: var(--block-nexus-text);
+}
+
+.block-nexus-call.block-mode-detach {
+  border-style: dashed;
+}
+
 /* === Tagged Composite: Unified "hint" and "option" design === */
 /* A grey tag on the left, content block on the right that can expand */
 
@@ -495,6 +517,12 @@
   color: var(--block-workflow-call-text);
 }
 
+.tagged-nexus {
+  background: var(--block-nexus-bg);
+  border: 1px solid var(--block-nexus-border);
+  color: var(--block-nexus-text);
+}
+
 .tagged-ident {
   background: var(--block-await-bg);
   border: 1px solid var(--block-await-border);
@@ -555,6 +583,15 @@
 
 .block-await-stmt-workflow>.block-header {
   color: var(--block-workflow-call-text);
+}
+
+.block-await-stmt-nexus {
+  background: var(--block-nexus-bg);
+  border-color: var(--block-nexus-border);
+}
+
+.block-await-stmt-nexus>.block-header {
+  color: var(--block-nexus-text);
 }
 
 /* Await ident (promise/condition reference) - Teal (default await) */

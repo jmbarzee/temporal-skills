@@ -49,5 +49,9 @@ Read, write, or read-write interaction with a running workflow:
 | Primitive | Purpose | Details |
 |-----------|---------|---------|
 | `task_queue` | Route work to specific workers | [task-queues.md](../topics/task-queues.md) |
+| `worker` | Reusable type set (workflows, activities, nexus services) | [task-queues.md](../topics/task-queues.md) |
+| `namespace` | Instantiates workers with deployment options | [task-queues.md](../topics/task-queues.md) |
+| `nexus service` | Typed operation group for cross-namespace calls | [nexus.md](../topics/nexus.md) |
+| `nexus endpoint` | Routes nexus calls to a target task queue | [nexus.md](../topics/nexus.md) |
 | `search_attribute` | Index workflow for queries | Core primitive |
 | `memo` | Attach metadata to workflow | Core primitive |

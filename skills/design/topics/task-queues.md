@@ -1,41 +1,62 @@
-# Task Queues and Worker Scaling
+# Workers, Task Queues, and Deployment Topology
 
 > **Example:** [`task-queues.twf`](./task-queues.twf)
 
-Task queues route work to workers. Understanding task queue design is essential for scaling, isolation, and performance.
+Workers group type registrations. Task queues route work to workers. Namespaces instantiate workers with deployment options. Together they answer: **what runs together, how work reaches it, and where it's deployed.**
 
-## Task Queue Fundamentals
+---
 
-### How Task Queues Work
+## Worker Type Sets
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                      Temporal Server                        │
-│  ┌─────────────────┐  ┌─────────────────┐                  │
-│  │ Task Queue: A   │  │ Task Queue: B   │                  │
-│  │ ┌─────────────┐ │  │ ┌─────────────┐ │                  │
-│  │ │ Task 1      │ │  │ │ Task 4      │ │                  │
-│  │ │ Task 2      │ │  │ │ Task 5      │ │                  │
-│  │ │ Task 3      │ │  │ └─────────────┘ │                  │
-│  │ └─────────────┘ │  └────────┬────────┘                  │
-│  └────────┬────────┘           │                           │
-└───────────┼────────────────────┼───────────────────────────┘
-            │ poll               │ poll
-    ┌───────▼───────┐    ┌───────▼───────┐
-    │   Worker 1    │    │   Worker 2    │
-    │  (Queue A)    │    │  (Queue B)    │
-    └───────────────┘    └───────────────┘
+Workers are reusable type sets that list which workflows, activities, and nexus services belong together:
+
+```twf
+worker orderTypes:
+    workflow ProcessOrder
+    workflow CancelOrder
+    activity ChargePayment
+    activity SendNotification
 ```
 
-### Key Concepts
+Workers contain only type references — no deployment config. Naming: `lowerCamelCase`.
 
-| Concept | Description |
-|---------|-------------|
-| **Task Queue** | Named queue where tasks wait for workers |
-| **Worker** | Process that polls task queue and executes tasks |
-| **Workflow Task** | Task to execute workflow code |
-| **Activity Task** | Task to execute activity code |
-| **Poller** | Thread/goroutine that polls for tasks |
+---
+
+## Namespace Instantiation
+
+Namespaces instantiate workers with deployment options (task queue, concurrency limits, etc.):
+
+```twf
+namespace orders:
+    worker orderTypes
+        options:
+            task_queue: "orderProcessing"
+            max_concurrent_activity_executions: 50
+```
+
+The same worker type set can be reused across namespaces:
+
+```twf
+namespace staging:
+    worker orderTypes
+        options:
+            task_queue: "staging-orders"
+```
+
+### What the Resolver Validates
+
+- **Undefined references** — Catch typos (e.g., referencing a workflow or worker that doesn't exist)
+- **Coverage gaps** — Warn when a defined workflow/activity isn't registered on any instantiated worker
+- **Task queue coherence** — Error when different workers on the same queue register different type sets
+- **Missing configuration** — Error when a worker instantiation is missing the required `task_queue` option
+
+### Rules
+
+- Workers contain only `workflow`, `activity`, and `nexus service` entries (type set only, no deployment config)
+- Each worker instantiation in a namespace requires a `task_queue` option
+- Worker names use lowerCamelCase; workflow/activity names keep UpperCamelCase
+- Multiple workers can be instantiated on the same task queue (but must register the same type sets)
+- Workers not instantiated in any namespace produce warnings
 
 ---
 
@@ -63,113 +84,6 @@ Task queues route work to workers. Understanding task queue design is essential 
 
 ---
 
-## Worker Configuration
-
-### Basic Worker Setup
-
-> Note: Worker configuration is SDK-level code, not TWF notation.
-
-```pseudo
-worker = Worker(
-    client: temporal_client,
-    task_queue: "main-queue",
-    workflows: [OrderWorkflow, PaymentWorkflow],
-    activities: [ValidateOrder, ProcessPayment]
-)
-
-worker.run()
-```
-
-### Poller Configuration
-
-```pseudo
-worker = Worker(
-    task_queue: "main-queue",
-    
-    # Workflow task pollers (usually low, workflows are fast)
-    max_concurrent_workflow_task_pollers: 4,
-    
-    # Activity task pollers (scale based on activity concurrency needs)
-    max_concurrent_activity_task_pollers: 10,
-    
-    # Max concurrent executions
-    max_concurrent_workflow_tasks: 100,
-    max_concurrent_activities: 50
-)
-```
-
-### Poller Tuning Guidelines
-
-| Setting | Low Value | High Value | Guidance |
-|---------|-----------|------------|----------|
-| Workflow pollers | Underutilized CPU | Wasted connections | 2-4 usually sufficient |
-| Activity pollers | Underutilized workers | Connection overhead | Match expected concurrency |
-| Concurrent workflows | Limited throughput | Memory pressure | Based on workflow complexity |
-| Concurrent activities | Limited throughput | Resource exhaustion | Based on activity resource needs |
-
----
-
-## Scaling Patterns
-
-### Horizontal Scaling
-
-Add more worker instances polling the same queue:
-
-```text
-# Worker 1, 2, 3... all poll same queue
-┌─────────────────┐
-│ Task Queue: A   │
-└───────┬─────────┘
-        │
-   ┌────┴────┐
-   ▼    ▼    ▼
-Worker Worker Worker
-  1      2      3
-```
-
-**Characteristics:**
-- Tasks distributed across workers
-- No coordination needed
-- Linear scaling (mostly)
-- All workers must have same capabilities
-
-### Vertical Scaling
-
-Increase resources per worker:
-
-```pseudo
-worker = Worker(
-    task_queue: "compute-heavy",
-    max_concurrent_activities: 100,  # Increased from 50
-    # ... on a larger machine
-)
-```
-
-**Characteristics:**
-- Fewer instances to manage
-- Limited by single machine
-- May have resource contention
-
-### Queue-Based Scaling
-
-Different queues scale independently:
-
-```text
-┌─────────────────┐     ┌─────────────────┐
-│ Queue: fast     │     │ Queue: batch    │
-└───────┬─────────┘     └───────┬─────────┘
-        │                       │
-   ┌────┴────┐            ┌─────┴─────┐
-   ▼    ▼    ▼            ▼           ▼
-Worker Worker Worker   Worker      Worker
-  1      2      3        1            2
-
-Fast: 3 workers (low latency)
-Batch: 2 workers (cost efficient)
-```
-
----
-
 ## Task Queue Patterns
 
 ### Priority Queues
@@ -188,13 +102,6 @@ workflow OrderWorkflow(order: Order) -> (Result):
                 task_queue: "standard"
 ```
 
-Worker deployment:
-```pseudo
-# More workers on high-priority queue
-high_priority_workers: 10
-standard_workers: 5
-```
-
 ### Tenant Isolation
 
 Separate queues per tenant:
@@ -205,12 +112,6 @@ workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
     activity ProcessData(data)
         options:
             task_queue: "tenant-{tenantId}"
-```
-
-```pseudo
-# Deploy workers per tenant (SDK-level)
-for tenant in tenants:
-    Worker(task_queue: "tenant-{tenant.id}").run()
 ```
 
 ### Capability-Based Routing
@@ -244,152 +145,16 @@ workflow GlobalWorkflow(request: Request) -> (Result):
 
 ---
 
-## Sticky Execution
-
-Workflows "stick" to workers for cache efficiency.
-
-### How Sticky Execution Works
-
-```text
-1. Workflow starts on Worker A
-2. Worker A caches workflow state
-3. Next workflow task routed to Worker A (sticky)
-4. If Worker A unavailable, falls back to any worker
-```
-
-### Sticky Queue Configuration
-
-```pseudo
-worker = Worker(
-    task_queue: "main",
-    
-    # How long workflow sticks to this worker
-    sticky_schedule_to_start_timeout: 5s,
-    
-    # Max cached workflows
-    max_cached_workflows: 1000
-)
-```
-
-### When Sticky Execution Matters
-
-| Scenario | Impact |
-|----------|--------|
-| Complex workflows | Cache miss = full replay |
-| High workflow volume | Cache misses = high CPU |
-| Worker restarts | All workflows replay |
-| Workflow completion | Cache entry freed |
-
----
-
-## Multi-Queue Workers
-
-Workers can poll multiple queues:
-
-```pseudo
-worker = Worker(
-    client: client,
-    task_queue: "primary",
-    additional_task_queues: ["secondary", "overflow"],
-    workflows: [Workflow1, Workflow2],
-    activities: [Activity1, Activity2]
-)
-```
-
-### Use Cases
-
-| Use Case | Configuration |
-|----------|---------------|
-| Primary + overflow | Main queue + spike handling |
-| Shared + dedicated | Common activities + specialized |
-| Migration | Old queue + new queue during transition |
-
----
-
-## Monitoring and Observability
-
-### Key Metrics
-
-| Metric | What It Tells You |
-|--------|-------------------|
-| `schedule_to_start_latency` | How long tasks wait in queue |
-| `task_queue_backlog` | Tasks waiting for workers |
-| `worker_task_slots_available` | Worker capacity |
-| `poller_utilization` | Are pollers busy or idle? |
-
-### Scaling Indicators
-
-| Indicator | Action |
-|-----------|--------|
-| High schedule_to_start latency | Add workers or pollers |
-| Growing backlog | Add workers |
-| Low poller utilization | Reduce pollers (save connections) |
-| High worker CPU | Reduce concurrent activities or add workers |
-
-### Health Checks
-
-```bash
-# Check if workers are polling
-temporal task-queue describe --task-queue main-queue
-
-# Check backlog
-temporal task-queue get-build-ids --task-queue main-queue
-```
-
----
-
 ## Anti-Patterns
 
 ### One Queue Per Workflow Type
 
-> Note: Task queue assignment for workflows is done at the SDK/deployment level, not in TWF. Shown as pseudo-code.
-
-```pseudo
-# BAD: Unnecessary complexity
-workflow OrderWorkflow():
-    task_queue: "order-queue"
-
-workflow PaymentWorkflow():
-    task_queue: "payment-queue"
-
+```twf
+# BAD: Unnecessary complexity — one queue per type
 # Results in many queues, complex deployment
 
 # GOOD: Shared queue unless isolation needed
-workflow OrderWorkflow():
-    task_queue: "main-queue"
-
-workflow PaymentWorkflow():
-    task_queue: "main-queue"
-```
-
-### Too Many Pollers
-
-```pseudo
-# BAD: Excessive connections
-worker = Worker(
-    max_concurrent_workflow_task_pollers: 100,  # Way too many
-    max_concurrent_activity_task_pollers: 100
-)
-
-# GOOD: Reasonable poller counts
-worker = Worker(
-    max_concurrent_workflow_task_pollers: 4,
-    max_concurrent_activity_task_pollers: 20
-)
-```
-
-### No Backpressure
-
-```pseudo
-# BAD: Accept unlimited concurrent activities
-worker = Worker(
-    max_concurrent_activities: 10000  # Will exhaust resources
-)
-
-# GOOD: Match to actual capacity
-worker = Worker(
-    max_concurrent_activities: 50  # Based on worker resources
-)
+# Put related workflows on the same worker and task queue
 ```
 
 ### Dynamic Queue Names Without Cleanup
@@ -408,96 +173,3 @@ workflow Process(request: Request):
         options:
             task_queue: queue
 ```
-
----
-
-## Deployment Considerations
-
-### Worker Deployment Checklist
-
-- [ ] Task queue name matches workflow/activity routing
-- [ ] Poller counts appropriate for expected load
-- [ ] Concurrent execution limits match resources
-- [ ] Health checks configured
-- [ ] Graceful shutdown handling
-- [ ] Multiple instances for availability
-
-### Rolling Updates
-
-```text
-# Workers can be updated independently
-# Temporal handles routing to available workers
-
-1. Deploy new worker version
-2. New workers start polling
-3. Old workers finish current tasks
-4. Old workers shut down
-5. All traffic on new workers
-```
-
-### Graceful Shutdown
-
-```pseudo
-worker = Worker(task_queue: "main")
-
-on_shutdown_signal:
-    worker.stop()  # Stop accepting new tasks
-    # Finish in-progress tasks
-    # Then exit
-```
-
----
-
-## Worker and Namespace Blocks in TWF
-
-TWF uses a two-tier model for declaring deployment topology: **worker type sets** group workflows and activities, and **namespace blocks** instantiate workers with deployment options.
-
-### Worker Type Sets
-
-Workers are reusable type sets that list which workflows and activities belong together:
-
-```twf
-worker orderTypes:
-    workflow ProcessOrder
-    workflow CancelOrder
-    activity ChargePayment
-    activity SendNotification
-```
-
-### Namespace Blocks
-
-Namespaces instantiate workers with deployment options (task queue, concurrency limits, etc.):
-
-```twf
-namespace orders:
-    worker orderTypes
-        options:
-            task_queue: "orderProcessing"
-            max_concurrent_activity_executions: 50
-```
-
-The same worker type set can be reused across namespaces:
-
-```twf
-namespace staging:
-    worker orderTypes
-        options:
-            task_queue: "staging-orders"
-```
-
-### Purpose
-
-Worker and namespace blocks let the resolver validate deployment topology at design time:
-
-- **Undefined references** — Catch typos (e.g., referencing a workflow or worker that doesn't exist)
-- **Coverage gaps** — Warn when a defined workflow/activity isn't registered on any instantiated worker
-- **Task queue coherence** — Error when different workers on the same queue register different type sets
-- **Missing configuration** — Error when a worker instantiation is missing the required `task_queue` option
-
-### Rules
-
-- Workers contain only `workflow`, `activity`, and `nexus service` entries (type set only, no deployment config)
-- Each worker instantiation in a namespace requires a `task_queue` option
-- Worker names use lowerCamelCase; workflow/activity names keep UpperCamelCase
-- Multiple workers can be instantiated on the same task queue (but must register the same type sets)
-- Workers not instantiated in any namespace produce warnings

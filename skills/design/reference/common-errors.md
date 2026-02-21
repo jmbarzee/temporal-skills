@@ -25,3 +25,14 @@ Common `twf check` errors and how to fix them.
 | `expected ( after if` / `expected ( after for` | Missing parentheses around condition/iterator | Use `if (expr):` / `for (x in items):` |
 | `unexpected token <tok> at top level` | Statement or keyword that doesn't start a workflow or activity definition | Ensure all top-level items are `workflow`, `activity`, `worker`, `namespace`, or `nexus service` definitions |
 | `unexpected token <tok> in await one case` | Invalid case type inside `await one:` block | Cases must be `signal`, `update`, `timer`, `activity`, `workflow`, an identifier, or `await all` |
+
+## Worker / Namespace / Nexus Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `worker X references undefined ...` | Worker lists a name that doesn't exist | Add the definition or fix the name |
+| `namespace X references undefined worker: Y` | Namespace uses unknown worker | Add worker block or fix name |
+| `worker instantiation missing required task_queue` | No `task_queue` in options | Add `options: task_queue: "..."` |
+| `duplicate nexus endpoint name "X"` | Same endpoint name in multiple namespaces | Use unique endpoint names |
+
+Warnings (workflow/activity not on any worker, worker not instantiated) indicate coverage gaps, not errors.

@@ -160,6 +160,17 @@ activity ActivityName(input: InputType) -> (Result):
 
 activity DoWork(input: InputType) -> (WorkResult):
     return work(input)
+
+worker mainWorker:
+    workflow WorkflowName
+    workflow ChildWorkflowName
+    activity ActivityName
+    activity DoWork
+
+namespace default:
+    worker mainWorker
+        options:
+            task_queue: "main"
 ```
 
 ---
@@ -170,9 +181,10 @@ The design is ready to present when:
 
 1. `twf check` passes with no errors
 2. `twf symbols` lists all expected workflows and activities
-3. All I/O, time, and randomness live in activities (determinism)
-4. Activities are idempotent (retries produce same result)
-5. Failure modes have recovery strategies
+3. Worker/namespace topology validates (when present)
+4. All I/O, time, and randomness live in activities (determinism)
+5. Activities are idempotent (retries produce same result)
+6. Failure modes have recovery strategies
 
 For the full checklist: [design-checklist.md](./reference/design-checklist.md). Present a summary alongside the `.twf` file: key workflows, activity purposes, and notable design decisions.
 
@@ -199,6 +211,8 @@ Read only what the current design requires.
 | Anti-Patterns | Common Temporal design mistakes | [anti-patterns.md](./reference/anti-patterns.md) |
 | Common Errors | Troubleshooting `twf check` | [common-errors.md](./reference/common-errors.md) |
 | Primitives Reference | Temporal primitive lookup | [primitives-reference.md](./reference/primitives-reference.md) |
+| Workers & Task Queues | Worker grouping, task queue routing, deployment | [task-queues.md](./topics/task-queues.md) |
+| Nexus | Cross-namespace communication | [nexus.md](./topics/nexus.md) |
 | Editor Setup | VS Code/Cursor extension | [editor-setup.md](./reference/editor-setup.md) |
 
 Topic deep-dives are in `reference/` and `topics/` — consult as needed during design.

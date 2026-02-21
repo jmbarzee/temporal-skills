@@ -1,5 +1,5 @@
-# Task queue routing patterns
-# Demonstrates: explicit routing, implicit inheritance, capability-based queues
+# Workers, task queues, and deployment topology
+# Demonstrates: worker type sets, namespace instantiation, explicit routing, capability-based queues
 
 # --- Explicit routing + implicit inheritance ---
 

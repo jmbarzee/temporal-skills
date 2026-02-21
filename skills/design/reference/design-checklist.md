@@ -27,3 +27,9 @@
 - [ ] Each workflow has single clear purpose
 - [ ] Child workflow vs activity choice justified
 - [ ] Workflow names describe outcomes, not steps
+
+## Deployment Topology
+- [ ] Workers group all workflows/activities into type sets
+- [ ] Each worker instantiated in a namespace with `task_queue`
+- [ ] Cross-namespace calls have nexus endpoints
+- [ ] `twf check` passes topology validation

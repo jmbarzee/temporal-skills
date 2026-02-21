@@ -18,3 +18,5 @@
 **Rule of thumb:** Loops or conditionals inside an activity → should be a workflow.
 
 See [child-workflows.md](../topics/child-workflows.md) for detailed patterns.
+
+**Beyond workflow boundaries:** When decomposition crosses namespace or team boundaries, see [nexus.md](../topics/nexus.md) for cross-namespace communication and [task-queues.md](../topics/task-queues.md) for deployment topology.

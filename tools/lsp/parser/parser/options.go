@@ -33,7 +33,9 @@ var retryPolicySchema = map[string]*optionSchema{
 }
 
 var prioritySchema = map[string]*optionSchema{
-	"value": {valueType: "number"},
+	"priority_key":    {valueType: "number"},
+	"fairness_key":    {valueType: "string"},
+	"fairness_weight": {valueType: "number"},
 }
 
 var activityOptionSchema = map[string]*optionSchema{

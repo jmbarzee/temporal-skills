@@ -867,6 +867,264 @@ func TestNexusCallNoServicesDefined(t *testing.T) {
 	}
 }
 
+// ===== ROUTING REACHABILITY TESTS =====
+
+func TestExplicitTaskQueueRouting(t *testing.T) {
+	input := `workflow Caller(x: int) -> (int):
+    activity Target(x) -> y
+        options:
+            task_queue: "other-queue"
+    return y
+
+activity Target(x: int) -> (int):
+    return x
+
+worker callerWorker:
+    workflow Caller
+
+worker targetWorker:
+    activity Target
+
+namespace ns:
+    worker callerWorker
+        options:
+            task_queue: "main-queue"
+    worker targetWorker
+        options:
+            task_queue: "other-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
+func TestExplicitTaskQueueRoutingMismatch(t *testing.T) {
+	input := `workflow Caller(x: int) -> (int):
+    activity Target(x) -> y
+        options:
+            task_queue: "wrong-queue"
+    return y
+
+activity Target(x: int) -> (int):
+    return x
+
+worker callerWorker:
+    workflow Caller
+
+worker targetWorker:
+    activity Target
+
+namespace ns:
+    worker callerWorker
+        options:
+            task_queue: "main-queue"
+    worker targetWorker
+        options:
+            task_queue: "other-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, `activity Target has task_queue "wrong-queue", but no worker on that queue registers it`) {
+		t.Error("expected error about explicit task_queue routing mismatch")
+	}
+}
+
+func TestImplicitTaskQueueRouting(t *testing.T) {
+	input := `workflow Caller(x: int) -> (int):
+    activity Target(x) -> y
+    return y
+
+activity Target(x: int) -> (int):
+    return x
+
+worker w:
+    workflow Caller
+    activity Target
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "shared-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
+func TestImplicitTaskQueueRoutingMismatch(t *testing.T) {
+	input := `workflow Caller(x: int) -> (int):
+    activity Unreachable(x) -> y
+    return y
+
+activity Unreachable(x: int) -> (int):
+    return x
+
+worker callerWorker:
+    workflow Caller
+
+worker otherWorker:
+    activity Unreachable
+
+namespace ns:
+    worker callerWorker
+        options:
+            task_queue: "main-queue"
+    worker otherWorker
+        options:
+            task_queue: "other-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasError(errs, `activity Unreachable is not on any worker polling task queue "main-queue"`) {
+		t.Error("expected error about implicit task queue routing mismatch")
+	}
+}
+
+func TestImplicitTaskQueueChildWorkflowRouting(t *testing.T) {
+	input := `workflow Parent(x: int) -> (int):
+    workflow Child(x) -> y
+    return y
+
+workflow Child(x: int) -> (int):
+    return x
+
+worker w:
+    workflow Parent
+    workflow Child
+
+namespace ns:
+    worker w
+        options:
+            task_queue: "shared-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
+func TestExplicitTaskQueueWorkflowRouting(t *testing.T) {
+	input := `workflow Parent(x: int) -> (int):
+    workflow Child(x) -> y
+        options:
+            task_queue: "child-queue"
+    return y
+
+workflow Child(x: int) -> (int):
+    return x
+
+worker parentWorker:
+    workflow Parent
+
+worker childWorker:
+    workflow Child
+
+namespace ns:
+    worker parentWorker
+        options:
+            task_queue: "parent-queue"
+    worker childWorker
+        options:
+            task_queue: "child-queue"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	for _, e := range errs {
+		if e.Severity != "warning" {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
+// ===== EMPTY DEFINITION WARNING TESTS =====
+
+func TestEmptyWorkerWarning(t *testing.T) {
+	input := `workflow Foo(x: int) -> (int):
+    return x
+
+worker emptyWorker:
+    # no registrations
+
+namespace ns:
+    worker emptyWorker
+        options:
+            task_queue: "q"
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "worker emptyWorker has no workflow, activity, or nexus service registrations") {
+		t.Error("expected warning about empty worker")
+	}
+}
+
+func TestEmptyNamespaceWarning(t *testing.T) {
+	input := `namespace emptyNs:
+    # no workers
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "namespace emptyNs has no worker or endpoint instantiations") {
+		t.Error("expected warning about empty namespace")
+	}
+}
+
+func TestEmptyWorkflowWarning(t *testing.T) {
+	input := `workflow EmptyWorkflow(x: int) -> (int):
+    # nothing here
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "workflow EmptyWorkflow has an empty body") {
+		t.Error("expected warning about empty workflow body")
+	}
+}
+
+func TestEmptyActivityWarning(t *testing.T) {
+	input := `activity EmptyActivity(x: int) -> (int):
+    # nothing here
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if !hasWarning(errs, "activity EmptyActivity has an empty body") {
+		t.Error("expected warning about empty activity body")
+	}
+}
+
+// ===== PRIORITY SCHEMA TESTS =====
+
+func TestPriorityNestedSchema(t *testing.T) {
+	input := `workflow Foo(x: int) -> (int):
+    activity Bar(x) -> y
+        options:
+            priority:
+                priority_key: 1
+                fairness_key: "high"
+                fairness_weight: 9.0
+    return y
+
+activity Bar(x: int) -> (int):
+    return x
+`
+	file := mustParse(t, input)
+	errs := Resolve(file)
+	if len(errs) > 0 {
+		for _, e := range errs {
+			t.Errorf("unexpected error: %v", e)
+		}
+	}
+}
+
 // hasError checks if any non-warning error contains the given substring.
 func hasError(errs []*ResolveError, substr string) bool {
 	for _, e := range errs {

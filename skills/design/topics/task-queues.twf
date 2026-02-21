@@ -1,173 +1,103 @@
-# Source: task-queues.md
-# Patterns: priority/tenant/capability/geographic routing via options
+# Task queue routing patterns
+# Demonstrates: explicit routing, implicit inheritance, capability-based queues
 
-# --- Priority queue routing ---
+# --- Explicit routing + implicit inheritance ---
 
-workflow PriorityOrderWorkflow(order: Order) -> (Result):
-    if (order.priority == "express"):
-        activity ProcessOrder(order) -> result
-            options:
-                task_queue: "high-priority"
-    else:
-        activity ProcessOrder(order) -> result
-            options:
-                task_queue: "standard"
+workflow OrderWorkflow(order: Order) -> (Result):
+    # Implicit: inherits OrderWorkflow's queue ("orders")
+    activity ValidateOrder(order) -> validated
 
-    close complete(Result{result})
-
-# --- Tenant isolation ---
-
-workflow TenantWorkflow(tenantId: string, data: Data) -> (Result):
-    # Route to tenant-specific queue
-    activity ProcessTenantData(data) -> result
+    # Explicit: route to dedicated payment workers
+    activity ChargePayment(order) -> payment
         options:
-            task_queue: "tenant-{tenantId}"
+            task_queue: "payments"
 
-    close complete(Result{result})
+    # Explicit: conditional routing by shipping priority
+    if (order.priority == "express"):
+        activity ShipOrder(order, payment) -> shipment
+            options:
+                task_queue: "shipping-express"
+    else:
+        activity ShipOrder(order, payment) -> shipment
+            options:
+                task_queue: "shipping-standard"
+
+    close complete(Result{shipment})
 
 # --- Capability-based routing ---
 
-workflow MediaWorkflow(media: Media) -> (Result):
-    if (media.type == "video"):
-        # Needs GPU workers
-        activity TranscodeVideo(media) -> result
-            options:
-                task_queue: "gpu-workers"
-    else:
-        activity ProcessImage(media) -> result
-            options:
-                task_queue: "standard-workers"
-
-    close complete(Result{result})
-
-# --- Geographic routing ---
-
-workflow GlobalWorkflow(request: Request) -> (Result):
-    # Route to nearest region
-    activity ProcessLocally(request) -> result
+workflow MediaPipeline(media: Media) -> (Result):
+    # Explicit: route to GPU-capable workers
+    activity TranscodeVideo(media) -> transcoded
         options:
-            task_queue: "workers-{request.region}"
+            task_queue: "gpu-transcode"
+            start_to_close_timeout: 10m
 
-    close complete(Result{result})
+    # Implicit: inherits MediaPipeline's queue ("media")
+    activity GenerateThumbnail(transcoded) -> thumb
 
-# --- Multi-queue workflow combining patterns ---
+    close complete(Result{thumb})
 
-workflow ComplexRoutingWorkflow(job: Job) -> (JobResult):
-    # Validate on fast queue
-    activity QuickValidation(job) -> validated
-        options:
-            task_queue: "fast-queue"
-            start_to_close_timeout: 5s
+# --- Activities ---
 
-    if (validated.valid == false):
-        close fail(JobResult{status: "invalid"})
+activity ValidateOrder(order: Order) -> (ValidationResult):
+    return validate(order)
 
-    # Process based on job type
-    switch (job.type):
-        case "compute":
-            activity HeavyCompute(job) -> result
-                options:
-                    task_queue: "compute-workers"
-        case "io":
-            activity IOBoundWork(job) -> result
-                options:
-                    task_queue: "io-workers"
-        else:
-            activity DefaultProcess(job) -> result
+activity ChargePayment(order: Order) -> (Payment):
+    return charge(order)
 
-    close complete(JobResult{status: "done"})
-
-# --- Supporting activities ---
-
-activity ProcessOrder(order: Order) -> (OrderResult):
-    return process(order)
-
-activity ProcessTenantData(data: Data) -> (DataResult):
-    return process(data)
+activity ShipOrder(order: Order, payment: Payment) -> (Shipment):
+    return ship(order)
 
 activity TranscodeVideo(media: Media) -> (TranscodeResult):
+    heartbeat(media.progress)
     return transcode(media)
 
-activity ProcessImage(media: Media) -> (ImageResult):
-    return process(media)
+activity GenerateThumbnail(video: Video) -> (Thumbnail):
+    return thumbnail(video)
 
-activity ProcessLocally(request: Request) -> (ProcessResult):
-    return process(request)
+# --- Workers ---
 
-activity QuickValidation(job: Job) -> (ValidationResult):
-    return validate(job)
+worker orderWorker:
+    workflow OrderWorkflow
+    activity ValidateOrder
 
-activity HeavyCompute(job: Job) -> (ComputeResult):
-    return compute(job)
+worker paymentWorker:
+    activity ChargePayment
 
-activity IOBoundWork(job: Job) -> (IOResult):
-    return io_process(job)
+worker expressShipWorker:
+    activity ShipOrder
 
-activity DefaultProcess(job: Job) -> (ProcessResult):
-    return process(job)
+worker standardShipWorker:
+    activity ShipOrder
 
-# --- Worker type sets ---
-# Workers are reusable type sets grouping workflows and activities.
-
-worker highPriorityWorker:
-    activity ProcessOrder
-
-worker standardWorker:
-    activity ProcessOrder
-
-worker tenantWorker:
-    workflow TenantWorkflow
-    activity ProcessTenantData
+worker mediaWorker:
+    workflow MediaPipeline
+    activity GenerateThumbnail
 
 worker gpuWorker:
     activity TranscodeVideo
 
-worker standardMediaWorker:
-    activity ProcessImage
+# --- Namespaces ---
 
-worker globalWorker:
-    workflow GlobalWorkflow
-    activity ProcessLocally
-
-worker routingWorker:
-    workflow PriorityOrderWorkflow
-    workflow MediaWorkflow
-    workflow ComplexRoutingWorkflow
-    activity QuickValidation
-    activity HeavyCompute
-    activity IOBoundWork
-    activity DefaultProcess
-
-# --- Namespace definitions ---
-# Namespaces instantiate workers with deployment options.
-
-namespace orders:
-    worker highPriorityWorker
+namespace ecommerce:
+    worker orderWorker
         options:
-            task_queue: "highPriority"
-    worker standardWorker
+            task_queue: "orders"
+    worker paymentWorker
         options:
-            task_queue: "standard"
-
-namespace tenants:
-    worker tenantWorker
+            task_queue: "payments"
+    worker expressShipWorker
         options:
-            task_queue: "tenantDefault"
+            task_queue: "shipping-express"
+    worker standardShipWorker
+        options:
+            task_queue: "shipping-standard"
 
 namespace media:
+    worker mediaWorker
+        options:
+            task_queue: "media"
     worker gpuWorker
         options:
-            task_queue: "gpuWorkers"
-    worker standardMediaWorker
-        options:
-            task_queue: "standardWorkers"
-
-namespace global:
-    worker globalWorker
-        options:
-            task_queue: "globalDefault"
-
-namespace jobs:
-    worker routingWorker
-        options:
-            task_queue: "jobDefault"
+            task_queue: "gpu-transcode"

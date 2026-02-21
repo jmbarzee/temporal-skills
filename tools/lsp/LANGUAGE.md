@@ -333,6 +333,8 @@ Workflow call options: `task_queue`, `workflow_execution_timeout`, `workflow_run
 
 Retry policy keys: `initial_interval`, `backoff_coefficient`, `maximum_interval`, `maximum_attempts`, `non_retryable_error_types`
 
+Priority keys: `priority_key` (number, 1–n, lower = higher priority), `fairness_key` (string, fairness balancing key), `fairness_weight` (number, weight in [0.001, 1000])
+
 **Example:**
 ```
 activity ChargePayment(order) -> payment
@@ -342,6 +344,9 @@ activity ChargePayment(order) -> payment
         retry_policy:
             maximum_attempts: 3
             initial_interval: 1s
+        priority:
+            priority_key: 1
+            fairness_key: "high"
 ```
 
 ### Workflow Call
@@ -365,7 +370,7 @@ Calls a nexus service operation. The three IDENTs are: Endpoint, Service.Operati
 - Endpoint: The nexus endpoint name (defined in a namespace block)
 - Service.Operation: The nexus service and operation name (dot-separated)
 
-**Nexus call options:** `schedule_to_close_timeout`, `retry_policy`, `priority`
+**Nexus call options:** `schedule_to_close_timeout`, `retry_policy`, `priority` (all nested blocks use the same sub-key schemas described above)
 
 **Examples:**
 ```
@@ -860,9 +865,15 @@ Common error types:
 - Detach nexus call with result binding
 - Async nexus operation references undefined workflow
 - Nexus endpoint routes to task queue with no worker registering the service
+- Explicit `task_queue` routing: target activity/workflow not on any worker polling that queue
+- Implicit task queue routing: called activity/workflow not on any worker polling the calling workflow's task queue
 - Workflow/activity not registered on any instantiated worker (warning)
 - Nexus service not referenced by any worker (warning)
 - Worker not instantiated in any namespace (warning)
+- Empty worker with no registrations (warning)
+- Empty namespace with no worker or endpoint instantiations (warning)
+- Empty workflow body (warning)
+- Empty activity body (warning)
 - Unresolved nexus endpoint when no endpoints defined (warning, may be external)
 - Unresolved nexus service when no services defined (warning, may be external)
 - Unknown option key in `options:` block

@@ -117,218 +117,263 @@ func parseAwaitStmt(p *Parser) (ast.Statement, error) {
 // timer(duration), signal Name [-> params], update Name [-> params],
 // activity Name(args) [-> result], workflow Name(args) [-> result]
 func parseSingleAwait(p *Parser, pos ast.Pos) (*ast.AwaitStmt, error) {
-	stmt := &ast.AwaitStmt{Pos: pos}
-
-	switch p.current.Type {
-	case token.TIMER:
-		p.advance()
-		duration, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.TimerTarget{Duration: duration.Literal}
-
-	case token.SIGNAL:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.SignalTarget{Name: name.Literal}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			params, err := parseParamBinding(p)
-			if err != nil {
-				return nil, err
-			}
-			t.Params = params
-		}
-		stmt.Target = t
-
-	case token.UPDATE:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.UpdateTarget{Name: name.Literal}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			params, err := parseParamBinding(p)
-			if err != nil {
-				return nil, err
-			}
-			t.Params = params
-		}
-		stmt.Target = t
-
-	case token.ACTIVITY:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.ActivityTarget{Name: name.Literal}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		t.Args = args.Literal
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		stmt.Target = t
-
-	case token.DETACH, token.WORKFLOW:
-		mode := ast.CallChild
-		if p.current.Type == token.DETACH {
-			mode = ast.CallDetach
-			p.advance()
-		}
-
-		if p.current.Type == token.NEXUS {
-			p.advance()
-			endpoint, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			service, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(token.DOT); err != nil {
-				return nil, err
-			}
-			operation, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			args, err := p.expect(token.ARGS)
-			if err != nil {
-				return nil, err
-			}
-			t := &ast.NexusTarget{
-				Endpoint:  endpoint.Literal,
-				Service:   service.Literal,
-				Operation: operation.Literal,
-				Args:      args.Literal,
-				Detach:    mode == ast.CallDetach,
-			}
-			if p.current.Type == token.ARROW {
-				p.advance()
-				result, err := p.expect(token.IDENT)
-				if err != nil {
-					return nil, err
-				}
-				t.Result = result.Literal
-			}
-			if t.Detach && t.Result != "" {
-				return nil, &ParseError{
-					Msg:    "detach nexus call cannot have a result (-> identifier)",
-					Line:   pos.Line,
-					Column: pos.Column,
-				}
-			}
-			stmt.Target = t
-		} else {
-			if _, err := p.expect(token.WORKFLOW); err != nil {
-				return nil, err
-			}
-			name, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			args, err := p.expect(token.ARGS)
-			if err != nil {
-				return nil, err
-			}
-			t := &ast.WorkflowTarget{
-				Name: name.Literal,
-				Mode: mode,
-				Args: args.Literal,
-			}
-			if p.current.Type == token.ARROW {
-				p.advance()
-				result, err := p.expect(token.IDENT)
-				if err != nil {
-					return nil, err
-				}
-				t.Result = result.Literal
-			}
-			if mode == ast.CallDetach && t.Result != "" {
-				return nil, &ParseError{
-					Msg:    "detach workflow cannot have a result (-> identifier)",
-					Line:   pos.Line,
-					Column: pos.Column,
-				}
-			}
-			stmt.Target = t
-		}
-
-	case token.NEXUS:
-		p.advance()
-		endpoint, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		service, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.DOT); err != nil {
-			return nil, err
-		}
-		operation, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.NexusTarget{
-			Endpoint:  endpoint.Literal,
-			Service:   service.Literal,
-			Operation: operation.Literal,
-			Args:      args.Literal,
-		}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		stmt.Target = t
-
-	case token.IDENT:
-		t := &ast.IdentTarget{Name: p.current.Literal}
-		p.advance()
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		stmt.Target = t
-
-	default:
-		return nil, p.errorf("expected timer, signal, update, activity, workflow, nexus, or identifier after 'await', got %s", p.current.Type)
+	target, err := parseAsyncTarget(p, true, true, pos)
+	if err != nil {
+		return nil, err
 	}
-
 	if p.current.Type == token.NEWLINE {
 		p.advance()
 	}
+	return &ast.AwaitStmt{Pos: pos, Target: target}, nil
+}
 
-	return stmt, nil
+// parseAsyncTarget parses an async target (timer, signal, update, activity,
+// workflow, nexus, ident). When allowArrows is true, result/param arrows are
+// parsed. When allowDetach is true, the DETACH prefix and IDENT fallback are
+// accepted.
+func parseAsyncTarget(p *Parser, allowArrows, allowDetach bool, pos ast.Pos) (ast.AsyncTarget, error) {
+	switch p.current.Type {
+	case token.TIMER:
+		return parseTimerTarget(p)
+	case token.SIGNAL:
+		return parseSignalTarget(p, allowArrows)
+	case token.UPDATE:
+		return parseUpdateTarget(p, allowArrows)
+	case token.ACTIVITY:
+		return parseActivityTarget(p, allowArrows)
+	case token.DETACH, token.WORKFLOW:
+		if !allowDetach && p.current.Type == token.DETACH {
+			return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
+		}
+		return parseWorkflowOrNexusTarget(p, allowArrows, pos)
+	case token.NEXUS:
+		return parseNexusCallTarget(p, allowArrows)
+	case token.IDENT:
+		if !allowDetach {
+			return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
+		}
+		return parseIdentTarget(p, allowArrows)
+	default:
+		if allowDetach {
+			return nil, p.errorf("expected timer, signal, update, activity, workflow, nexus, or identifier after 'await', got %s", p.current.Type)
+		}
+		return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
+	}
+}
+
+func parseTimerTarget(p *Parser) (*ast.TimerTarget, error) {
+	p.advance() // consume TIMER
+	duration, err := p.expect(token.ARGS)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.TimerTarget{Duration: duration.Literal}, nil
+}
+
+func parseSignalTarget(p *Parser, allowArrows bool) (*ast.SignalTarget, error) {
+	p.advance() // consume SIGNAL
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.SignalTarget{Name: name.Literal}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		params, err := parseParamBinding(p)
+		if err != nil {
+			return nil, err
+		}
+		t.Params = params
+	}
+	return t, nil
+}
+
+func parseUpdateTarget(p *Parser, allowArrows bool) (*ast.UpdateTarget, error) {
+	p.advance() // consume UPDATE
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.UpdateTarget{Name: name.Literal}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		params, err := parseParamBinding(p)
+		if err != nil {
+			return nil, err
+		}
+		t.Params = params
+	}
+	return t, nil
+}
+
+func parseActivityTarget(p *Parser, allowArrows bool) (*ast.ActivityTarget, error) {
+	p.advance() // consume ACTIVITY
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	args, err := p.expect(token.ARGS)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.ActivityTarget{Name: name.Literal, Args: args.Literal}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		result, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		t.Result = result.Literal
+	}
+	return t, nil
+}
+
+// parseWorkflowOrNexusTarget handles the DETACH/WORKFLOW token cases.
+// After an optional DETACH prefix, it branches to either a nexus target
+// (detach nexus ...) or a workflow target (workflow ...).
+func parseWorkflowOrNexusTarget(p *Parser, allowArrows bool, pos ast.Pos) (ast.AsyncTarget, error) {
+	mode := ast.CallChild
+	if p.current.Type == token.DETACH {
+		mode = ast.CallDetach
+		p.advance()
+	}
+
+	if p.current.Type == token.NEXUS {
+		return parseDetachableNexusTarget(p, mode, allowArrows, pos)
+	}
+
+	if _, err := p.expect(token.WORKFLOW); err != nil {
+		return nil, err
+	}
+	name, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	args, err := p.expect(token.ARGS)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.WorkflowTarget{
+		Name: name.Literal,
+		Mode: mode,
+		Args: args.Literal,
+	}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		result, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		t.Result = result.Literal
+	}
+	if mode == ast.CallDetach && t.Result != "" {
+		return nil, &ParseError{
+			Msg:    "detach workflow cannot have a result (-> identifier)",
+			Line:   pos.Line,
+			Column: pos.Column,
+		}
+	}
+	return t, nil
+}
+
+// parseDetachableNexusTarget parses a nexus target that may have a DETACH prefix.
+func parseDetachableNexusTarget(p *Parser, mode ast.WorkflowCallMode, allowArrows bool, pos ast.Pos) (*ast.NexusTarget, error) {
+	p.advance() // consume NEXUS
+	endpoint, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	service, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.DOT); err != nil {
+		return nil, err
+	}
+	operation, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	args, err := p.expect(token.ARGS)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.NexusTarget{
+		Endpoint:  endpoint.Literal,
+		Service:   service.Literal,
+		Operation: operation.Literal,
+		Args:      args.Literal,
+		Detach:    mode == ast.CallDetach,
+	}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		result, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		t.Result = result.Literal
+	}
+	if t.Detach && t.Result != "" {
+		return nil, &ParseError{
+			Msg:    "detach nexus call cannot have a result (-> identifier)",
+			Line:   pos.Line,
+			Column: pos.Column,
+		}
+	}
+	return t, nil
+}
+
+// parseNexusCallTarget parses a standalone nexus target (without DETACH prefix).
+func parseNexusCallTarget(p *Parser, allowArrows bool) (*ast.NexusTarget, error) {
+	p.advance() // consume NEXUS
+	endpoint, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	service, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(token.DOT); err != nil {
+		return nil, err
+	}
+	operation, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, err
+	}
+	args, err := p.expect(token.ARGS)
+	if err != nil {
+		return nil, err
+	}
+	t := &ast.NexusTarget{
+		Endpoint:  endpoint.Literal,
+		Service:   service.Literal,
+		Operation: operation.Literal,
+		Args:      args.Literal,
+	}
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		result, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		t.Result = result.Literal
+	}
+	return t, nil
+}
+
+func parseIdentTarget(p *Parser, allowArrows bool) (*ast.IdentTarget, error) {
+	t := &ast.IdentTarget{Name: p.current.Literal}
+	p.advance()
+	if allowArrows && p.current.Type == token.ARROW {
+		p.advance()
+		result, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		t.Result = result.Literal
+	}
+	return t, nil
 }
 
 // parseParamBinding parses parameter binding after ARROW:
@@ -420,208 +465,8 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	c := &ast.AwaitOneCase{Pos: pos}
 
-	switch p.current.Type {
-	case token.SIGNAL:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.SignalTarget{Name: name.Literal}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			params, err := parseParamBinding(p)
-			if err != nil {
-				return nil, err
-			}
-			t.Params = params
-		}
-		c.Target = t
-
-	case token.UPDATE:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.UpdateTarget{Name: name.Literal}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			params, err := parseParamBinding(p)
-			if err != nil {
-				return nil, err
-			}
-			t.Params = params
-		}
-		c.Target = t
-
-	case token.TIMER:
-		p.advance()
-		duration, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		c.Target = &ast.TimerTarget{Duration: duration.Literal}
-
-	case token.ACTIVITY:
-		p.advance()
-		name, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.ActivityTarget{Name: name.Literal}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		t.Args = args.Literal
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		c.Target = t
-
-	case token.DETACH, token.WORKFLOW:
-		mode := ast.CallChild
-		if p.current.Type == token.DETACH {
-			mode = ast.CallDetach
-			p.advance()
-		}
-
-		if p.current.Type == token.NEXUS {
-			p.advance()
-			endpoint, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			service, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(token.DOT); err != nil {
-				return nil, err
-			}
-			operation, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			args, err := p.expect(token.ARGS)
-			if err != nil {
-				return nil, err
-			}
-			t := &ast.NexusTarget{
-				Endpoint:  endpoint.Literal,
-				Service:   service.Literal,
-				Operation: operation.Literal,
-				Args:      args.Literal,
-				Detach:    mode == ast.CallDetach,
-			}
-			if p.current.Type == token.ARROW {
-				p.advance()
-				result, err := p.expect(token.IDENT)
-				if err != nil {
-					return nil, err
-				}
-				t.Result = result.Literal
-			}
-			if t.Detach && t.Result != "" {
-				return nil, &ParseError{
-					Msg:    "detach nexus call cannot have a result (-> identifier)",
-					Line:   pos.Line,
-					Column: pos.Column,
-				}
-			}
-			c.Target = t
-		} else {
-			if _, err := p.expect(token.WORKFLOW); err != nil {
-				return nil, err
-			}
-			name, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			args, err := p.expect(token.ARGS)
-			if err != nil {
-				return nil, err
-			}
-			t := &ast.WorkflowTarget{
-				Name: name.Literal,
-				Mode: mode,
-				Args: args.Literal,
-			}
-			if p.current.Type == token.ARROW {
-				p.advance()
-				result, err := p.expect(token.IDENT)
-				if err != nil {
-					return nil, err
-				}
-				t.Result = result.Literal
-			}
-			if mode == ast.CallDetach && t.Result != "" {
-				return nil, &ParseError{
-					Msg:    "detach workflow cannot have a result (-> identifier)",
-					Line:   pos.Line,
-					Column: pos.Column,
-				}
-			}
-			c.Target = t
-		}
-
-	case token.NEXUS:
-		p.advance()
-		endpoint, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		service, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.DOT); err != nil {
-			return nil, err
-		}
-		operation, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		t := &ast.NexusTarget{
-			Endpoint:  endpoint.Literal,
-			Service:   service.Literal,
-			Operation: operation.Literal,
-			Args:      args.Literal,
-		}
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		c.Target = t
-
-	case token.IDENT:
-		t := &ast.IdentTarget{Name: p.current.Literal}
-		p.advance()
-		if p.current.Type == token.ARROW {
-			p.advance()
-			result, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, err
-			}
-			t.Result = result.Literal
-		}
-		c.Target = t
-
-	case token.AWAIT:
+	// Handle special "await all:" case before the shared target parser.
+	if p.current.Type == token.AWAIT {
 		stmt, err := parseAwaitStmt(p)
 		if err != nil {
 			return nil, err
@@ -632,10 +477,13 @@ func parseAwaitOneCase(p *Parser) (*ast.AwaitOneCase, error) {
 		}
 		c.AwaitAll = awaitAll
 		return c, nil
-
-	default:
-		return nil, p.errorf("unexpected token %s in await one case (expected signal, update, timer, activity, workflow, nexus, identifier, or await)", p.current.Type)
 	}
+
+	target, err := parseAsyncTarget(p, true, true, pos)
+	if err != nil {
+		return nil, err
+	}
+	c.Target = target
 
 	// All target cases (not await all) need colon + optional body
 	if _, err := p.expect(token.COLON); err != nil {
@@ -694,98 +542,20 @@ func parsePromiseStmt(p *Parser) (ast.Statement, error) {
 		return nil, err
 	}
 
-	stmt := &ast.PromiseStmt{
-		Pos:  pos,
-		Name: name.Literal,
-	}
-
-	// Parse async target
-	switch p.current.Type {
-	case token.TIMER:
-		p.advance()
-		duration, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.TimerTarget{Duration: duration.Literal}
-
-	case token.SIGNAL:
-		p.advance()
-		sigName, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.SignalTarget{Name: sigName.Literal}
-
-	case token.UPDATE:
-		p.advance()
-		updName, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.UpdateTarget{Name: updName.Literal}
-
-	case token.ACTIVITY:
-		p.advance()
-		actName, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.ActivityTarget{Name: actName.Literal, Args: args.Literal}
-
-	case token.WORKFLOW:
-		p.advance()
-		wfName, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.WorkflowTarget{Name: wfName.Literal, Args: args.Literal}
-
-	case token.NEXUS:
-		p.advance()
-		endpoint, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		service, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.DOT); err != nil {
-			return nil, err
-		}
-		operation, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		args, err := p.expect(token.ARGS)
-		if err != nil {
-			return nil, err
-		}
-		stmt.Target = &ast.NexusTarget{
-			Endpoint:  endpoint.Literal,
-			Service:   service.Literal,
-			Operation: operation.Literal,
-			Args:      args.Literal,
-		}
-
-	default:
-		return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
+	target, err := parseAsyncTarget(p, false, false, pos)
+	if err != nil {
+		return nil, err
 	}
 
 	if p.current.Type == token.NEWLINE {
 		p.advance()
 	}
 
-	return stmt, nil
+	return &ast.PromiseStmt{
+		Pos:    pos,
+		Name:   name.Literal,
+		Target: target,
+	}, nil
 }
 
 // parseSetStmt parses: SET IDENT NEWLINE

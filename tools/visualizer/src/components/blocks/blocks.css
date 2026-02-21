@@ -43,9 +43,13 @@
   --block-case-border: #E2E8F0;
   --block-case-text: #475569;
 
-  --block-worker-bg: linear-gradient(135deg, #E8ECF1 0%, #DCE1E8 100%);
-  --block-worker-border: #94A3B8;
-  --block-worker-text: #1E293B;
+  --block-worker-bg: linear-gradient(135deg, #F0F3F7 0%, #EAEFF5 100%);
+  --block-worker-border: #AAB5C5;
+  --block-worker-text: #2D3748;
+
+  --block-namespace-bg: linear-gradient(135deg, #CDD4DE 0%, #C0C8D4 100%);
+  --block-namespace-border: #6A7A92;
+  --block-namespace-text: #151C28;
 
   --block-return-bg: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%);
   --block-return-border: #6EE7B7;
@@ -132,9 +136,13 @@
   --block-case-border: #3D4550;
   --block-case-text: #A0AEC0;
 
-  --block-worker-bg: linear-gradient(135deg, #2A2E35 0%, #323740 100%);
-  --block-worker-border: #64748B;
+  --block-worker-bg: linear-gradient(135deg, #30353D 0%, #383E47 100%);
+  --block-worker-border: #707F91;
   --block-worker-text: #E2E8F0;
+
+  --block-namespace-bg: linear-gradient(135deg, #20242C 0%, #272C36 100%);
+  --block-namespace-border: #4D5C70;
+  --block-namespace-text: #C8D0DC;
 
   --block-return-bg: linear-gradient(135deg, #1E3028 0%, #243830 100%);
   --block-return-border: #48BB78;
@@ -225,6 +233,10 @@
 
 .block-icon-placeholder {
   width: 16px;
+}
+
+.block-icon-namespace {
+  font-size: 16px;
 }
 
 .block-keyword {
@@ -459,6 +471,88 @@
 }
 
 .worker-ref.expanded>.worker-ref-header {
+  border-radius: 6px 6px 0 0;
+}
+
+/* Namespace Definition - Dark Foundational Grey */
+.block-namespace-def {
+  background: var(--block-namespace-bg);
+  border: 2px solid var(--block-namespace-border);
+}
+
+.block-namespace-def>.block-header {
+  color: var(--block-namespace-text);
+}
+
+/* Namespace entry sections */
+.namespace-entry-section {
+  margin: 8px 0 4px;
+}
+
+.namespace-entry-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  padding: 2px 0 4px;
+  color: var(--block-namespace-text);
+}
+
+/* Namespace entry items (worker/endpoint instantiations) */
+.namespace-entry {
+  position: relative;
+  margin: 4px 0;
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  transition: box-shadow 0.15s;
+}
+
+.namespace-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.15s;
+}
+
+.namespace-entry-header:hover {
+  filter: brightness(var(--hover-brightness));
+}
+
+.namespace-entry-name {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* Namespace worker entry — uses worker colors */
+.namespace-entry-worker {
+  background: var(--block-worker-bg);
+  border: 1px solid var(--block-worker-border);
+  color: var(--block-worker-text);
+}
+
+/* Namespace endpoint entry — uses nexus colors */
+.namespace-entry-endpoint {
+  background: var(--block-nexus-bg);
+  border: 1px solid var(--block-nexus-border);
+  color: var(--block-nexus-text);
+}
+
+.namespace-entry.namespace-entry-unresolved {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+.namespace-entry.expanded {
+  box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.namespace-entry.expanded>.namespace-entry-header {
   border-radius: 6px 6px 0 0;
 }
 

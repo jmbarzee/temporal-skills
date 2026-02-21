@@ -338,6 +338,26 @@ body {
   background: rgba(148, 163, 184, 0.15);
 }
 
+/* Namespace type toggle */
+.header-type-tag.header-type-namespaceDef:hover {
+  border-color: #7E8CA0;
+  color: #4A5568;
+  background: rgba(126, 140, 160, 0.06);
+}
+
+.header-type-tag.header-type-namespaceDef.active {
+  border-color: #7E8CA0;
+  background: rgba(126, 140, 160, 0.12);
+  color: #4A5568;
+  font-weight: 500;
+}
+
+.vscode-dark .header-type-tag.header-type-namespaceDef:hover,
+.vscode-dark .header-type-tag.header-type-namespaceDef.active {
+  color: #7E8CA0;
+  background: rgba(126, 140, 160, 0.15);
+}
+
 /* No workflows message */
 .no-workflows {
   display: flex;

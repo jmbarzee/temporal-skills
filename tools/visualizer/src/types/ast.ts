@@ -22,7 +22,7 @@ export interface TWFFile {
 }
 
 // Definition types
-export type Definition = WorkflowDef | ActivityDef | WorkerDef
+export type Definition = WorkflowDef | ActivityDef | WorkerDef | NamespaceDef
 
 export interface WorkflowDef extends Position {
   type: 'workflowDef'
@@ -70,6 +70,28 @@ export interface WorkerDef extends Position {
   workflows: WorkerRef[]
   activities: WorkerRef[]
   services: WorkerRef[]
+  // Source file path (added by extension)
+  sourceFile?: string
+}
+
+// Namespace worker instantiation (worker + deployment options)
+export interface NamespaceWorker extends Position {
+  workerName: string
+  options?: OptionsBlock
+}
+
+// Namespace endpoint instantiation (nexus endpoint + options)
+export interface NamespaceEndpoint extends Position {
+  endpointName: string
+  options?: OptionsBlock
+}
+
+// Namespace definition - instantiates workers with deployment config
+export interface NamespaceDef extends Position {
+  type: 'namespaceDef'
+  name: string
+  workers: NamespaceWorker[]
+  endpoints: NamespaceEndpoint[]
   // Source file path (added by extension)
   sourceFile?: string
 }
@@ -348,4 +370,8 @@ export function isActivityDef(def: Definition): def is ActivityDef {
 
 export function isWorkerDef(def: Definition): def is WorkerDef {
   return def.type === 'workerDef'
+}
+
+export function isNamespaceDef(def: Definition): def is NamespaceDef {
+  return def.type === 'namespaceDef'
 }

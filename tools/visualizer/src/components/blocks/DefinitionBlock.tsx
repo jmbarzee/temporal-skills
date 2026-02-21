@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Definition, WorkflowDef, ActivityDef, WorkerDef, WorkerRef, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
+import type { Definition, WorkflowDef, ActivityDef, WorkerDef, WorkerRef, NamespaceDef, NamespaceWorker, NamespaceEndpoint, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { WorkflowContent } from './WorkflowContent'
 import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
@@ -19,6 +19,8 @@ export function DefinitionBlock({ definition }: DefinitionBlockProps) {
       return <ActivityDefBlock def={definition} />
     case 'workerDef':
       return <WorkerDefBlock def={definition} />
+    case 'namespaceDef':
+      return <NamespaceDefBlock def={definition} />
     default:
       return null
   }
@@ -94,7 +96,7 @@ function WorkerDefBlock({ def }: { def: WorkerDef }) {
     <div className={`block block-worker-def ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon">⧉</span>
+        <span className="block-icon">□</span>
         <span className="block-keyword">worker</span>
         <span className="block-signature">{def.name} ({totalRefs} types)</span>
       </div>
@@ -165,6 +167,92 @@ function WorkerRefItem({ ref_, refType }: { ref_: WorkerRef; refType: 'workflow'
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function NamespaceDefBlock({ def }: { def: NamespaceDef }) {
+  const [expanded, toggle] = useToggle()
+
+  const totalEntries = (def.workers?.length || 0) + (def.endpoints?.length || 0)
+
+  return (
+    <div className={`block block-namespace-def ${expanded ? 'expanded' : 'collapsed'}`}>
+      <div className="block-header" onClick={toggle}>
+        <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        <span className="block-icon block-icon-namespace">⧉</span>
+        <span className="block-keyword">namespace</span>
+        <span className="block-signature">{def.name} ({totalEntries} entries)</span>
+      </div>
+
+      {expanded && (
+        <div className="block-body">
+          {def.workers?.length > 0 && (
+            <div className="namespace-entry-section">
+              <div className="namespace-entry-label">workers</div>
+              {def.workers.map((w) => (
+                <NamespaceWorkerEntry key={`${w.line}:${w.column}`} entry={w} />
+              ))}
+            </div>
+          )}
+          {def.endpoints?.length > 0 && (
+            <div className="namespace-entry-section">
+              <div className="namespace-entry-label">nexus endpoints</div>
+              {def.endpoints.map((ep) => (
+                <NamespaceEndpointEntry key={`${ep.line}:${ep.column}`} entry={ep} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NamespaceWorkerEntry({ entry }: { entry: NamespaceWorker }) {
+  const context = React.useContext(DefinitionContext)
+  const workerDef = context.workers.get(entry.workerName)
+  const isDefined = !!workerDef
+  const [expanded, toggle] = useToggle(false, isDefined)
+
+  return (
+    <div className={`namespace-entry namespace-entry-worker ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'namespace-entry-unresolved' : ''}`}>
+      <div className="namespace-entry-header" onClick={toggle}>
+        {isDefined ? (
+          <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
+        ) : (
+          <span className="block-toggle-placeholder" />
+        )}
+        <span className="block-icon">□</span>
+        <span className="namespace-entry-name">{entry.workerName}</span>
+        {!isDefined && <span className="block-unresolved-badge">?</span>}
+      </div>
+
+      {expanded && isDefined && workerDef && (
+        <div className="block-body">
+          {workerDef.workflows?.length > 0 && (
+            <WorkerRefSection label="workflows" refs={workerDef.workflows} refType="workflow" />
+          )}
+          {workerDef.activities?.length > 0 && (
+            <WorkerRefSection label="activities" refs={workerDef.activities} refType="activity" />
+          )}
+          {workerDef.services?.length > 0 && (
+            <WorkerRefSection label="nexus services" refs={workerDef.services} refType="service" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NamespaceEndpointEntry({ entry }: { entry: NamespaceEndpoint }) {
+  return (
+    <div className="namespace-entry namespace-entry-endpoint collapsed">
+      <div className="namespace-entry-header">
+        <span className="block-toggle-placeholder" />
+        <span className="block-icon">⬡</span>
+        <span className="namespace-entry-name">{entry.endpointName}</span>
+      </div>
     </div>
   )
 }

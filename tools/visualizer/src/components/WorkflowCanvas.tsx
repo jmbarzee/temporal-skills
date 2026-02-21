@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TWFFile, Definition, WorkflowDef, ActivityDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
+import type { TWFFile, Definition, WorkflowDef, ActivityDef, WorkerDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
 import { SearchIcon } from './icons/GearIcons'
 
@@ -11,6 +11,7 @@ interface WorkflowCanvasProps {
 export interface DefinitionContext {
   workflows: Map<string, WorkflowDef>
   activities: Map<string, ActivityDef>
+  workers: Map<string, WorkerDef>
 }
 
 // Context for looking up signal/query/update handlers in the current workflow
@@ -23,6 +24,7 @@ export interface HandlerContext {
 export const DefinitionContext = React.createContext<DefinitionContext>({
   workflows: new Map(),
   activities: new Map(),
+  workers: new Map(),
 })
 
 export const HandlerContext = React.createContext<HandlerContext>({
@@ -42,7 +44,8 @@ interface DefTypeConfig {
 const DEF_TYPE_CONFIGS: DefTypeConfig[] = [
   { type: 'workflowDef', label: 'Workflows', icon: '⚙⚙', defaultOn: true },
   { type: 'activityDef', label: 'Activities', icon: '⚙', defaultOn: false },
-  { type: 'workerDef', label: 'Workers', icon: '⧉', defaultOn: false },
+  { type: 'workerDef', label: 'Workers', icon: '□', defaultOn: false },
+  { type: 'namespaceDef', label: 'Namespaces', icon: '⧉', defaultOn: false },
 ]
 
 const DEFAULT_VISIBLE_TYPES = new Set(
@@ -61,16 +64,19 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
   const context = React.useMemo<DefinitionContext>(() => {
     const workflows = new Map<string, WorkflowDef>()
     const activities = new Map<string, ActivityDef>()
+    const workers = new Map<string, WorkerDef>()
 
     for (const def of ast.definitions) {
       if (def.type === 'workflowDef') {
         workflows.set(def.name, def)
       } else if (def.type === 'activityDef') {
         activities.set(def.name, def)
+      } else if (def.type === 'workerDef') {
+        workers.set(def.name, def)
       }
     }
 
-    return { workflows, activities }
+    return { workflows, activities, workers }
   }, [ast])
 
   // Extract all unique source files from definitions

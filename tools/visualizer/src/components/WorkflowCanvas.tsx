@@ -46,12 +46,15 @@ interface DefTypeConfig {
 }
 
 const DEF_TYPE_CONFIGS: DefTypeConfig[] = [
+  { type: 'namespaceDef', label: 'Namespaces', icon: '⧉', defaultOn: false },
+  { type: 'workerDef', label: 'Workers', icon: '□', defaultOn: true },
+  { type: 'nexusServiceDef', label: 'Nexus Services', icon: '★', defaultOn: false },
   { type: 'workflowDef', label: 'Workflows', icon: '⚙⚙', defaultOn: true },
   { type: 'activityDef', label: 'Activities', icon: '⚙', defaultOn: false },
-  { type: 'nexusServiceDef', label: 'Nexus Services', icon: '★', defaultOn: false },
-  { type: 'workerDef', label: 'Workers', icon: '□', defaultOn: false },
-  { type: 'namespaceDef', label: 'Namespaces', icon: '⧉', defaultOn: false },
 ]
+
+// Type ordering for canvas grouping (matches toggle bar: broadest scope first)
+const DEF_TYPE_ORDER = new Map(DEF_TYPE_CONFIGS.map((cfg, i) => [cfg.type, i]))
 
 const DEFAULT_VISIBLE_TYPES = new Set(
   DEF_TYPE_CONFIGS.filter(c => c.defaultOn).map(c => c.type)
@@ -155,11 +158,11 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
     })
   }
 
-  // Filter definitions for display
+  // Filter and group definitions for display
   const visibleDefinitions = React.useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase()
 
-    return ast.definitions.filter((def): def is Definition => {
+    const filtered = ast.definitions.filter((def): def is Definition => {
       // Type filter
       if (!visibleTypes.has(def.type)) return false
 
@@ -176,6 +179,15 @@ export function WorkflowCanvas({ ast, onOpenFile }: WorkflowCanvasProps) {
 
       return true
     })
+
+    // Group by type in scope order (namespace → worker → nexus → workflow → activity)
+    filtered.sort((a, b) => {
+      const orderA = DEF_TYPE_ORDER.get(a.type) ?? 999
+      const orderB = DEF_TYPE_ORDER.get(b.type) ?? 999
+      return orderA - orderB
+    })
+
+    return filtered
   }, [ast.definitions, selectedFiles, visibleTypes, searchQuery])
 
   // Partition errors into "shown files" vs "hidden files" based on file filter

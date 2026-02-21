@@ -6,6 +6,7 @@ import type {
   SetStmt,
   UnsetStmt,
 } from '../../types/ast'
+import { THEME, CLOSE_REASON_THEME } from '../../theme/temporal-theme'
 
 // Return
 export function ReturnBlock({ stmt }: { stmt: ReturnStmt }) {
@@ -13,7 +14,7 @@ export function ReturnBlock({ stmt }: { stmt: ReturnStmt }) {
     <div className="block block-return collapsed">
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">↩</span>
+        <span className="block-icon">{THEME.return.icon}</span>
         <span className="block-keyword">return</span>
         {stmt.value && <span className="block-signature">{stmt.value}</span>}
       </div>
@@ -23,11 +24,8 @@ export function ReturnBlock({ stmt }: { stmt: ReturnStmt }) {
 
 // Close - workflow termination
 export function CloseBlock({ stmt }: { stmt: CloseStmt }) {
-  // Determine the icon and class based on reason
-  const isContinueAsNew = stmt.reason === 'continue_as_new'
-  const isFailed = stmt.reason === 'fail'
-  const icon = isContinueAsNew ? '⟳' : isFailed ? '✕' : '✓'
-  const statusClass = isContinueAsNew ? 'close-continue-as-new' : isFailed ? 'close-failed' : ''
+  const icon = (CLOSE_REASON_THEME[stmt.reason] ?? THEME.closeComplete).icon
+  const statusClass = stmt.reason === 'continue_as_new' ? 'close-continue-as-new' : stmt.reason === 'fail' ? 'close-failed' : ''
 
   return (
     <div className={`block block-close ${statusClass} collapsed`}>
@@ -50,7 +48,7 @@ export function RawBlock({ stmt }: { stmt: RawStmt }) {
     <div className="block block-raw collapsed">
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">≡</span>
+        <span className="block-icon">{THEME.raw.icon}</span>
         <span className="block-code">{stmt.text}</span>
       </div>
     </div>
@@ -63,7 +61,7 @@ export function SimpleBlock({ keyword, className }: { keyword: string; className
     <div className={`block ${className} collapsed`}>
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">•</span>
+        <span className="block-icon">{THEME.breakContinue.icon}</span>
         <span className="block-keyword">{keyword}</span>
       </div>
     </div>
@@ -94,7 +92,7 @@ export function PromiseBlock({ stmt }: { stmt: PromiseStmt }) {
     <div className="block block-promise collapsed">
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">◇</span>
+        <span className="block-icon">{THEME.promise.icon}</span>
         <span className="block-keyword">promise</span>
         <span className="block-signature">{stmt.name} ← {target}</span>
       </div>
@@ -108,7 +106,7 @@ export function SetBlock({ stmt }: { stmt: SetStmt }) {
     <div className="block block-set collapsed">
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">◉</span>
+        <span className="block-icon">{THEME.conditionSet.icon}</span>
         <span className="block-keyword">set</span>
         <span className="block-signature">{stmt.name}</span>
       </div>
@@ -122,7 +120,7 @@ export function UnsetBlock({ stmt }: { stmt: UnsetStmt }) {
     <div className="block block-unset collapsed">
       <div className="block-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon">○</span>
+        <span className="block-icon">{THEME.conditionUnset.icon}</span>
         <span className="block-keyword">unset</span>
         <span className="block-signature">{stmt.name}</span>
       </div>

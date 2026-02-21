@@ -11,6 +11,7 @@ import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
 import { useToggle } from './useToggle'
 import { StatementBlock } from './StatementBlock'
 import { InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
+import { THEME, AWAIT_TARGET_THEME } from '../../theme/temporal-theme'
 
 // Shared await target display - both getAwaitStmtDisplay and getAwaitOneCaseDisplay delegate here
 function getAwaitTargetDisplay(
@@ -20,31 +21,31 @@ function getAwaitTargetDisplay(
 ): { icon: string; keyword: string; signature: string; expandableDef?: { body?: Statement[] }; nexusAsyncWorkflow?: WorkflowDef; nexusSyncBody?: Statement[]; isUnresolved: boolean } {
   switch (target.kind) {
     case 'timer':
-      return { icon: '⏱', keyword: 'timer', signature: `(${target.timer || ''})`, isUnresolved: false }
+      return { icon: AWAIT_TARGET_THEME.timer.icon, keyword: 'timer', signature: `(${target.timer || ''})`, isUnresolved: false }
     case 'signal': {
       const sig = target.signal || ''
       const params = target.signalParams ? ` → ${target.signalParams}` : ''
       const handler = handlers.signals.get(sig)
-      return { icon: '↪', keyword: 'signal', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
+      return { icon: AWAIT_TARGET_THEME.signal.icon, keyword: 'signal', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
     }
     case 'update': {
       const sig = target.update || ''
       const params = target.updateParams ? ` → ${target.updateParams}` : ''
       const handler = handlers.updates.get(sig)
-      return { icon: '⇄', keyword: 'update', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
+      return { icon: AWAIT_TARGET_THEME.update.icon, keyword: 'update', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
     }
     case 'activity': {
       const sig = `${target.activity || ''}(${target.activityArgs || ''})`
       const result = target.activityResult ? ` → ${target.activityResult}` : ''
       const def = context.activities.get(target.activity || '')
-      return { icon: '⚙', keyword: 'activity', signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
+      return { icon: AWAIT_TARGET_THEME.activity.icon, keyword: 'activity', signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
     }
     case 'workflow': {
       const modePrefix = target.workflowMode === 'detach' ? 'detach ' : ''
       const sig = `${target.workflow || ''}(${target.workflowArgs || ''})`
       const result = target.workflowResult ? ` → ${target.workflowResult}` : ''
       const def = context.workflows.get(target.workflow || '')
-      return { icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
+      return { icon: AWAIT_TARGET_THEME.workflow.icon, keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
     }
     case 'nexus': {
       const detachPrefix = target.nexusDetach ? 'detach ' : ''
@@ -57,17 +58,17 @@ function getAwaitTargetDisplay(
       if (operation?.opType === 'async' && operation.workflowName) {
         const wf = context.workflows.get(operation.workflowName)
         if (wf) {
-          return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusAsyncWorkflow: wf, isUnresolved }
+          return { icon: AWAIT_TARGET_THEME.nexus.icon, keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusAsyncWorkflow: wf, isUnresolved }
         }
       } else if (operation?.opType === 'sync' && operation.body) {
-        return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusSyncBody: operation.body, isUnresolved }
+        return { icon: AWAIT_TARGET_THEME.nexus.icon, keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, nexusSyncBody: operation.body, isUnresolved }
       }
-      return { icon: '☆', keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, isUnresolved }
+      return { icon: AWAIT_TARGET_THEME.nexus.icon, keyword: `${detachPrefix}nexus`, signature: `${sig}${result}`, isUnresolved }
     }
     case 'ident': {
       const name = target.ident || ''
       const result = target.identResult ? ` → ${target.identResult}` : ''
-      return { icon: '◉', keyword: '', signature: `${name}${result}`, isUnresolved: false }
+      return { icon: AWAIT_TARGET_THEME.ident.icon, keyword: '', signature: `${name}${result}`, isUnresolved: false }
     }
     default:
       return { icon: '?', keyword: '', signature: '', isUnresolved: false }
@@ -98,7 +99,7 @@ function getAwaitOneCaseDisplay(
 ): { contentClass: string; icon: string; keyword: string; signature: string; isUnresolved: boolean } {
   // await_all is case-only, handle separately
   if (c.kind === 'await_all') {
-    return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
+    return { contentClass: 'tagged-await-all', icon: THEME.awaitAll.icon, keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
   }
   const target = getAwaitTargetDisplay(c, context, handlers)
   return {
@@ -160,7 +161,7 @@ export function AwaitAllBlockComponent({ stmt }: { stmt: AwaitAllBlock }) {
     <div className={`block block-await-all ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon">⫴</span>
+        <span className="block-icon">{THEME.awaitAll.icon}</span>
         <span className="block-keyword">await all</span>
         <span className="block-signature">{(stmt.body || []).length} branch(es)</span>
       </div>

@@ -1,21 +1,15 @@
 import React from 'react'
 import type { WorkflowDef, HandlerDecl, Statement, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
-import { InterlockingGearsIcon } from '../icons/GearIcons'
+import { THEME, HANDLER_CONFIG, ThemeIcon } from '../../theme/temporal-theme'
 import { useToggle } from './useToggle'
 import { HandlerContext } from '../WorkflowCanvas'
 import './blocks.css'
 
-const handlerConfig = {
-  signalDecl: { icon: '↪', keyword: 'signal', cssClass: 'declaration-signal' },
-  queryDecl:  { icon: '↩', keyword: 'query',  cssClass: 'declaration-query' },
-  updateDecl: { icon: '⇄', keyword: 'update', cssClass: 'declaration-update' },
-} as const
-
 function HandlerDeclBlock({ decl }: { decl: HandlerDecl }) {
   const hasBody = decl.body && decl.body.length > 0
   const [expanded, toggle] = useToggle(false, hasBody)
-  const { icon, keyword, cssClass } = handlerConfig[decl.type]
+  const { icon, keyword, cssClass } = HANDLER_CONFIG[decl.type]
 
   let signature = `${decl.name}(${decl.params})`
   if ('returnType' in decl && decl.returnType) signature += ` → ${decl.returnType}`
@@ -60,7 +54,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
         <div className="block-declarations-group">
           <div className="declarations-header" onClick={toggleState}>
             <span className="block-toggle">{stateExpanded ? '▼' : '▶'}</span>
-            <span className="declarations-icon declaration-condition">◉</span>
+            <span className="declarations-icon declaration-condition">{THEME.conditionSet.icon}</span>
             <span className="declarations-label">state</span>
             <span className="declarations-count">({stateItemCount})</span>
           </div>
@@ -70,7 +64,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
                 <div key={`${c.line}:${c.column}`} className="declaration declaration-condition">
                   <div className="declaration-header">
                     <span className="block-toggle-placeholder" />
-                    <span className="declaration-icon">◉</span>
+                    <span className="declaration-icon">{THEME.conditionSet.icon}</span>
                     <span className="declaration-keyword">condition</span>
                     <span className="declaration-name">{c.name}</span>
                   </div>
@@ -80,7 +74,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
                 <div key={`${r.line}:${r.column}`} className="declaration declaration-raw-state">
                   <div className="declaration-header">
                     <span className="block-toggle-placeholder" />
-                    <span className="declaration-icon">≡</span>
+                    <span className="declaration-icon">{THEME.raw.icon}</span>
                     <span className="declaration-name">{r.text}</span>
                   </div>
                 </div>
@@ -94,7 +88,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
         <div className="block-declarations-group">
           <div className="declarations-header" onClick={toggleSignals}>
             <span className="block-toggle">{signalsExpanded ? '▼' : '▶'}</span>
-            <span className="declarations-icon declaration-signal">↪</span>
+            <span className="declarations-icon declaration-signal">{THEME.signal.icon}</span>
             <span className="declarations-label">signals</span>
             <span className="declarations-count">({def.signals!.length})</span>
           </div>
@@ -112,7 +106,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
         <div className="block-declarations-group">
           <div className="declarations-header" onClick={toggleQueries}>
             <span className="block-toggle">{queriesExpanded ? '▼' : '▶'}</span>
-            <span className="declarations-icon declaration-query">↩</span>
+            <span className="declarations-icon declaration-query">{THEME.query.icon}</span>
             <span className="declarations-label">queries</span>
             <span className="declarations-count">({def.queries!.length})</span>
           </div>
@@ -130,7 +124,7 @@ export function WorkflowContent({ def }: { def: WorkflowDef }) {
         <div className="block-declarations-group">
           <div className="declarations-header" onClick={toggleUpdates}>
             <span className="block-toggle">{updatesExpanded ? '▼' : '▶'}</span>
-            <span className="declarations-icon declaration-update">⇄</span>
+            <span className="declarations-icon declaration-update">{THEME.update.icon}</span>
             <span className="declarations-label">updates</span>
             <span className="declarations-count">({def.updates!.length})</span>
           </div>
@@ -178,7 +172,7 @@ export function InlineWorkflowBlock({ def }: { def: WorkflowDef }) {
       <div className={`block block-workflow-call ${expanded ? 'expanded' : 'collapsed'}`}>
         <div className="block-header" onClick={toggle}>
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-          <span className="block-icon"><InterlockingGearsIcon /></span>
+          <span className="block-icon"><ThemeIcon kind="workflow" /></span>
           <span className="block-keyword">workflow</span>
           <span className="block-signature">{signature}</span>
         </div>

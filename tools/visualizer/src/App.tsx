@@ -1,5 +1,6 @@
 import React from 'react'
 import { WorkflowCanvas } from './components/WorkflowCanvas'
+import { StyleGuide } from './components/StyleGuide'
 import type { TWFFile } from './types/ast'
 
 // Standalone app - for development/testing
@@ -9,6 +10,19 @@ function App() {
   const [ast, setAst] = React.useState<TWFFile | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
+  const [showStyleGuide, setShowStyleGuide] = React.useState(false)
+
+  // Ctrl+Shift+G toggles style guide
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'G') {
+        e.preventDefault()
+        setShowStyleGuide(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Load AST from query param or postMessage
   React.useEffect(() => {
@@ -96,6 +110,10 @@ function App() {
         </div>
       </div>
     )
+  }
+
+  if (showStyleGuide) {
+    return <StyleGuide onClose={() => setShowStyleGuide(false)} />
   }
 
   return <WorkflowCanvas ast={ast} />

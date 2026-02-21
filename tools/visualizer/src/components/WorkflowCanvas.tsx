@@ -2,6 +2,7 @@ import React from 'react'
 import type { TWFFile, Definition, WorkflowDef, ActivityDef, WorkerDef, NamespaceDef, NexusServiceDef, SignalDecl, QueryDecl, UpdateDecl, FileError } from '../types/ast'
 import { DefinitionBlock } from './blocks/DefinitionBlock'
 import { SearchIcon } from './icons/GearIcons'
+import { THEME, DEF_TYPE_CONFIGS, DEF_TYPE_ORDER } from '../theme/temporal-theme'
 
 interface WorkflowCanvasProps {
   ast: TWFFile
@@ -36,25 +37,6 @@ export const HandlerContext = React.createContext<HandlerContext>({
   queries: new Map(),
   updates: new Map(),
 })
-
-// Definition type toggle configuration
-interface DefTypeConfig {
-  type: string
-  label: string
-  icon: string
-  defaultOn: boolean
-}
-
-const DEF_TYPE_CONFIGS: DefTypeConfig[] = [
-  { type: 'namespaceDef', label: 'Namespaces', icon: '⧉', defaultOn: false },
-  { type: 'workerDef', label: 'Workers', icon: '□', defaultOn: true },
-  { type: 'nexusServiceDef', label: 'Nexus Services', icon: '★', defaultOn: false },
-  { type: 'workflowDef', label: 'Workflows', icon: '⚙⚙', defaultOn: true },
-  { type: 'activityDef', label: 'Activities', icon: '⚙', defaultOn: false },
-]
-
-// Type ordering for canvas grouping (matches toggle bar: broadest scope first)
-const DEF_TYPE_ORDER = new Map(DEF_TYPE_CONFIGS.map((cfg, i) => [cfg.type, i]))
 
 const DEFAULT_VISIBLE_TYPES = new Set(
   DEF_TYPE_CONFIGS.filter(c => c.defaultOn).map(c => c.type)
@@ -346,7 +328,7 @@ function ErrorsHeader({ shownFileErrors, hiddenFileErrors }: {
     <div className="errors-header">
       <div className="errors-header-bar" onClick={() => setExpanded(!expanded)}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="errors-header-icon">⚠</span>
+        <span className="errors-header-icon">{THEME.error.icon}</span>
         <span className="errors-header-title">
           {totalErrors} {totalErrors === 1 ? 'error' : 'errors'}{summary}
         </span>

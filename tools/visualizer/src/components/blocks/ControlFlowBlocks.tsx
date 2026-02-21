@@ -1,6 +1,7 @@
 import type { SwitchBlock, IfStmt, ForStmt } from '../../types/ast'
 import { useToggle } from './useToggle'
 import { StatementBlock } from './StatementBlock'
+import { THEME } from '../../theme/temporal-theme'
 
 // Switch - expandable
 export function SwitchBlockComponent({ stmt }: { stmt: SwitchBlock }) {
@@ -115,7 +116,7 @@ export function ForBlock({ stmt }: { stmt: ForStmt }) {
     <div className={`block block-for ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon">↻</span>
+        <span className="block-icon">{THEME.forLoop.icon}</span>
         <span className="block-keyword">for</span>
         <span className="block-signature">{label}</span>
       </div>

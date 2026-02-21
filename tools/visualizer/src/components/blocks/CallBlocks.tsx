@@ -2,7 +2,7 @@ import React from 'react'
 import type { ActivityCall, WorkflowCall, NexusCall } from '../../types/ast'
 import { DefinitionContext } from '../WorkflowCanvas'
 import { WorkflowContent, InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
-import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
+import { THEME, ThemeIcon } from '../../theme/temporal-theme'
 import { useToggle } from './useToggle'
 import { StatementBlock } from './StatementBlock'
 
@@ -23,7 +23,7 @@ export function ActivityCallBlock({ stmt }: { stmt: ActivityCall }) {
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon"><SingleGearIcon /></span>
+        <span className="block-icon"><ThemeIcon kind="activity" /></span>
         <span className="block-keyword">activity</span>
         <span className="block-signature">{signature}</span>
         {!isDefined && <span className="block-unresolved-badge">?</span>}
@@ -62,7 +62,7 @@ export function WorkflowCallBlock({ stmt }: { stmt: WorkflowCall }) {
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon"><InterlockingGearsIcon /></span>
+        <span className="block-icon"><ThemeIcon kind="workflow" /></span>
         <span className="block-keyword">{modePrefix}workflow</span>
         <span className="block-signature">{signature}</span>
         {!isDefined && <span className="block-unresolved-badge">?</span>}
@@ -106,7 +106,7 @@ export function NexusCallBlock({ stmt }: { stmt: NexusCall }) {
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon block-icon-nexus-call">☆</span>
+        <span className="block-icon block-icon-nexus-call">{THEME.nexusCall.icon}</span>
         <span className="block-keyword">{modePrefix}nexus</span>
         <span className="block-signature">{signature}{result}</span>
         {!isDefined && stmt.service && <span className="block-unresolved-badge">?</span>}

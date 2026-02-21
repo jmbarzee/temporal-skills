@@ -2,7 +2,7 @@ import React from 'react'
 import type { Definition, WorkflowDef, ActivityDef, WorkerDef, WorkerRef, NamespaceDef, NamespaceWorker, NamespaceEndpoint, NexusServiceDef, NexusOperation, SignalDecl, QueryDecl, UpdateDecl } from '../../types/ast'
 import { StatementBlock } from './StatementBlock'
 import { WorkflowContent, InlineWorkflowBlock, SyncBodyBlock } from './WorkflowContent'
-import { SingleGearIcon, InterlockingGearsIcon } from '../icons/GearIcons'
+import { THEME, ThemeIcon, WORKER_REF_THEME } from '../../theme/temporal-theme'
 import { useToggle } from './useToggle'
 import { DefinitionContext, HandlerContext } from '../WorkflowCanvas'
 import './blocks.css'
@@ -50,7 +50,7 @@ function WorkflowDefBlock({ def }: { def: WorkflowDef }) {
       <div className={`block block-workflow ${expanded ? 'expanded' : 'collapsed'}`}>
         <div className="block-header" onClick={toggle}>
           <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-          <span className="block-icon"><InterlockingGearsIcon /></span>
+          <span className="block-icon"><ThemeIcon kind="workflow" /></span>
           <span className="block-keyword">workflow</span>
           <span className="block-signature">{signature}</span>
         </div>
@@ -73,7 +73,7 @@ function ActivityDefBlock({ def }: { def: ActivityDef }) {
     <div className={`block block-activity-def ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon"><SingleGearIcon /></span>
+        <span className="block-icon"><ThemeIcon kind="activity" /></span>
         <span className="block-keyword">activity</span>
         <span className="block-signature">{signature}</span>
       </div>
@@ -98,7 +98,7 @@ function WorkerDefBlock({ def }: { def: WorkerDef }) {
     <div className={`block block-worker-def ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon">□</span>
+        <span className="block-icon">{THEME.worker.icon}</span>
         <span className="block-keyword">worker</span>
         <span className="block-signature">{def.name} ({totalRefs} types)</span>
       </div>
@@ -146,7 +146,7 @@ function WorkerRefItem({ ref_, refType }: { ref_: WorkerRef; refType: 'workflow'
   const isDefined = !!(linkedDef || linkedService)
   const [expanded, toggle] = useToggle(false, isDefined)
 
-  const icon = refType === 'workflow' ? '⚙⚙' : refType === 'activity' ? '⚙' : '★'
+  const icon = WORKER_REF_THEME[refType].icon
 
   return (
     <div className={`worker-ref worker-ref-${refType} ${expanded ? 'expanded' : 'collapsed'} ${!isDefined ? 'worker-ref-unresolved' : ''}`}>
@@ -189,7 +189,7 @@ function NamespaceDefBlock({ def }: { def: NamespaceDef }) {
     <div className={`block block-namespace-def ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon block-icon-namespace">⧉</span>
+        <span className="block-icon block-icon-namespace">{THEME.namespace.icon}</span>
         <span className="block-keyword">namespace</span>
         <span className="block-signature">{def.name} ({totalEntries} entries)</span>
       </div>
@@ -232,7 +232,7 @@ function NamespaceWorkerEntry({ entry }: { entry: NamespaceWorker }) {
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon">□</span>
+        <span className="block-icon">{THEME.worker.icon}</span>
         <span className="namespace-entry-name">{entry.workerName}</span>
         {!isDefined && <span className="block-unresolved-badge">?</span>}
       </div>
@@ -259,7 +259,7 @@ function NamespaceEndpointEntry({ entry }: { entry: NamespaceEndpoint }) {
     <div className="namespace-entry namespace-entry-endpoint collapsed">
       <div className="namespace-entry-header">
         <span className="block-toggle-placeholder" />
-        <span className="block-icon block-icon-nexus-endpoint">★</span>
+        <span className="block-icon block-icon-nexus-endpoint">{THEME.nexusService.icon}</span>
         <span className="namespace-entry-name">{entry.endpointName}</span>
       </div>
     </div>
@@ -282,7 +282,7 @@ function NexusServiceDefBlock({ def }: { def: NexusServiceDef }) {
     <div className={`block block-nexus-service-def ${expanded ? 'expanded' : 'collapsed'}`}>
       <div className="block-header" onClick={toggle}>
         <span className="block-toggle">{expanded ? '▼' : '▶'}</span>
-        <span className="block-icon block-icon-nexus-service">★</span>
+        <span className="block-icon block-icon-nexus-service">{THEME.nexusService.icon}</span>
         <span className="block-keyword">service</span>
         <span className="block-signature">{def.name} ({opCount} operation{opCount !== 1 ? 's' : ''})</span>
       </div>
@@ -340,7 +340,7 @@ export function NexusOperationBlock({ operation }: { operation: NexusOperation }
         ) : (
           <span className="block-toggle-placeholder" />
         )}
-        <span className="block-icon block-icon-nexus-operation">☆</span>
+        <span className="block-icon block-icon-nexus-operation">{THEME.nexusOperation.icon}</span>
         <span className="block-keyword">{operation.opType}</span>
         <span className="block-signature">{signature}</span>
         {isUnresolved && <span className="block-unresolved-badge">?</span>}

@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"strings"
+
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/token"
 )
@@ -89,21 +91,16 @@ var endpointOptionSchema = map[string]*optionSchema{
 	"task_queue": {valueType: "string"},
 }
 
+var optionSchemas = map[OptionsContext]map[string]*optionSchema{
+	OptionsContextActivity:  activityOptionSchema,
+	OptionsContextWorkflow:  workflowOptionSchema,
+	OptionsContextWorker:    workerOptionSchema,
+	OptionsContextNexusCall: nexusCallOptionSchema,
+	OptionsContextEndpoint:  endpointOptionSchema,
+}
+
 func schemaForContext(ctx OptionsContext) map[string]*optionSchema {
-	switch ctx {
-	case OptionsContextActivity:
-		return activityOptionSchema
-	case OptionsContextWorkflow:
-		return workflowOptionSchema
-	case OptionsContextWorker:
-		return workerOptionSchema
-	case OptionsContextNexusCall:
-		return nexusCallOptionSchema
-	case OptionsContextEndpoint:
-		return endpointOptionSchema
-	default:
-		return nil
-	}
+	return optionSchemas[ctx]
 }
 
 // parseOptionsBlock parses the contents of an options block: COLON NEWLINE INDENT entries DEDENT.
@@ -314,7 +311,7 @@ func (p *Parser) parseOptionValue(sch *optionSchema) (string, string, error) {
 			}
 			if !valid {
 				return "", "", &ParseError{
-					Msg:    "invalid value " + val + " for enum option (allowed: " + joinStrings(sch.allowed) + ")",
+					Msg:    "invalid value " + val + " for enum option (allowed: " + strings.Join(sch.allowed, ", ") + ")",
 					Line:   p.current.Line,
 					Column: p.current.Column,
 				}
@@ -329,13 +326,3 @@ func (p *Parser) parseOptionValue(sch *optionSchema) (string, string, error) {
 	}
 }
 
-func joinStrings(ss []string) string {
-	result := ""
-	for i, s := range ss {
-		if i > 0 {
-			result += ", "
-		}
-		result += s
-	}
-	return result
-}

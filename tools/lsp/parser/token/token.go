@@ -1,6 +1,9 @@
 package token
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // TokenType represents the type of a lexical token.
 type TokenType int
@@ -86,63 +89,84 @@ const (
 	RAW_TEXT // anything else
 )
 
-var tokenNames = map[TokenType]string{
-	EOF:             "EOF",
-	ILLEGAL:         "ILLEGAL",
-	NEWLINE:         "NEWLINE",
-	INDENT:          "INDENT",
-	DEDENT:          "DEDENT",
-	WORKFLOW:        "WORKFLOW",
-	ACTIVITY:        "ACTIVITY",
-	WORKER:          "WORKER",
-	NAMESPACE:       "NAMESPACE",
-	TASK_QUEUE:      "TASK_QUEUE",
-	SIGNAL:          "SIGNAL",
-	QUERY:           "QUERY",
-	UPDATE:          "UPDATE",
-	DETACH:          "DETACH",
-	NEXUS:           "NEXUS",
-	SYNC:            "SYNC",
-	ASYNC:           "ASYNC",
-	PROMISE:         "PROMISE",
-	CONDITION:       "CONDITION",
-	SET:             "SET",
-	UNSET:           "UNSET",
-	STATE:           "STATE",
-	TIMER:           "TIMER",
-	OPTIONS:         "OPTIONS",
-	AWAIT:           "AWAIT",
-	ALL:             "ALL",
-	ONE:             "ONE",
-	SWITCH:          "SWITCH",
-	CASE:            "CASE",
-	IF:              "IF",
-	ELSE:            "ELSE",
-	FOR:             "FOR",
-	IN:              "IN",
-	CLOSE:           "CLOSE",
-	COMPLETE:        "COMPLETE",
-	FAIL:            "FAIL",
-	RETURN:          "RETURN",
-	CONTINUE_AS_NEW: "CONTINUE_AS_NEW",
-	BREAK:           "BREAK",
-	CONTINUE:        "CONTINUE",
-	COLON:           "COLON",
-	ARROW:           "ARROW",
-	LEFT_ARROW:      "LEFT_ARROW",
-	DOT:             "DOT",
-	NUMBER:          "NUMBER",
-	DURATION:        "DURATION",
-	IDENT:           "IDENT",
-	STRING:          "STRING",
-	ARGS:            "ARGS",
-	COMMENT:         "COMMENT",
-	RAW_TEXT:        "RAW_TEXT",
+// tokenInfo describes a token type's display name and whether it is a keyword.
+type tokenInfo struct {
+	name      string
+	isKeyword bool
+}
+
+// tokenTable is the single source of truth for token names and keyword status.
+// Indexed by TokenType iota values.
+var tokenTable = [...]tokenInfo{
+	EOF:             {"EOF", false},
+	ILLEGAL:         {"ILLEGAL", false},
+	NEWLINE:         {"NEWLINE", false},
+	INDENT:          {"INDENT", false},
+	DEDENT:          {"DEDENT", false},
+	WORKFLOW:        {"WORKFLOW", true},
+	ACTIVITY:        {"ACTIVITY", true},
+	WORKER:          {"WORKER", true},
+	NAMESPACE:       {"NAMESPACE", true},
+	TASK_QUEUE:      {"TASK_QUEUE", true},
+	SIGNAL:          {"SIGNAL", true},
+	QUERY:           {"QUERY", true},
+	UPDATE:          {"UPDATE", true},
+	DETACH:          {"DETACH", true},
+	NEXUS:           {"NEXUS", true},
+	SYNC:            {"SYNC", true},
+	ASYNC:           {"ASYNC", true},
+	PROMISE:         {"PROMISE", true},
+	CONDITION:       {"CONDITION", true},
+	SET:             {"SET", true},
+	UNSET:           {"UNSET", true},
+	STATE:           {"STATE", true},
+	TIMER:           {"TIMER", true},
+	OPTIONS:         {"OPTIONS", true},
+	AWAIT:           {"AWAIT", true},
+	ALL:             {"ALL", true},
+	ONE:             {"ONE", true},
+	SWITCH:          {"SWITCH", true},
+	CASE:            {"CASE", true},
+	IF:              {"IF", true},
+	ELSE:            {"ELSE", true},
+	FOR:             {"FOR", true},
+	IN:              {"IN", true},
+	CLOSE:           {"CLOSE", true},
+	COMPLETE:        {"COMPLETE", true},
+	FAIL:            {"FAIL", true},
+	RETURN:          {"RETURN", true},
+	CONTINUE_AS_NEW: {"CONTINUE_AS_NEW", true},
+	BREAK:           {"BREAK", true},
+	CONTINUE:        {"CONTINUE", true},
+	COLON:           {"COLON", false},
+	ARROW:           {"ARROW", false},
+	LEFT_ARROW:      {"LEFT_ARROW", false},
+	DOT:             {"DOT", false},
+	NUMBER:          {"NUMBER", false},
+	DURATION:        {"DURATION", false},
+	IDENT:           {"IDENT", false},
+	STRING:          {"STRING", false},
+	ARGS:            {"ARGS", false},
+	COMMENT:         {"COMMENT", false},
+	RAW_TEXT:        {"RAW_TEXT", false},
+}
+
+// keywords maps keyword strings to their token types.
+// Built from tokenTable in init().
+var keywords map[string]TokenType
+
+func init() {
+	keywords = make(map[string]TokenType)
+	for i, info := range tokenTable {
+		if info.isKeyword {
+			keywords[strings.ToLower(info.name)] = TokenType(i)
+		}
+	}
 }
 
 func (t TokenType) String() string {
-	if name, ok := tokenNames[t]; ok {
-		return name
+	if int(t) >= 0 && int(t) < len(tokenTable) && tokenTable[t].name != "" {
+		return tokenTable[t].name
 	}
 	return fmt.Sprintf("TokenType(%d)", int(t))
 }
@@ -160,44 +184,6 @@ func (t Token) String() string {
 		return fmt.Sprintf("%s@%d:%d", t.Type, t.Line, t.Column)
 	}
 	return fmt.Sprintf("%s(%q)@%d:%d", t.Type, t.Literal, t.Line, t.Column)
-}
-
-var keywords = map[string]TokenType{
-	"workflow":        WORKFLOW,
-	"activity":        ACTIVITY,
-	"worker":          WORKER,
-	"namespace":       NAMESPACE,
-	"task_queue":      TASK_QUEUE,
-	"signal":          SIGNAL,
-	"query":           QUERY,
-	"update":          UPDATE,
-	"detach":          DETACH,
-	"nexus":           NEXUS,
-	"sync":            SYNC,
-	"async":           ASYNC,
-	"promise":         PROMISE,
-	"condition":       CONDITION,
-	"set":             SET,
-	"unset":           UNSET,
-	"state":           STATE,
-	"timer":           TIMER,
-	"options":         OPTIONS,
-	"await":           AWAIT,
-	"all":             ALL,
-	"one":             ONE,
-	"switch":          SWITCH,
-	"case":            CASE,
-	"if":              IF,
-	"else":            ELSE,
-	"for":             FOR,
-	"in":              IN,
-	"close":           CLOSE,
-	"complete":        COMPLETE,
-	"fail":            FAIL,
-	"return":          RETURN,
-	"continue_as_new": CONTINUE_AS_NEW,
-	"break":           BREAK,
-	"continue":        CONTINUE,
 }
 
 // LookupIdent returns the TokenType for an identifier string.

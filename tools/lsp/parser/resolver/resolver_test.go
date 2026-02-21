@@ -46,17 +46,17 @@ workflow ShipOrder(order: Order) -> (ShipResult):
 	// Verify resolution links.
 	wf := file.Definitions[0].(*ast.WorkflowDef)
 	actCall := wf.Body[0].(*ast.ActivityCall)
-	if actCall.Resolved == nil {
+	if actCall.Activity.Resolved == nil {
 		t.Error("activity call not resolved")
-	} else if actCall.Resolved.Name != "GetOrder" {
-		t.Errorf("activity resolved to %q, expected 'GetOrder'", actCall.Resolved.Name)
+	} else if actCall.Activity.Resolved.Name != "GetOrder" {
+		t.Errorf("activity resolved to %q, expected 'GetOrder'", actCall.Activity.Resolved.Name)
 	}
 
 	wfCall := wf.Body[1].(*ast.WorkflowCall)
-	if wfCall.Resolved == nil {
+	if wfCall.Workflow.Resolved == nil {
 		t.Error("workflow call not resolved")
-	} else if wfCall.Resolved.Name != "ShipOrder" {
-		t.Errorf("workflow resolved to %q, expected 'ShipOrder'", wfCall.Resolved.Name)
+	} else if wfCall.Workflow.Resolved.Name != "ShipOrder" {
+		t.Errorf("workflow resolved to %q, expected 'ShipOrder'", wfCall.Workflow.Resolved.Name)
 	}
 }
 
@@ -241,14 +241,14 @@ workflow Child(y: int) -> (int):
 	// Verify resolution links still work with structured options.
 	wf := file.Definitions[0].(*ast.WorkflowDef)
 	actCall := wf.Body[0].(*ast.ActivityCall)
-	if actCall.Resolved == nil {
+	if actCall.Activity.Resolved == nil {
 		t.Error("activity call not resolved")
 	}
 	if actCall.Options == nil || len(actCall.Options.Entries) != 2 {
 		t.Error("expected 2 option entries on activity call")
 	}
 	wfCall := wf.Body[1].(*ast.WorkflowCall)
-	if wfCall.Resolved == nil {
+	if wfCall.Workflow.Resolved == nil {
 		t.Error("workflow call not resolved")
 	}
 }
@@ -448,18 +448,18 @@ activity ValidateAddr(addr: string) -> (bool):
 
 	// Check signal body resolution
 	sigBody := wf.Signals[0].Body[0].(*ast.ActivityCall)
-	if sigBody.Resolved == nil {
+	if sigBody.Activity.Resolved == nil {
 		t.Error("signal body activity call not resolved")
-	} else if sigBody.Resolved.Name != "LogCancel" {
-		t.Errorf("resolved to %q, expected 'LogCancel'", sigBody.Resolved.Name)
+	} else if sigBody.Activity.Resolved.Name != "LogCancel" {
+		t.Errorf("resolved to %q, expected 'LogCancel'", sigBody.Activity.Resolved.Name)
 	}
 
 	// Check update body resolution
 	updBody := wf.Updates[0].Body[0].(*ast.ActivityCall)
-	if updBody.Resolved == nil {
+	if updBody.Activity.Resolved == nil {
 		t.Error("update body activity call not resolved")
-	} else if updBody.Resolved.Name != "ValidateAddr" {
-		t.Errorf("resolved to %q, expected 'ValidateAddr'", updBody.Resolved.Name)
+	} else if updBody.Activity.Resolved.Name != "ValidateAddr" {
+		t.Errorf("resolved to %q, expected 'ValidateAddr'", updBody.Activity.Resolved.Name)
 	}
 }
 
@@ -863,13 +863,8 @@ namespace orders:
 	wfRef := worker.Workflows[0]
 	if wfRef.Resolved == nil {
 		t.Error("workflow ref not resolved")
-	} else {
-		wfDef, ok := wfRef.Resolved.(*ast.WorkflowDef)
-		if !ok {
-			t.Errorf("workflow ref resolved to wrong type: %T", wfRef.Resolved)
-		} else if wfDef.Name != "ProcessOrder" {
-			t.Errorf("workflow ref resolved to %q, expected 'ProcessOrder'", wfDef.Name)
-		}
+	} else if wfRef.Resolved.Name != "ProcessOrder" {
+		t.Errorf("workflow ref resolved to %q, expected 'ProcessOrder'", wfRef.Resolved.Name)
 	}
 
 	// Activity ref should resolve to ChargePayment.
@@ -879,13 +874,8 @@ namespace orders:
 	actRef := worker.Activities[0]
 	if actRef.Resolved == nil {
 		t.Error("activity ref not resolved")
-	} else {
-		actDef, ok := actRef.Resolved.(*ast.ActivityDef)
-		if !ok {
-			t.Errorf("activity ref resolved to wrong type: %T", actRef.Resolved)
-		} else if actDef.Name != "ChargePayment" {
-			t.Errorf("activity ref resolved to %q, expected 'ChargePayment'", actDef.Name)
-		}
+	} else if actRef.Resolved.Name != "ChargePayment" {
+		t.Errorf("activity ref resolved to %q, expected 'ChargePayment'", actRef.Resolved.Name)
 	}
 
 	// Service ref should resolve to OrderService.
@@ -895,13 +885,8 @@ namespace orders:
 	svcRef := worker.Services[0]
 	if svcRef.Resolved == nil {
 		t.Error("service ref not resolved")
-	} else {
-		svcDef, ok := svcRef.Resolved.(*ast.NexusServiceDef)
-		if !ok {
-			t.Errorf("service ref resolved to wrong type: %T", svcRef.Resolved)
-		} else if svcDef.Name != "OrderService" {
-			t.Errorf("service ref resolved to %q, expected 'OrderService'", svcDef.Name)
-		}
+	} else if svcRef.Resolved.Name != "OrderService" {
+		t.Errorf("service ref resolved to %q, expected 'OrderService'", svcRef.Resolved.Name)
 	}
 }
 
@@ -935,10 +920,10 @@ namespace myNs:
 	}
 
 	nw := ns.Workers[0]
-	if nw.ResolvedWorker == nil {
+	if nw.Worker.Resolved == nil {
 		t.Error("namespace worker not resolved")
-	} else if nw.ResolvedWorker.Name != "myWorker" {
-		t.Errorf("namespace worker resolved to %q, expected 'myWorker'", nw.ResolvedWorker.Name)
+	} else if nw.Worker.Resolved.Name != "myWorker" {
+		t.Errorf("namespace worker resolved to %q, expected 'myWorker'", nw.Worker.Resolved.Name)
 	}
 }
 

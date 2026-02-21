@@ -42,11 +42,11 @@ func parseActivityCall(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.ActivityCall{
-		Pos:     pos,
-		Name:    name.Literal,
-		Args:    args.Literal,
-		Result:  result,
-		Options: options,
+		Pos:      pos,
+		Activity: ast.Ref[*ast.ActivityDef]{Pos: pos, Name: name.Literal},
+		Args:     args.Literal,
+		Result:   result,
+		Options:  options,
 	}, nil
 }
 
@@ -85,12 +85,12 @@ func parseWorkflowCall(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.WorkflowCall{
-		Pos:     pos,
-		Mode:    ast.CallChild,
-		Name:    name.Literal,
-		Args:    args.Literal,
-		Result:  result,
-		Options: options,
+		Pos:      pos,
+		Mode:     ast.CallChild,
+		Workflow: ast.Ref[*ast.WorkflowDef]{Pos: pos, Name: name.Literal},
+		Args:     args.Literal,
+		Result:   result,
+		Options:  options,
 	}, nil
 }
 
@@ -176,7 +176,7 @@ func parseSignalTarget(p *Parser, allowArrows bool) (*ast.SignalTarget, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &ast.SignalTarget{Name: name.Literal}
+	t := &ast.SignalTarget{Signal: ast.Ref[*ast.SignalDecl]{Name: name.Literal}}
 	if allowArrows && p.current.Type == token.ARROW {
 		p.advance()
 		params, err := parseParamBinding(p)
@@ -194,7 +194,7 @@ func parseUpdateTarget(p *Parser, allowArrows bool) (*ast.UpdateTarget, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &ast.UpdateTarget{Name: name.Literal}
+	t := &ast.UpdateTarget{Update: ast.Ref[*ast.UpdateDecl]{Name: name.Literal}}
 	if allowArrows && p.current.Type == token.ARROW {
 		p.advance()
 		params, err := parseParamBinding(p)
@@ -216,7 +216,7 @@ func parseActivityTarget(p *Parser, allowArrows bool) (*ast.ActivityTarget, erro
 	if err != nil {
 		return nil, err
 	}
-	t := &ast.ActivityTarget{Name: name.Literal, Args: args.Literal}
+	t := &ast.ActivityTarget{Activity: ast.Ref[*ast.ActivityDef]{Name: name.Literal}, Args: args.Literal}
 	if allowArrows && p.current.Type == token.ARROW {
 		p.advance()
 		result, err := p.expect(token.IDENT)
@@ -254,9 +254,9 @@ func parseWorkflowOrNexusTarget(p *Parser, allowArrows bool, pos ast.Pos) (ast.A
 		return nil, err
 	}
 	t := &ast.WorkflowTarget{
-		Name: name.Literal,
-		Mode: mode,
-		Args: args.Literal,
+		Workflow: ast.Ref[*ast.WorkflowDef]{Name: name.Literal},
+		Mode:     mode,
+		Args:     args.Literal,
 	}
 	if allowArrows && p.current.Type == token.ARROW {
 		p.advance()
@@ -573,8 +573,8 @@ func parseSetStmt(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.SetStmt{
-		Pos:  pos,
-		Name: name.Literal,
+		Pos:       pos,
+		Condition: ast.Ref[*ast.ConditionDecl]{Pos: pos, Name: name.Literal},
 	}, nil
 }
 
@@ -593,8 +593,8 @@ func parseUnsetStmt(p *Parser) (ast.Statement, error) {
 	}
 
 	return &ast.UnsetStmt{
-		Pos:  pos,
-		Name: name.Literal,
+		Pos:       pos,
+		Condition: ast.Ref[*ast.ConditionDecl]{Pos: pos, Name: name.Literal},
 	}, nil
 }
 

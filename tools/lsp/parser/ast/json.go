@@ -238,7 +238,7 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 	return json.Marshal(aj)
 }
 
-// WorkerRefJSON is the JSON representation of a worker reference.
+// WorkerRefJSON is the JSON representation of a Ref used in worker definitions.
 type WorkerRefJSON struct {
 	Name     string           `json:"name"`
 	Line     int              `json:"line"`
@@ -246,8 +246,8 @@ type WorkerRefJSON struct {
 	Resolved *resolvedRefJSON `json:"resolved,omitempty"`
 }
 
-// marshalWorkerRefs converts a slice of WorkerRef to JSON form.
-func marshalWorkerRefs(refs []WorkerRef) []WorkerRefJSON {
+// marshalWorkerRefs converts a slice of Ref[T] to JSON form.
+func marshalWorkerRefs[T interface{ comparable; Node }](refs []Ref[T]) []WorkerRefJSON {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -258,7 +258,8 @@ func marshalWorkerRefs(refs []WorkerRef) []WorkerRefJSON {
 			Line:   ref.Line,
 			Column: ref.Column,
 		}
-		if ref.Resolved != nil {
+		var zero T
+		if ref.Resolved != zero {
 			rj.Resolved = &resolvedRefJSON{
 				Name:   ref.Name,
 				Line:   ref.Resolved.NodeLine(),
@@ -330,13 +331,13 @@ func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
 	}
 	for _, w := range n.Workers {
 		wj := NamespaceWorkerJSON{
-			WorkerName: w.WorkerName,
+			WorkerName: w.Worker.Name,
 			Line:       w.Line,
 			Column:     w.Column,
 			Options:    marshalOptionsBlock(w.Options),
 		}
-		if w.ResolvedWorker != nil {
-			wj.ResolvedWorker = &resolvedRefJSON{Name: w.ResolvedWorker.Name, Line: w.ResolvedWorker.Line, Column: w.ResolvedWorker.Column}
+		if w.Worker.Resolved != nil {
+			wj.ResolvedWorker = &resolvedRefJSON{Name: w.Worker.Resolved.Name, Line: w.Worker.Resolved.Line, Column: w.Worker.Resolved.Column}
 		}
 		nj.Workers = append(nj.Workers, wj)
 	}
@@ -389,7 +390,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Type:    "activityCall",
 			Line:    s.Line,
 			Column:  s.Column,
-			Name:    s.Name,
+			Name:    s.Activity.Name,
 			Args:    s.Args,
 			Result:  s.Result,
 			Options: marshalOptionsBlock(s.Options),
@@ -400,7 +401,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Line:    s.Line,
 			Column:  s.Column,
 			Mode:    workflowCallModeString(s.Mode),
-			Name:    s.Name,
+			Name:    s.Workflow.Name,
 			Args:    s.Args,
 			Result:  s.Result,
 			Options: marshalOptionsBlock(s.Options),
@@ -583,14 +584,14 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Type:   "set",
 			Line:   s.Line,
 			Column: s.Column,
-			Name:   s.Name,
+			Name:   s.Condition.Name,
 		})
 	case *UnsetStmt:
 		return json.Marshal(unsetStmtJSON{
 			Type:   "unset",
 			Line:   s.Line,
 			Column: s.Column,
-			Name:   s.Name,
+			Name:   s.Condition.Name,
 		})
 	default:
 		return json.Marshal(stmt)
@@ -698,17 +699,17 @@ func marshalAsyncTargetFields(target AsyncTarget) asyncTargetFieldsJSON {
 	case *TimerTarget:
 		f.Timer = t.Duration
 	case *SignalTarget:
-		f.Signal = t.Name
+		f.Signal = t.Signal.Name
 		f.SignalParams = t.Params
 	case *UpdateTarget:
-		f.Update = t.Name
+		f.Update = t.Update.Name
 		f.UpdateParams = t.Params
 	case *ActivityTarget:
-		f.Activity = t.Name
+		f.Activity = t.Activity.Name
 		f.ActivityArgs = t.Args
 		f.ActivityResult = t.Result
 	case *WorkflowTarget:
-		f.Workflow = t.Name
+		f.Workflow = t.Workflow.Name
 		f.WorkflowMode = workflowCallModeString(t.Mode)
 		f.WorkflowArgs = t.Args
 		f.WorkflowResult = t.Result
@@ -907,7 +908,7 @@ func (n *NexusServiceDef) MarshalJSON() ([]byte, error) {
 			Line:         op.Line,
 			Column:       op.Column,
 			Name:         op.Name,
-			WorkflowName: op.WorkflowName,
+			WorkflowName: op.Workflow.Name,
 			Params:       op.Params,
 			ReturnType:   op.ReturnType,
 		}

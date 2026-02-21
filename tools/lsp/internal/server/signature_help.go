@@ -24,12 +24,12 @@ func signatureHelpHandler(store *DocumentStore) protocol.TextDocumentSignatureHe
 
 		switch n := node.(type) {
 		case *ast.ActivityCall:
-			if n.Resolved != nil {
-				return buildSignatureHelp(n.Resolved.Name, "activity", n.Resolved.Params, n.Resolved.ReturnType), nil
+			if n.Activity.Resolved != nil {
+				return buildSignatureHelp(n.Activity.Resolved.Name, "activity", n.Activity.Resolved.Params, n.Activity.Resolved.ReturnType), nil
 			}
 		case *ast.WorkflowCall:
-			if n.Resolved != nil {
-				return buildSignatureHelp(n.Resolved.Name, "workflow", n.Resolved.Params, n.Resolved.ReturnType), nil
+			if n.Workflow.Resolved != nil {
+				return buildSignatureHelp(n.Workflow.Resolved.Name, "workflow", n.Workflow.Resolved.Params, n.Workflow.Resolved.ReturnType), nil
 			}
 		}
 

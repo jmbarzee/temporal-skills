@@ -169,7 +169,7 @@ func namespaceSymbol(ns *ast.NamespaceDef) protocol.DocumentSymbol {
 	var children []protocol.DocumentSymbol
 	for _, w := range ns.Workers {
 		children = append(children, protocol.DocumentSymbol{
-			Name:           w.WorkerName,
+			Name:           w.Worker.Name,
 			Kind:           protocol.SymbolKindModule,
 			Range:          lineRange(w.Line, w.Line),
 			SelectionRange: posToRange(w.Line, w.Column),

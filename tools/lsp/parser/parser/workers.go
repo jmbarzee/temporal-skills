@@ -38,18 +38,18 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 			continue
 
 		case token.WORKFLOW:
-			ref, err := p.parseWorkerRef()
+			pos, name, err := p.parseWorkerRef()
 			if err != nil {
 				return nil, err
 			}
-			worker.Workflows = append(worker.Workflows, ref)
+			worker.Workflows = append(worker.Workflows, ast.Ref[*ast.WorkflowDef]{Pos: pos, Name: name})
 
 		case token.ACTIVITY:
-			ref, err := p.parseWorkerRef()
+			pos, name, err := p.parseWorkerRef()
 			if err != nil {
 				return nil, err
 			}
-			worker.Activities = append(worker.Activities, ref)
+			worker.Activities = append(worker.Activities, ast.Ref[*ast.ActivityDef]{Pos: pos, Name: name})
 
 		case token.NEXUS:
 			refPos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
@@ -63,7 +63,7 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 			if err != nil {
 				return nil, err
 			}
-			worker.Services = append(worker.Services, ast.WorkerRef{
+			worker.Services = append(worker.Services, ast.Ref[*ast.NexusServiceDef]{
 				Pos:  refPos,
 				Name: svcName.Literal,
 			})
@@ -84,16 +84,16 @@ func parseWorkerDef(p *Parser) (ast.Definition, error) {
 }
 
 // parseWorkerRef consumes the current keyword token, expects an IDENT name,
-// and returns a WorkerRef. Consumes a trailing NEWLINE if present.
-func (p *Parser) parseWorkerRef() (ast.WorkerRef, error) {
+// and returns the position and name. Consumes a trailing NEWLINE if present.
+func (p *Parser) parseWorkerRef() (ast.Pos, string, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume keyword (WORKFLOW, ACTIVITY, etc.)
 	name, err := p.expect(token.IDENT)
 	if err != nil {
-		return ast.WorkerRef{}, err
+		return ast.Pos{}, "", err
 	}
 	if p.current.Type == token.NEWLINE {
 		p.advance()
 	}
-	return ast.WorkerRef{Pos: pos, Name: name.Literal}, nil
+	return pos, name.Literal, nil
 }

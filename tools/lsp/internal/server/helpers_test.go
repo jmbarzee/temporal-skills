@@ -66,8 +66,8 @@ func TestFindNodeInStmts(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ActivityCall, got %T", node)
 	}
-	if call.Name != "Foo" {
-		t.Errorf("expected name 'Foo', got %q", call.Name)
+	if call.Activity.Name != "Foo" {
+		t.Errorf("expected name 'Foo', got %q", call.Activity.Name)
 	}
 
 	// Line 3 = "activity Bar()"
@@ -79,8 +79,8 @@ func TestFindNodeInStmts(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ActivityCall, got %T", node)
 	}
-	if call.Name != "Bar" {
-		t.Errorf("expected name 'Bar', got %q", call.Name)
+	if call.Activity.Name != "Bar" {
+		t.Errorf("expected name 'Bar', got %q", call.Activity.Name)
 	}
 }
 
@@ -118,8 +118,8 @@ func TestFindCallInStatements(t *testing.T) {
 	if call == nil {
 		t.Fatal("expected to find activity call 'Foo'")
 	}
-	if call.Name != "Foo" {
-		t.Errorf("expected 'Foo', got %q", call.Name)
+	if call.Activity.Name != "Foo" {
+		t.Errorf("expected 'Foo', got %q", call.Activity.Name)
 	}
 
 	// Should find Bar at top level.

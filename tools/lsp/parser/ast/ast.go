@@ -27,6 +27,13 @@ type Pos struct {
 func (p Pos) NodeLine() int   { return p.Line }
 func (p Pos) NodeColumn() int { return p.Column }
 
+// Ref is a named reference to another AST node, resolved after parsing.
+type Ref[T any] struct {
+	Pos
+	Name     string
+	Resolved T
+}
+
 // File represents a parsed .twf file.
 type File struct {
 	Definitions []Definition
@@ -60,19 +67,12 @@ type ActivityDef struct {
 
 func (*ActivityDef) defNode() {}
 
-// WorkerRef is a reference to a workflow or activity name inside a worker block.
-type WorkerRef struct {
-	Pos
-	Name     string
-	Resolved Definition // *WorkflowDef, *ActivityDef, or *NexusServiceDef
-}
-
 type WorkerDef struct {
 	Pos
 	Name       string
-	Workflows  []WorkerRef
-	Activities []WorkerRef
-	Services   []WorkerRef // nexus service references
+	Workflows  []Ref[*WorkflowDef]
+	Activities []Ref[*ActivityDef]
+	Services   []Ref[*NexusServiceDef] // nexus service references
 }
 
 func (*WorkerDef) defNode() {}
@@ -80,9 +80,8 @@ func (*WorkerDef) defNode() {}
 // NamespaceWorker is a worker instantiation inside a namespace block.
 type NamespaceWorker struct {
 	Pos
-	WorkerName     string
-	Options        *OptionsBlock
-	ResolvedWorker *WorkerDef
+	Worker  Ref[*WorkerDef]
+	Options *OptionsBlock
 }
 
 // NamespaceEndpoint is a nexus endpoint instantiation inside a namespace block.
@@ -141,11 +140,10 @@ func (*UpdateDecl) stmtNode() {}
 
 type ActivityCall struct {
 	Pos
-	Name     string
+	Activity Ref[*ActivityDef]
 	Args     string
 	Result   string // optional
 	Options  *OptionsBlock
-	Resolved *ActivityDef
 }
 
 func (*ActivityCall) stmtNode() {}
@@ -161,11 +159,10 @@ const (
 type WorkflowCall struct {
 	Pos
 	Mode     WorkflowCallMode
-	Name     string
+	Workflow Ref[*WorkflowDef]
 	Args     string
 	Result   string // optional
 	Options  *OptionsBlock
-	Resolved *WorkflowDef
 }
 
 func (*WorkflowCall) stmtNode() {}
@@ -209,36 +206,32 @@ type TimerTarget struct {
 func (*TimerTarget) asyncTarget() {}
 
 type SignalTarget struct {
-	Name     string
-	Params   string
-	Resolved *SignalDecl
+	Signal Ref[*SignalDecl]
+	Params string
 }
 
 func (*SignalTarget) asyncTarget() {}
 
 type UpdateTarget struct {
-	Name     string
-	Params   string
-	Resolved *UpdateDecl
+	Update Ref[*UpdateDecl]
+	Params string
 }
 
 func (*UpdateTarget) asyncTarget() {}
 
 type ActivityTarget struct {
-	Name     string
+	Activity Ref[*ActivityDef]
 	Args     string
 	Result   string
-	Resolved *ActivityDef
 }
 
 func (*ActivityTarget) asyncTarget() {}
 
 type WorkflowTarget struct {
-	Name     string
+	Workflow Ref[*WorkflowDef]
 	Mode     WorkflowCallMode
 	Args     string
 	Result   string
-	Resolved *WorkflowDef
 }
 
 func (*WorkflowTarget) asyncTarget() {}
@@ -415,7 +408,7 @@ func (*PromiseStmt) stmtNode() {}
 // SetStmt represents: set conditionName
 type SetStmt struct {
 	Pos
-	Name string
+	Condition Ref[*ConditionDecl]
 }
 
 func (*SetStmt) stmtNode() {}
@@ -423,7 +416,7 @@ func (*SetStmt) stmtNode() {}
 // UnsetStmt represents: unset conditionName
 type UnsetStmt struct {
 	Pos
-	Name string
+	Condition Ref[*ConditionDecl]
 }
 
 func (*UnsetStmt) stmtNode() {}
@@ -445,7 +438,7 @@ type NexusOperation struct {
 	Pos
 	OpType       NexusOperationType
 	Name         string
-	WorkflowName string      // async only: backing workflow
+	Workflow      Ref[*WorkflowDef] // async only: backing workflow
 	Params       string      // sync only
 	ReturnType   string      // sync only
 	Body         []Statement // sync only

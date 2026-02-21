@@ -72,7 +72,7 @@ func TestWalkStatementsAwaitOne(t *testing.T) {
 				},
 				{
 					Pos:    Pos{Line: 20},
-					Target: &SignalTarget{Name: "s"},
+					Target: &SignalTarget{Signal: Ref[*SignalDecl]{Name: "s"}},
 					Body:   []Statement{&RawStmt{Pos: Pos{Line: 21}}},
 				},
 			},

@@ -62,33 +62,26 @@ func nameOfNode(node ast.Node) (name, kind string) {
 		return n.EndpointName, "nexus_endpoint"
 	case *ast.WorkerDef:
 		return n.Name, "worker"
-	case *ast.WorkerRef:
-		// WorkerRef can resolve to workflow, activity, or nexus service.
-		if n.Resolved != nil {
-			switch d := n.Resolved.(type) {
-			case *ast.WorkflowDef:
-				return d.Name, "workflow"
-			case *ast.ActivityDef:
-				return d.Name, "activity"
-			case *ast.NexusServiceDef:
-				return d.Name, "nexus_service"
-			}
-		}
-		return n.Name, "workflow" // best-effort fallback
+	case *ast.Ref[*ast.WorkflowDef]:
+		return n.Name, "workflow"
+	case *ast.Ref[*ast.ActivityDef]:
+		return n.Name, "activity"
+	case *ast.Ref[*ast.NexusServiceDef]:
+		return n.Name, "nexus_service"
 	case *ast.NamespaceWorker:
-		return n.WorkerName, "worker"
+		return n.Worker.Name, "worker"
 	case *ast.NamespaceDef:
 		return n.Name, "namespace"
 	case *ast.ActivityCall:
-		if n.Resolved != nil {
-			return n.Resolved.Name, "activity"
+		if n.Activity.Resolved != nil {
+			return n.Activity.Resolved.Name, "activity"
 		}
-		return n.Name, "activity"
+		return n.Activity.Name, "activity"
 	case *ast.WorkflowCall:
-		if n.Resolved != nil {
-			return n.Resolved.Name, "workflow"
+		if n.Workflow.Resolved != nil {
+			return n.Workflow.Resolved.Name, "workflow"
 		}
-		return n.Name, "workflow"
+		return n.Workflow.Name, "workflow"
 	case *ast.NexusCall:
 		if n.ResolvedService != nil {
 			return n.ResolvedService.Name, "nexus_service"
@@ -195,7 +188,7 @@ func collectReferences(file *ast.File, name, kind string, includeDecl bool) []as
 			// Check worker references.
 			if kind == "worker" {
 				for i := range d.Workers {
-					if d.Workers[i].WorkerName == name {
+					if d.Workers[i].Worker.Name == name {
 						refs = append(refs, &d.Workers[i])
 					}
 				}
@@ -217,11 +210,11 @@ func collectRefsInStmts(stmts []ast.Statement, name, kind string, refs []ast.Nod
 	ast.WalkStatements(stmts, func(s ast.Statement) bool {
 		switch n := s.(type) {
 		case *ast.ActivityCall:
-			if kind == "activity" && n.Name == name {
+			if kind == "activity" && n.Activity.Name == name {
 				refs = append(refs, n)
 			}
 		case *ast.WorkflowCall:
-			if kind == "workflow" && n.Name == name {
+			if kind == "workflow" && n.Workflow.Name == name {
 				refs = append(refs, n)
 			}
 		case *ast.NexusCall:
@@ -253,13 +246,13 @@ func collectRefsInStmts(stmts []ast.Statement, name, kind string, refs []ast.Nod
 func nameOfAsyncTarget(target ast.AsyncTarget) (name, kind string) {
 	switch t := target.(type) {
 	case *ast.SignalTarget:
-		return t.Name, "signal"
+		return t.Signal.Name, "signal"
 	case *ast.UpdateTarget:
-		return t.Name, "update"
+		return t.Update.Name, "update"
 	case *ast.ActivityTarget:
-		return t.Name, "activity"
+		return t.Activity.Name, "activity"
 	case *ast.WorkflowTarget:
-		return t.Name, "workflow"
+		return t.Workflow.Name, "workflow"
 	case *ast.NexusTarget:
 		return t.Service, "nexus_service"
 	}
@@ -270,13 +263,13 @@ func nameOfAsyncTarget(target ast.AsyncTarget) (name, kind string) {
 func matchesAsyncTarget(target ast.AsyncTarget, name, kind string) bool {
 	switch t := target.(type) {
 	case *ast.SignalTarget:
-		return kind == "signal" && t.Name == name
+		return kind == "signal" && t.Signal.Name == name
 	case *ast.UpdateTarget:
-		return kind == "update" && t.Name == name
+		return kind == "update" && t.Update.Name == name
 	case *ast.ActivityTarget:
-		return kind == "activity" && t.Name == name
+		return kind == "activity" && t.Activity.Name == name
 	case *ast.WorkflowTarget:
-		return kind == "workflow" && t.Name == name
+		return kind == "workflow" && t.Workflow.Name == name
 	case *ast.NexusTarget:
 		return (kind == "nexus_service" && t.Service == name) ||
 			(kind == "nexus_endpoint" && t.Endpoint == name)

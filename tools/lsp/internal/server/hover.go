@@ -177,19 +177,19 @@ func signatureFor(node ast.Node) string {
 		}
 		return sig
 	case *ast.ActivityCall:
-		if n.Resolved != nil {
-			return activitySig(n.Resolved)
+		if n.Activity.Resolved != nil {
+			return activitySig(n.Activity.Resolved)
 		}
-		return fmt.Sprintf("activity %s(%s)", n.Name, n.Args)
+		return fmt.Sprintf("activity %s(%s)", n.Activity.Name, n.Args)
 	case *ast.WorkflowCall:
-		if n.Resolved != nil {
-			return workflowSig(n.Resolved)
+		if n.Workflow.Resolved != nil {
+			return workflowSig(n.Workflow.Resolved)
 		}
 		prefix := "workflow"
 		if n.Mode == ast.CallDetach {
 			prefix = "detach workflow"
 		}
-		return fmt.Sprintf("%s %s(%s)", prefix, n.Name, n.Args)
+		return fmt.Sprintf("%s %s(%s)", prefix, n.Workflow.Name, n.Args)
 	case *ast.WorkerDef:
 		sig := fmt.Sprintf("worker %s", n.Name)
 		if len(n.Workflows) > 0 || len(n.Activities) > 0 || len(n.Services) > 0 {
@@ -206,26 +206,36 @@ func signatureFor(node ast.Node) string {
 			sig += "\n" + strings.Join(parts, "\n")
 		}
 		return sig
-	case *ast.WorkerRef:
+	case *ast.Ref[*ast.WorkflowDef]:
+		if n.Resolved != nil {
+			return signatureFor(n.Resolved)
+		}
+		return fmt.Sprintf("ref %s (unresolved)", n.Name)
+	case *ast.Ref[*ast.ActivityDef]:
+		if n.Resolved != nil {
+			return signatureFor(n.Resolved)
+		}
+		return fmt.Sprintf("ref %s (unresolved)", n.Name)
+	case *ast.Ref[*ast.NexusServiceDef]:
 		if n.Resolved != nil {
 			return signatureFor(n.Resolved)
 		}
 		return fmt.Sprintf("ref %s (unresolved)", n.Name)
 	case *ast.NamespaceWorker:
-		sig := fmt.Sprintf("worker %s", n.WorkerName)
+		sig := fmt.Sprintf("worker %s", n.Worker.Name)
 		tq := extractWorkerTaskQueue(n)
 		if tq != "" {
 			sig += fmt.Sprintf("\n  task_queue: %s", tq)
 		}
-		if n.ResolvedWorker != nil {
+		if n.Worker.Resolved != nil {
 			var parts []string
-			for _, ref := range n.ResolvedWorker.Workflows {
+			for _, ref := range n.Worker.Resolved.Workflows {
 				parts = append(parts, fmt.Sprintf("  workflow %s", ref.Name))
 			}
-			for _, ref := range n.ResolvedWorker.Activities {
+			for _, ref := range n.Worker.Resolved.Activities {
 				parts = append(parts, fmt.Sprintf("  activity %s", ref.Name))
 			}
-			for _, ref := range n.ResolvedWorker.Services {
+			for _, ref := range n.Worker.Resolved.Services {
 				parts = append(parts, fmt.Sprintf("  nexus service %s", ref.Name))
 			}
 			if len(parts) > 0 {
@@ -239,9 +249,9 @@ func signatureFor(node ast.Node) string {
 		for _, w := range n.Workers {
 			tq := extractWorkerTaskQueue(&w)
 			if tq != "" {
-				parts = append(parts, fmt.Sprintf("  worker %s (task_queue: %s)", w.WorkerName, tq))
+				parts = append(parts, fmt.Sprintf("  worker %s (task_queue: %s)", w.Worker.Name, tq))
 			} else {
-				parts = append(parts, fmt.Sprintf("  worker %s", w.WorkerName))
+				parts = append(parts, fmt.Sprintf("  worker %s", w.Worker.Name))
 			}
 		}
 		for _, ep := range n.Endpoints {
@@ -280,7 +290,7 @@ func signatureFor(node ast.Node) string {
 		var ops []string
 		for _, op := range n.Operations {
 			if op.OpType == ast.NexusOpAsync {
-				ops = append(ops, fmt.Sprintf("  async %s workflow %s", op.Name, op.WorkflowName))
+				ops = append(ops, fmt.Sprintf("  async %s workflow %s", op.Name, op.Workflow.Name))
 			} else {
 				ops = append(ops, fmt.Sprintf("  sync %s(%s) -> (%s)", op.Name, op.Params, op.ReturnType))
 			}
@@ -299,28 +309,28 @@ func signatureFor(node ast.Node) string {
 			return fmt.Sprintf("await timer(%s)", t.Duration)
 		case *ast.SignalTarget:
 			if t.Params != "" {
-				return fmt.Sprintf("await signal %s -> %s", t.Name, t.Params)
+				return fmt.Sprintf("await signal %s -> %s", t.Signal.Name, t.Params)
 			}
-			return fmt.Sprintf("await signal %s", t.Name)
+			return fmt.Sprintf("await signal %s", t.Signal.Name)
 		case *ast.UpdateTarget:
 			if t.Params != "" {
-				return fmt.Sprintf("await update %s -> %s", t.Name, t.Params)
+				return fmt.Sprintf("await update %s -> %s", t.Update.Name, t.Params)
 			}
-			return fmt.Sprintf("await update %s", t.Name)
+			return fmt.Sprintf("await update %s", t.Update.Name)
 		case *ast.ActivityTarget:
 			if t.Result != "" {
-				return fmt.Sprintf("await activity %s(%s) -> %s", t.Name, t.Args, t.Result)
+				return fmt.Sprintf("await activity %s(%s) -> %s", t.Activity.Name, t.Args, t.Result)
 			}
-			return fmt.Sprintf("await activity %s(%s)", t.Name, t.Args)
+			return fmt.Sprintf("await activity %s(%s)", t.Activity.Name, t.Args)
 		case *ast.WorkflowTarget:
 			prefix := "await workflow"
 			if t.Mode == ast.CallDetach {
 				prefix = "await detach workflow"
 			}
 			if t.Result != "" {
-				return fmt.Sprintf("%s %s(%s) -> %s", prefix, t.Name, t.Args, t.Result)
+				return fmt.Sprintf("%s %s(%s) -> %s", prefix, t.Workflow.Name, t.Args, t.Result)
 			}
-			return fmt.Sprintf("%s %s(%s)", prefix, t.Name, t.Args)
+			return fmt.Sprintf("%s %s(%s)", prefix, t.Workflow.Name, t.Args)
 		case *ast.NexusTarget:
 			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint, t.Service, t.Operation, t.Args)
 			if t.Result != "" {

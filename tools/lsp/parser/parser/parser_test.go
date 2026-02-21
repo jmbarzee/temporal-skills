@@ -222,8 +222,8 @@ func TestActivityCallWithResult(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ActivityCall, got %T", wf.Body[0])
 	}
-	if call.Name != "GetOrder" {
-		t.Errorf("expected name 'GetOrder', got %q", call.Name)
+	if call.Activity.Name != "GetOrder" {
+		t.Errorf("expected name 'GetOrder', got %q", call.Activity.Name)
 	}
 	if call.Args != "orderId" {
 		t.Errorf("expected args 'orderId', got %q", call.Args)
@@ -249,8 +249,8 @@ func TestWorkflowCallChild(t *testing.T) {
 	if call.Mode != ast.CallChild {
 		t.Errorf("expected CallChild, got %d", call.Mode)
 	}
-	if call.Name != "ShipOrder" {
-		t.Errorf("expected name 'ShipOrder', got %q", call.Name)
+	if call.Workflow.Name != "ShipOrder" {
+		t.Errorf("expected name 'ShipOrder', got %q", call.Workflow.Name)
 	}
 	if call.Result != "shipResult" {
 		t.Errorf("expected result 'shipResult', got %q", call.Result)
@@ -277,8 +277,8 @@ func TestPromiseActivity(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected ActivityTarget, got %T", promise.Target)
 	}
-	if at.Name != "ProcessAsync" {
-		t.Errorf("expected activity 'ProcessAsync', got %q", at.Name)
+	if at.Activity.Name != "ProcessAsync" {
+		t.Errorf("expected activity 'ProcessAsync', got %q", at.Activity.Name)
 	}
 	if at.Args != "data" {
 		t.Errorf("expected args 'data', got %q", at.Args)
@@ -359,8 +359,8 @@ workflow ProcessAsync(data: Data) -> (Result):
 	if !ok {
 		t.Fatalf("expected WorkflowTarget, got %T", promise.Target)
 	}
-	if wt.Name != "ProcessAsync" {
-		t.Errorf("expected workflow 'ProcessAsync', got %q", wt.Name)
+	if wt.Workflow.Name != "ProcessAsync" {
+		t.Errorf("expected workflow 'ProcessAsync', got %q", wt.Workflow.Name)
 	}
 }
 
@@ -408,8 +408,8 @@ func TestPromiseSignal(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected SignalTarget, got %T", promise.Target)
 	}
-	if st.Name != "Approved" {
-		t.Errorf("expected signal 'Approved', got %q", st.Name)
+	if st.Signal.Name != "Approved" {
+		t.Errorf("expected signal 'Approved', got %q", st.Signal.Name)
 	}
 }
 
@@ -465,16 +465,16 @@ func TestSetUnsetStatements(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected SetStmt, got %T", wf.Body[0])
 	}
-	if setStmt.Name != "ready" {
-		t.Errorf("expected name 'ready', got %q", setStmt.Name)
+	if setStmt.Condition.Name != "ready" {
+		t.Errorf("expected name 'ready', got %q", setStmt.Condition.Name)
 	}
 
 	unsetStmt, ok := wf.Body[1].(*ast.UnsetStmt)
 	if !ok {
 		t.Fatalf("expected UnsetStmt, got %T", wf.Body[1])
 	}
-	if unsetStmt.Name != "ready" {
-		t.Errorf("expected name 'ready', got %q", unsetStmt.Name)
+	if unsetStmt.Condition.Name != "ready" {
+		t.Errorf("expected name 'ready', got %q", unsetStmt.Condition.Name)
 	}
 }
 
@@ -1558,8 +1558,8 @@ namespace orders:
 	if len(ns.Workers) != 1 {
 		t.Fatalf("expected 1 worker instantiation, got %d", len(ns.Workers))
 	}
-	if ns.Workers[0].WorkerName != "orderTypes" {
-		t.Errorf("expected worker ref 'orderTypes', got %q", ns.Workers[0].WorkerName)
+	if ns.Workers[0].Worker.Name != "orderTypes" {
+		t.Errorf("expected worker ref 'orderTypes', got %q", ns.Workers[0].Worker.Name)
 	}
 	if ns.Workers[0].Options == nil {
 		t.Fatal("expected options on worker instantiation")
@@ -1598,11 +1598,11 @@ namespace orders:
 	if len(ns.Workers) != 2 {
 		t.Fatalf("expected 2 worker instantiations, got %d", len(ns.Workers))
 	}
-	if ns.Workers[0].WorkerName != "orderTypes" {
-		t.Errorf("expected first worker 'orderTypes', got %q", ns.Workers[0].WorkerName)
+	if ns.Workers[0].Worker.Name != "orderTypes" {
+		t.Errorf("expected first worker 'orderTypes', got %q", ns.Workers[0].Worker.Name)
 	}
-	if ns.Workers[1].WorkerName != "paymentTypes" {
-		t.Errorf("expected second worker 'paymentTypes', got %q", ns.Workers[1].WorkerName)
+	if ns.Workers[1].Worker.Name != "paymentTypes" {
+		t.Errorf("expected second worker 'paymentTypes', got %q", ns.Workers[1].Worker.Name)
 	}
 }
 
@@ -1703,8 +1703,8 @@ activity FetchStatus(orderId: string) -> (Status):
 	if asyncOp.Name != "PlaceOrder" {
 		t.Errorf("expected name 'PlaceOrder', got %q", asyncOp.Name)
 	}
-	if asyncOp.WorkflowName != "ProcessOrder" {
-		t.Errorf("expected workflow 'ProcessOrder', got %q", asyncOp.WorkflowName)
+	if asyncOp.Workflow.Name != "ProcessOrder" {
+		t.Errorf("expected workflow 'ProcessOrder', got %q", asyncOp.Workflow.Name)
 	}
 
 	syncOp := svc.Operations[1]

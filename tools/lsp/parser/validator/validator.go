@@ -171,11 +171,11 @@ func (v *validationCtx) checkTaskQueueRequirements() {
 			tq := extractTaskQueue(nw.Options)
 			if tq == "" {
 				v.errs = append(v.errs, &Error{
-					Msg:    fmt.Sprintf("worker %s in namespace %s missing required task_queue option", nw.WorkerName, ns.Name),
+					Msg:    fmt.Sprintf("worker %s in namespace %s missing required task_queue option", nw.Worker.Name, ns.Name),
 					Line:   nw.Line,
 					Column: nw.Column,
 					Kind:   ErrMissingTaskQueue,
-					Name:   nw.WorkerName,
+					Name:   nw.Worker.Name,
 				})
 			}
 		}
@@ -206,8 +206,8 @@ func (v *validationCtx) checkCoverage() {
 
 	for _, ns := range v.namespaces {
 		for _, nw := range ns.Workers {
-			instantiatedWorkers[nw.WorkerName] = true
-			if w, ok := v.workers[nw.WorkerName]; ok {
+			instantiatedWorkers[nw.Worker.Name] = true
+			if w, ok := v.workers[nw.Worker.Name]; ok {
 				for _, ref := range w.Workflows {
 					coveredWorkflows[ref.Name] = true
 				}
@@ -240,7 +240,7 @@ func (v *validationCtx) checkTaskQueueCoherence() {
 			if tq == "" {
 				continue
 			}
-			w, ok := v.workers[nw.WorkerName]
+			w, ok := v.workers[nw.Worker.Name]
 			if !ok {
 				continue
 			}
@@ -253,7 +253,7 @@ func (v *validationCtx) checkTaskQueueCoherence() {
 				actSet[ref.Name] = true
 			}
 			queueWorkers[tq] = append(queueWorkers[tq], queueInfo{
-				workerName: nw.WorkerName,
+				workerName: nw.Worker.Name,
 				workflows:  wfSet,
 				activities: actSet,
 			})
@@ -316,9 +316,9 @@ func (v *validationCtx) walkStatements(stmts []ast.Statement, callingWorkflow st
 	ast.WalkStatements(stmts, func(s ast.Statement) bool {
 		switch n := s.(type) {
 		case *ast.ActivityCall:
-			v.checkCallRouting("activity", n.Name, n.Options, callingWorkflow, n.Line, n.Column)
+			v.checkCallRouting("activity", n.Activity.Name, n.Options, callingWorkflow, n.Line, n.Column)
 		case *ast.WorkflowCall:
-			v.checkCallRouting("workflow", n.Name, n.Options, callingWorkflow, n.Line, n.Column)
+			v.checkCallRouting("workflow", n.Workflow.Name, n.Options, callingWorkflow, n.Line, n.Column)
 		case *ast.NexusCall:
 			v.checkEndpointServiceLinkage(n.Endpoint, n.Service, n.Line, n.Column)
 		case *ast.AwaitStmt:
@@ -394,7 +394,7 @@ func (v *validationCtx) typeOnQueue(kind, name, taskQueue string) bool {
 			if nwTQ != taskQueue {
 				continue
 			}
-			w, ok := v.workers[nw.WorkerName]
+			w, ok := v.workers[nw.Worker.Name]
 			if !ok {
 				continue
 			}
@@ -424,7 +424,7 @@ func (v *validationCtx) taskQueuesForType(kind, name string) []string {
 	var queues []string
 	for _, ns := range v.namespaces {
 		for _, nw := range ns.Workers {
-			w, ok := v.workers[nw.WorkerName]
+			w, ok := v.workers[nw.Worker.Name]
 			if !ok {
 				continue
 			}
@@ -475,7 +475,7 @@ func (v *validationCtx) checkEndpointServiceLinkage(endpoint, service string, li
 			if nwTQ != tq {
 				continue
 			}
-			w, ok := v.workers[nw.WorkerName]
+			w, ok := v.workers[nw.Worker.Name]
 			if !ok {
 				continue
 			}

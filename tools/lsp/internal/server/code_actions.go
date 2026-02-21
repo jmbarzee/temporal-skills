@@ -183,7 +183,7 @@ func findCallByName(file *ast.File, name string) *ast.ActivityCall {
 func findCallInStatements(stmts []ast.Statement, name string) *ast.ActivityCall {
 	var found *ast.ActivityCall
 	ast.WalkStatements(stmts, func(s ast.Statement) bool {
-		if call, ok := s.(*ast.ActivityCall); ok && call.Name == name {
+		if call, ok := s.(*ast.ActivityCall); ok && call.Activity.Name == name {
 			found = call
 			return false
 		}

@@ -175,13 +175,15 @@ func Resolve(file *ast.File) []*ResolveError {
 		for _, op := range svc.Operations {
 			if op.OpType == ast.NexusOpAsync {
 				// Async operations reference a workflow by name.
-				if _, ok := workflows[op.WorkflowName]; !ok {
+				if wf, ok := workflows[op.Workflow.Name]; ok {
+					op.Workflow.Resolved = wf
+				} else {
 					errs = append(errs, &ResolveError{
-						Msg:    fmt.Sprintf("nexus service %s: async operation %s references undefined workflow: %s", svc.Name, op.Name, op.WorkflowName),
+						Msg:    fmt.Sprintf("nexus service %s: async operation %s references undefined workflow: %s", svc.Name, op.Name, op.Workflow.Name),
 						Line:   op.Line,
 						Column: op.Column,
 						Kind:   ErrNexusAsyncUndefinedWorkflow,
-						Name:   op.WorkflowName,
+						Name:   op.Workflow.Name,
 					})
 				}
 			} else if op.OpType == ast.NexusOpSync {
@@ -213,15 +215,15 @@ func Resolve(file *ast.File) []*ResolveError {
 	for _, ns := range namespaces {
 		for i := range ns.Workers {
 			nw := &ns.Workers[i]
-			if def, ok := workers[nw.WorkerName]; ok {
-				nw.ResolvedWorker = def
+			if def, ok := workers[nw.Worker.Name]; ok {
+				nw.Worker.Resolved = def
 			} else {
 				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("namespace %s references undefined worker: %s", ns.Name, nw.WorkerName),
+					Msg:    fmt.Sprintf("namespace %s references undefined worker: %s", ns.Name, nw.Worker.Name),
 					Line:   nw.Line,
 					Column: nw.Column,
 					Kind:   ErrNamespaceUndefinedWorker,
-					Name:   nw.WorkerName,
+					Name:   nw.Worker.Name,
 				})
 			}
 		}
@@ -252,30 +254,10 @@ func (c *resolveCtx) resolveStatements(stmts []ast.Statement) {
 func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 	switch s := stmt.(type) {
 	case *ast.ActivityCall:
-		if def, ok := c.activities[s.Name]; ok {
-			s.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined activity: %s", s.Name),
-				Line:   s.Line,
-				Column: s.Column,
-				Kind:   ErrUndefinedActivity,
-				Name:   s.Name,
-			})
-		}
+		resolveRef(&s.Activity, c.activities, "activity", ErrUndefinedActivity, &c.errs)
 
 	case *ast.WorkflowCall:
-		if def, ok := c.workflows[s.Name]; ok {
-			s.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined workflow: %s", s.Name),
-				Line:   s.Line,
-				Column: s.Column,
-				Kind:   ErrUndefinedWorkflow,
-				Name:   s.Name,
-			})
-		}
+		resolveRef(&s.Workflow, c.workflows, "workflow", ErrUndefinedWorkflow, &c.errs)
 
 	case *ast.NexusCall:
 		res := c.resolveNexusRef(s.Endpoint, s.Service, s.Operation, s.Line, s.Column)
@@ -316,26 +298,10 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 		c.resolveAsyncTarget(s.Target, s.Line, s.Column)
 
 	case *ast.SetStmt:
-		if _, ok := c.conditions[s.Name]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
-				Line:   s.Line,
-				Column: s.Column,
-				Kind:   ErrUndefinedCondition,
-				Name:   s.Name,
-			})
-		}
+		resolveRef(&s.Condition, c.conditions, "condition", ErrUndefinedCondition, &c.errs)
 
 	case *ast.UnsetStmt:
-		if _, ok := c.conditions[s.Name]; !ok {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined condition: %s", s.Name),
-				Line:   s.Line,
-				Column: s.Column,
-				Kind:   ErrUndefinedCondition,
-				Name:   s.Name,
-			})
-		}
+		resolveRef(&s.Condition, c.conditions, "condition", ErrUndefinedCondition, &c.errs)
 	}
 }
 
@@ -438,53 +404,13 @@ func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
 func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int) {
 	switch t := target.(type) {
 	case *ast.SignalTarget:
-		if def, ok := c.signals[t.Name]; ok {
-			t.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined signal: %s", t.Name),
-				Line:   line,
-				Column: column,
-				Kind:   ErrUndefinedSignal,
-				Name:   t.Name,
-			})
-		}
+		resolveRef(&t.Signal, c.signals, "signal", ErrUndefinedSignal, &c.errs)
 	case *ast.UpdateTarget:
-		if def, ok := c.updates[t.Name]; ok {
-			t.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined update: %s", t.Name),
-				Line:   line,
-				Column: column,
-				Kind:   ErrUndefinedUpdate,
-				Name:   t.Name,
-			})
-		}
+		resolveRef(&t.Update, c.updates, "update", ErrUndefinedUpdate, &c.errs)
 	case *ast.ActivityTarget:
-		if def, ok := c.activities[t.Name]; ok {
-			t.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined activity: %s", t.Name),
-				Line:   line,
-				Column: column,
-				Kind:   ErrUndefinedActivity,
-				Name:   t.Name,
-			})
-		}
+		resolveRef(&t.Activity, c.activities, "activity", ErrUndefinedActivity, &c.errs)
 	case *ast.WorkflowTarget:
-		if def, ok := c.workflows[t.Name]; ok {
-			t.Resolved = def
-		} else {
-			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined workflow: %s", t.Name),
-				Line:   line,
-				Column: column,
-				Kind:   ErrUndefinedWorkflow,
-				Name:   t.Name,
-			})
-		}
+		resolveRef(&t.Workflow, c.workflows, "workflow", ErrUndefinedWorkflow, &c.errs)
 	case *ast.NexusTarget:
 		res := c.resolveNexusRef(t.Endpoint, t.Service, t.Operation, line, column)
 		t.ResolvedEndpoint = res.endpoint
@@ -532,9 +458,25 @@ func collectDef[T any](m map[string]T, name string, def T, kind string, errKind 
 	m[name] = def
 }
 
+// resolveRef resolves a single Ref against a definition map, setting Resolved on
+// match or appending a ResolveError on miss.
+func resolveRef[T any](ref *ast.Ref[T], defs map[string]T, kind string, errKind ErrorKind, errs *[]*ResolveError) {
+	if def, ok := defs[ref.Name]; ok {
+		ref.Resolved = def
+	} else {
+		*errs = append(*errs, &ResolveError{
+			Msg:    fmt.Sprintf("undefined %s: %s", kind, ref.Name),
+			Line:   ref.Line,
+			Column: ref.Column,
+			Kind:   errKind,
+			Name:   ref.Name,
+		})
+	}
+}
+
 // resolveWorkerRefs resolves a slice of worker references against a definition map,
 // appending an error for each undefined reference.
-func resolveWorkerRefs[T ast.Definition](refs []ast.WorkerRef, defs map[string]T, workerName, kind string, errKind ErrorKind, errs *[]*ResolveError) {
+func resolveWorkerRefs[T any](refs []ast.Ref[T], defs map[string]T, workerName, kind string, errKind ErrorKind, errs *[]*ResolveError) {
 	for i := range refs {
 		ref := &refs[i]
 		if def, ok := defs[ref.Name]; ok {

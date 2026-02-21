@@ -98,7 +98,7 @@ func parseAsyncOperation(p *Parser) (*ast.NexusOperation, error) {
 		Pos:          pos,
 		OpType:       ast.NexusOpAsync,
 		Name:         opName.Literal,
-		WorkflowName: wfName.Literal,
+		Workflow:      ast.Ref[*ast.WorkflowDef]{Name: wfName.Literal},
 	}, nil
 }
 
@@ -276,9 +276,9 @@ func parseWorkflowCallOrNexus(p *Parser) (ast.Statement, error) {
 	return &ast.WorkflowCall{
 		Pos:     pos,
 		Mode:    ast.CallDetach,
-		Name:    name.Literal,
-		Args:    args.Literal,
-		Result:  result,
-		Options: options,
+		Workflow: ast.Ref[*ast.WorkflowDef]{Pos: pos, Name: name.Literal},
+		Args:     args.Literal,
+		Result:   result,
+		Options:  options,
 	}, nil
 }

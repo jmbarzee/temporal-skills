@@ -52,9 +52,9 @@ func parseNamespaceDef(p *Parser) (ast.Definition, error) {
 				return nil, err
 			}
 			ns.Workers = append(ns.Workers, ast.NamespaceWorker{
-				Pos:        workerPos,
-				WorkerName: workerName.Literal,
-				Options:    opts,
+				Pos:     workerPos,
+				Worker:  ast.Ref[*ast.WorkerDef]{Pos: workerPos, Name: workerName.Literal},
+				Options: opts,
 			})
 
 		case token.NEXUS:

@@ -36,12 +36,12 @@ func definitionHandler(store *DocumentStore) protocol.TextDocumentDefinitionFunc
 func resolvedTarget(node ast.Node) ast.Node {
 	switch n := node.(type) {
 	case *ast.ActivityCall:
-		if n.Resolved != nil {
-			return n.Resolved
+		if n.Activity.Resolved != nil {
+			return n.Activity.Resolved
 		}
 	case *ast.WorkflowCall:
-		if n.Resolved != nil {
-			return n.Resolved
+		if n.Workflow.Resolved != nil {
+			return n.Workflow.Resolved
 		}
 	case *ast.NexusCall:
 		// Prefer service definition as the primary go-to-definition target.
@@ -55,13 +55,21 @@ func resolvedTarget(node ast.Node) ast.Node {
 		if n.Target != nil {
 			return resolvedTargetFromAsync(n.Target)
 		}
-	case *ast.WorkerRef:
+	case *ast.Ref[*ast.WorkflowDef]:
+		if n.Resolved != nil {
+			return n.Resolved
+		}
+	case *ast.Ref[*ast.ActivityDef]:
+		if n.Resolved != nil {
+			return n.Resolved
+		}
+	case *ast.Ref[*ast.NexusServiceDef]:
 		if n.Resolved != nil {
 			return n.Resolved
 		}
 	case *ast.NamespaceWorker:
-		if n.ResolvedWorker != nil {
-			return n.ResolvedWorker
+		if n.Worker.Resolved != nil {
+			return n.Worker.Resolved
 		}
 	case *ast.AwaitOneCase:
 		if n.Target != nil {
@@ -75,20 +83,20 @@ func resolvedTarget(node ast.Node) ast.Node {
 func resolvedTargetFromAsync(target ast.AsyncTarget) ast.Node {
 	switch t := target.(type) {
 	case *ast.SignalTarget:
-		if t.Resolved != nil {
-			return t.Resolved
+		if t.Signal.Resolved != nil {
+			return t.Signal.Resolved
 		}
 	case *ast.UpdateTarget:
-		if t.Resolved != nil {
-			return t.Resolved
+		if t.Update.Resolved != nil {
+			return t.Update.Resolved
 		}
 	case *ast.ActivityTarget:
-		if t.Resolved != nil {
-			return t.Resolved
+		if t.Activity.Resolved != nil {
+			return t.Activity.Resolved
 		}
 	case *ast.WorkflowTarget:
-		if t.Resolved != nil {
-			return t.Resolved
+		if t.Workflow.Resolved != nil {
+			return t.Workflow.Resolved
 		}
 	case *ast.NexusTarget:
 		if t.ResolvedService != nil {

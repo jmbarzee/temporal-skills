@@ -16,12 +16,9 @@ Architecture and design issues to address before expanding visualizer complexity
 
 - E. ~~Extract a `<WorkflowContent>` component for the handler groups + body, used by both `WorkflowDefBlock` and `WorkflowCallBlock`~~ — Done. New `WorkflowContent.tsx` with `HandlerDeclBlock` + `WorkflowContent`.
 
-## 4. Unify await display helpers
+## ~~4. Unify await display helpers~~ (Done)
 
-**Problem:** `getAwaitStmtDisplay` and `getAwaitOneCaseDisplay` are structurally near-identical switch statements over overlapping kind unions. The `AwaitStmt` and `AwaitOneCase` types share the same optional fields.
-
-**Changes:**
-- F. Extract a shared `getAwaitTargetDisplay` helper that both functions delegate to
+- F. ~~Extract a shared `getAwaitTargetDisplay` helper that both functions delegate to~~ — Done. Shared helper handles the 6 common kinds; `getAwaitStmtDisplay` adds `await` prefix and overrides icons for activity/workflow; `getAwaitOneCaseDisplay` handles `await_all` separately then delegates.
 
 ## 5. Split StatementBlock.tsx
 

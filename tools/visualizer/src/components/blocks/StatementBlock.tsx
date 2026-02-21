@@ -177,47 +177,63 @@ function AwaitStmtBlock({ stmt }: { stmt: AwaitStmt }) {
   )
 }
 
+// Shared await target display - both getAwaitStmtDisplay and getAwaitOneCaseDisplay delegate here
+function getAwaitTargetDisplay(
+  target: { kind: string; timer?: string; signal?: string; signalParams?: string; update?: string; updateParams?: string; activity?: string; activityArgs?: string; activityResult?: string; workflow?: string; workflowMode?: string; workflowArgs?: string; workflowResult?: string; ident?: string; identResult?: string },
+  context: { activities: Map<string, any>; workflows: Map<string, any> },
+  handlers: { signals: Map<string, any>; updates: Map<string, any> },
+): { icon: string; keyword: string; signature: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
+  switch (target.kind) {
+    case 'timer':
+      return { icon: '⏱', keyword: 'timer', signature: `(${target.timer || ''})`, isUnresolved: false }
+    case 'signal': {
+      const sig = target.signal || ''
+      const params = target.signalParams ? ` → ${target.signalParams}` : ''
+      const handler = handlers.signals.get(sig)
+      return { icon: '↪', keyword: 'signal', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
+    }
+    case 'update': {
+      const sig = target.update || ''
+      const params = target.updateParams ? ` → ${target.updateParams}` : ''
+      const handler = handlers.updates.get(sig)
+      return { icon: '⇄', keyword: 'update', signature: `${sig}${params}`, expandableDef: handler, isUnresolved: !handler }
+    }
+    case 'activity': {
+      const sig = `${target.activity || ''}(${target.activityArgs || ''})`
+      const result = target.activityResult ? ` → ${target.activityResult}` : ''
+      const def = context.activities.get(target.activity || '')
+      return { icon: '⚙', keyword: 'activity', signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
+    }
+    case 'workflow': {
+      const modePrefix = target.workflowMode === 'detach' ? 'detach ' : ''
+      const sig = `${target.workflow || ''}(${target.workflowArgs || ''})`
+      const result = target.workflowResult ? ` → ${target.workflowResult}` : ''
+      const def = context.workflows.get(target.workflow || '')
+      return { icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, expandableDef: def, isUnresolved: !def }
+    }
+    case 'ident': {
+      const name = target.ident || ''
+      const result = target.identResult ? ` → ${target.identResult}` : ''
+      return { icon: '◉', keyword: '', signature: `${name}${result}`, isUnresolved: false }
+    }
+    default:
+      return { icon: '?', keyword: '', signature: '', isUnresolved: false }
+  }
+}
+
 // Get display info for single await statements
 function getAwaitStmtDisplay(
   stmt: AwaitStmt,
   context: { activities: Map<string, any>; workflows: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
 ): { icon: string; keyword: string; signature: string; blockClass: string; expandableDef?: { body?: Statement[] }; isUnresolved: boolean } {
-  switch (stmt.kind) {
-    case 'timer':
-      return { icon: '⏱', keyword: 'await timer', signature: `(${stmt.timer || ''})`, blockClass: 'block-await-stmt block-await-stmt-timer', isUnresolved: false }
-    case 'signal': {
-      const sig = stmt.signal || ''
-      const params = stmt.signalParams ? ` → ${stmt.signalParams}` : ''
-      const handler = handlers.signals.get(sig)
-      return { icon: '↪', keyword: 'await signal', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-signal', expandableDef: handler, isUnresolved: !handler }
-    }
-    case 'update': {
-      const sig = stmt.update || ''
-      const params = stmt.updateParams ? ` → ${stmt.updateParams}` : ''
-      const handler = handlers.updates.get(sig)
-      return { icon: '⇄', keyword: 'await update', signature: `${sig}${params}`, blockClass: 'block-await-stmt block-await-stmt-update', expandableDef: handler, isUnresolved: !handler }
-    }
-    case 'activity': {
-      const sig = `${stmt.activity || ''}(${stmt.activityArgs || ''})`
-      const result = stmt.activityResult ? ` → ${stmt.activityResult}` : ''
-      const def = context.activities.get(stmt.activity || '')
-      return { icon: '', keyword: 'await activity', signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-activity', expandableDef: def, isUnresolved: !def }
-    }
-    case 'workflow': {
-      const modePrefix = stmt.workflowMode === 'detach' ? 'detach ' : ''
-      const sig = `${stmt.workflow || ''}(${stmt.workflowArgs || ''})`
-      const result = stmt.workflowResult ? ` → ${stmt.workflowResult}` : ''
-      const def = context.workflows.get(stmt.workflow || '')
-      return { icon: '', keyword: `await ${modePrefix}workflow`, signature: `${sig}${result}`, blockClass: 'block-await-stmt block-await-stmt-workflow', expandableDef: def, isUnresolved: !def }
-    }
-    case 'ident': {
-      const name = stmt.ident || ''
-      const result = stmt.identResult ? ` → ${stmt.identResult}` : ''
-      return { icon: '◉', keyword: 'await', signature: `${name}${result}`, blockClass: 'block-await-stmt block-await-stmt-ident', isUnresolved: false }
-    }
-    default:
-      return { icon: '?', keyword: 'await', signature: '', blockClass: 'block-await-stmt', isUnresolved: false }
+  const target = getAwaitTargetDisplay(stmt, context, handlers)
+  return {
+    ...target,
+    // Activity/workflow use SVG icons at block level, not text icons
+    icon: (stmt.kind === 'activity' || stmt.kind === 'workflow') ? '' : target.icon,
+    keyword: target.keyword ? `await ${target.keyword}` : 'await',
+    blockClass: `block-await-stmt block-await-stmt-${stmt.kind}`,
   }
 }
 
@@ -316,41 +332,17 @@ function getAwaitOneCaseDisplay(
   context: { activities: Map<string, any>; workflows: Map<string, any> },
   handlers: { signals: Map<string, any>; updates: Map<string, any> },
 ): { contentClass: string; icon: string; keyword: string; signature: string; isUnresolved: boolean } {
-  switch (c.kind) {
-    case 'signal': {
-      const params = c.signalParams ? ` → ${c.signalParams}` : ''
-      const handler = handlers.signals.get(c.signal || '')
-      return { contentClass: 'tagged-signal', icon: '↪', keyword: 'signal', signature: `${c.signal || ''}${params}`, isUnresolved: !handler }
-    }
-    case 'update': {
-      const params = c.updateParams ? ` → ${c.updateParams}` : ''
-      const handler = handlers.updates.get(c.update || '')
-      return { contentClass: 'tagged-update', icon: '⇄', keyword: 'update', signature: `${c.update || ''}${params}`, isUnresolved: !handler }
-    }
-    case 'timer':
-      return { contentClass: 'tagged-timer', icon: '⏱', keyword: 'timer', signature: `(${c.timer || ''})`, isUnresolved: false }
-    case 'activity': {
-      const sig = `${c.activity || ''}(${c.activityArgs || ''})`
-      const result = c.activityResult ? ` → ${c.activityResult}` : ''
-      const def = context.activities.get(c.activity || '')
-      return { contentClass: 'tagged-activity', icon: '⚙', keyword: 'activity', signature: `${sig}${result}`, isUnresolved: !def }
-    }
-    case 'workflow': {
-      const modePrefix = c.workflowMode === 'detach' ? 'detach ' : ''
-      const sig = `${c.workflow || ''}(${c.workflowArgs || ''})`
-      const result = c.workflowResult ? ` → ${c.workflowResult}` : ''
-      const def = context.workflows.get(c.workflow || '')
-      return { contentClass: 'tagged-workflow', icon: '⚙⚙', keyword: `${modePrefix}workflow`, signature: `${sig}${result}`, isUnresolved: !def }
-    }
-    case 'await_all':
-      return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
-    case 'ident': {
-      const name = c.ident || ''
-      const result = c.identResult ? ` → ${c.identResult}` : ''
-      return { contentClass: 'tagged-ident', icon: '◉', keyword: '', signature: `${name}${result}`, isUnresolved: false }
-    }
-    default:
-      return { contentClass: 'tagged-raw', icon: '?', keyword: 'unknown', signature: '', isUnresolved: false }
+  // await_all is case-only, handle separately
+  if (c.kind === 'await_all') {
+    return { contentClass: 'tagged-await-all', icon: '⫴', keyword: 'await all', signature: `${c.awaitAll?.body?.length || 0} branch(es)`, isUnresolved: false }
+  }
+  const target = getAwaitTargetDisplay(c, context, handlers)
+  return {
+    icon: target.icon,
+    keyword: target.keyword,
+    signature: target.signature,
+    isUnresolved: target.isUnresolved,
+    contentClass: `tagged-${c.kind}`,
   }
 }
 

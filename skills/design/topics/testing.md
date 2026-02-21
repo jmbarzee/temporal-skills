@@ -78,7 +78,7 @@ Test workflow logic by mocking activities. Use Temporal's test framework.
 ### Pattern
 
 ```twf
-workflow OrderWorkflow(order: Order) -> OrderResult:
+workflow OrderWorkflow(order: Order) -> (OrderResult):
     activity ValidateOrder(order) -> validated
     if not validated.success:
         close fail(OrderResult{status: "invalid"})
@@ -178,7 +178,7 @@ test "OrderWorkflow replays deterministically":
 ### Signal Testing
 
 ```twf
-workflow ApprovalWorkflow(request: Request) -> Decision:
+workflow ApprovalWorkflow(request: Request) -> (Decision):
     await one:
         signal Approved:
             close complete(Decision{status: "approved"})
@@ -218,7 +218,7 @@ test "ApprovalWorkflow handles timeout":
 ### Query Testing
 
 ```twf
-workflow OrderWorkflow(order: Order) -> OrderResult:
+workflow OrderWorkflow(order: Order) -> (OrderResult):
     status = "pending"
     
     status = "processing"
@@ -227,7 +227,7 @@ workflow OrderWorkflow(order: Order) -> OrderResult:
     status = "completed"
     close complete(OrderResult{status: status})
 
-query GetStatus() -> string:
+query GetStatus() -> (string):
     return status
 ```
 
@@ -261,7 +261,7 @@ test "GetStatus query returns current status":
 Use time-skipping to test timer behavior without waiting.
 
 ```twf
-workflow ReminderWorkflow(userId: string) -> void:
+workflow ReminderWorkflow(userId: string):
     activity SendFirstReminder(userId)
 
     await timer(24h)
@@ -305,11 +305,11 @@ test "ReminderWorkflow sends reminders at correct intervals":
 ## Testing Child Workflows
 
 ```twf
-workflow ParentWorkflow(data: Data) -> Result:
+workflow ParentWorkflow(data: Data) -> (Result):
     workflow ChildWorkflow(data.item) -> childResult
     close complete(Result{childData: childResult})
 
-workflow ChildWorkflow(item: Item) -> ChildResult:
+workflow ChildWorkflow(item: Item) -> (ChildResult):
     activity ProcessItem(item)
     close complete(ChildResult{processed: true})
 ```

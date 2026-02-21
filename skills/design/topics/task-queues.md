@@ -496,7 +496,7 @@ Worker and namespace blocks let the resolver validate deployment topology at des
 
 ### Rules
 
-- Workers contain only `workflow` and `activity` entries (type set only, no deployment config)
+- Workers contain only `workflow`, `activity`, and `nexus service` entries (type set only, no deployment config)
 - Each worker instantiation in a namespace requires a `task_queue` option
 - Worker names use lowerCamelCase; workflow/activity names keep UpperCamelCase
 - Multiple workers can be instantiated on the same task queue (but must register the same type sets)

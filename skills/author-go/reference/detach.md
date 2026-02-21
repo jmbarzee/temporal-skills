@@ -21,14 +21,13 @@ workflow.ExecuteChildWorkflow(childCtx, NotifyCustomer, order.Customer)
 ### DSL
 
 ```twf
-detach nexus "notifications" workflow SendConfirmation(order.customer, paymentResult)
+detach nexus NotificationsEndpoint NotificationsService.SendConfirmation(order.customer, paymentResult)
 ```
 
 ### Go
 
 ```go
-nexusClient := workflow.NewNexusClient("notifications", "SendConfirmation")
-nexusClient.ExecuteOperation(ctx, sendConfirmationOp, sendConfirmationInput, workflow.NexusOperationOptions{})
+workflow.ExecuteNexusOperation(ctx, "NotificationsEndpoint", notificationsservice.SendConfirmation, sendConfirmationInput, workflow.NexusOperationOptions{})
 // No .Get() — fire-and-forget
 ```
 

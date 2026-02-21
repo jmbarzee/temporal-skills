@@ -31,7 +31,7 @@ A discrete operation that drives toward completion.
 ### Pattern
 
 ```twf
-workflow OrderFulfillment(order: Order) -> OrderResult:
+workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Step 1: Validate
     activity ValidateOrder(order) -> validated
     if not validated.success:
@@ -73,7 +73,7 @@ A long-running workflow representing a business entity.
 ### Pattern
 
 ```twf
-workflow AccountEntity(accountId: string, account: Account) -> void:
+workflow AccountEntity(accountId: string, account: Account):
     if account == null:
         activity LoadAccount(accountId) -> account
 
@@ -98,10 +98,10 @@ workflow AccountEntity(accountId: string, account: Account) -> void:
         if history_size() > 1000:
             close continue_as_new(accountId, account)
 
-query GetBalance() -> decimal:
+query GetBalance() -> (decimal):
     return account.balance
 
-update Transfer(amount: decimal, toAccount: string) -> TransferResult:
+update Transfer(amount: decimal, toAccount: string) -> (TransferResult):
     if account.balance < amount:
         return TransferResult{success: false, error: "insufficient funds"}
     account.balance -= amount
@@ -188,7 +188,7 @@ Process items in parallel, aggregate results.
 > Note: The TWF DSL currently re-binds the result variable on each iteration of `await all: for`. The aggregation step below is expressed as conceptual pseudo-code. See [`patterns.twf`](./patterns.twf) for the TWF syntax version.
 
 ```twf
-workflow BatchProcessor(items: []Item) -> BatchResult:
+workflow BatchProcessor(items: []Item) -> (BatchResult):
     # Fan-out: start all processing in parallel
     await all:
         for (item in items):
@@ -204,7 +204,7 @@ workflow BatchProcessor(items: []Item) -> BatchResult:
 
 **With Concurrency Limit:**
 ```twf
-workflow RateLimitedBatch(items: []Item) -> BatchResult:
+workflow RateLimitedBatch(items: []Item) -> (BatchResult):
     # Process in batches of 10
     for (batch in chunk(items, 10)):
         await all:
@@ -216,7 +216,7 @@ workflow RateLimitedBatch(items: []Item) -> BatchResult:
 
 **With Early Exit:**
 ```twf
-workflow FirstSuccessful(sources: []Source) -> Data:
+workflow FirstSuccessful(sources: []Source) -> (Data):
     await all:
         for (source in sources):
             activity TryFetch(source) -> result
@@ -247,7 +247,7 @@ Sequential transformation stages.
 ### Pattern
 
 ```twf
-workflow DataPipeline(rawData: RawData) -> ProcessedData:
+workflow DataPipeline(rawData: RawData) -> (ProcessedData):
     # Stage 1: Ingest
     activity Ingest(rawData) -> ingested
     
@@ -271,7 +271,7 @@ workflow DataPipeline(rawData: RawData) -> ProcessedData:
 ### With Conditional Stages
 
 ```twf
-workflow AdaptivePipeline(data: Data) -> Result:
+workflow AdaptivePipeline(data: Data) -> (Result):
     activity Parse(data) -> processed
     
     if processed.needsEnrichment:
@@ -305,43 +305,44 @@ Explicit states and transitions.
 ### Pattern
 
 ```twf
-workflow DocumentApproval(doc: Document) -> ApprovalResult:
+workflow DocumentApproval(doc: Document) -> (ApprovalResult):
     phase = "draft"
 
     for:
-        if phase == "draft":
-            await signal Submit
-            activity NotifyReviewers(doc)
-            phase = "pending_review"
+        switch (phase):
+            case "draft":
+                await signal Submit
+                activity NotifyReviewers(doc)
+                phase = "pending_review"
 
-        elif phase == "pending_review":
-            await one:
-                signal Approve:
-                    phase = "approved"
-                signal Reject:
-                    phase = "rejected"
-                signal RequestChanges:
-                    phase = "changes_requested"
+            case "pending_review":
+                await one:
+                    signal Approve:
+                        phase = "approved"
+                    signal Reject:
+                        phase = "rejected"
+                    signal RequestChanges:
+                        phase = "changes_requested"
 
-        elif phase == "changes_requested":
-            await one:
-                signal Submit:
-                    phase = "pending_review"
-                signal Withdraw:
-                    phase = "withdrawn"
+            case "changes_requested":
+                await one:
+                    signal Submit:
+                        phase = "pending_review"
+                    signal Withdraw:
+                        phase = "withdrawn"
 
-        elif phase == "approved":
-            activity PublishDocument(doc)
-            close complete(ApprovalResult{status: "approved"})
+            case "approved":
+                activity PublishDocument(doc)
+                close complete(ApprovalResult{status: "approved"})
 
-        elif phase == "rejected":
-            activity ArchiveDocument(doc)
-            close complete(ApprovalResult{status: "rejected"})
+            case "rejected":
+                activity ArchiveDocument(doc)
+                close complete(ApprovalResult{status: "rejected"})
 
-        elif phase == "withdrawn":
-            close complete(ApprovalResult{status: "withdrawn"})
+            case "withdrawn":
+                close complete(ApprovalResult{status: "withdrawn"})
 
-query GetPhase() -> string:
+query GetPhase() -> (string):
     return phase
 ```
 
@@ -377,7 +378,7 @@ Wait for external condition to be met.
 ### Pattern
 
 ```twf
-workflow WaitForResource(resourceId: string) -> Resource:
+workflow WaitForResource(resourceId: string) -> (Resource):
     backoff = 5s
     maxBackoff = 60s
 
@@ -406,7 +407,7 @@ workflow WaitForResource(resourceId: string) -> Resource:
 > Note: `upsert_search_attributes` is an SDK-level call, not TWF notation.
 
 ```twf
-workflow MonitorJob(jobId: string) -> JobResult:
+workflow MonitorJob(jobId: string) -> (JobResult):
     for:
         activity GetJobStatus(jobId) -> status
 

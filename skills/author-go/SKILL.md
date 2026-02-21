@@ -177,7 +177,7 @@ Read only what the current generation step requires.
 | DSL Construct | Go Mapping | File |
 |---------------|------------|------|
 | `options: ...` | `ActivityOptions` / `ChildWorkflowOptions` | [options.md](./reference/options.md) |
-| `nexus "ns" workflow ...` | Nexus operation client | [nexus.md](./reference/nexus.md) |
+| `nexus Endpoint Service.Op(args) -> result` | Nexus operation | [nexus.md](./reference/nexus.md) |
 | `detach workflow ...` | Fire-and-forget (no `.Get`) | [detach.md](./reference/detach.md) |
 | `if`/`for`/`switch`/`break`/`continue` | Go equivalents | [control-flow.md](./reference/control-flow.md) |
 | `close complete`/`fail`/`continue_as_new` | `return` / `workflow.NewContinueAsNewError` | [close.md](./reference/close.md) |

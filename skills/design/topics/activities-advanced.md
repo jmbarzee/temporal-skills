@@ -183,7 +183,7 @@ Lightweight activities that execute in the workflow worker process without task 
 
 > Note: Local activities are an SDK-level concept. In TWF notation, use `activity` with an `options:` block specifying local execution. The syntax below is conceptual.
 
-```twf
+```pseudo
 workflow ProcessOrder(order: Order) -> (Result):
     # Local activity: fast, in-process (SDK: use local activity API)
     activity ValidateInput(order) -> validated
@@ -210,7 +210,7 @@ workflow ProcessOrder(order: Order) -> (Result):
 
 > Note: Local activity configuration is SDK-specific.
 
-```twf
+```pseudo
 workflow Parent(data: Data) -> (Result):
     activity QuickValidation(data) -> result
         options:
@@ -293,7 +293,6 @@ workflow Parent(data: Data) -> (Result):
                 backoff_coefficient: 2.0
                 maximum_interval: 60s
                 maximum_attempts: 5
-                non_retryable_errors: ["InvalidInput", "NotFound"]
 ```
 
 ### Error Classification

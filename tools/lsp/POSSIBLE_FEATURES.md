@@ -105,6 +105,29 @@ if (historyBytes > 40_000_000):
 
 **Open questions:** Should the DSL formalize a set of SDK intrinsics? Or are these implementation details that belong in `raw_stmt`?
 
+### Workflow ID Call Option
+
+`workflow_id` as a workflow call option for specifying deterministic workflow IDs at call sites. This is a core Temporal SDK pattern (e.g., deriving a child workflow ID from a business entity) but is not currently in the allowed workflow call options defined in LANGUAGE.md.
+
+```twf
+workflow ProcessOrder(order: Order) -> (Result):
+    workflow ShipOrder(order) -> shipment
+        options:
+            workflow_id: "ship-order-" + order.id
+            parent_close_policy: TERMINATE
+
+    # Idempotent fan-out via deterministic IDs
+    for (item in order.items):
+        workflow ProcessItem(item)
+            options:
+                workflow_id: "process-item-" + item.id
+                workflow_id_reuse_policy: ALLOW_DUPLICATE_FAILED_ONLY
+```
+
+**Why deferred:** The concept is already used in topic docs (child-workflows.md shows `workflow_id` in options blocks), but the allowed workflow call options list in LANGUAGE.md does not include it. Adding it requires deciding whether the value is a plain string, a template expression (`"order-{order.id}"`), or a concatenation expression (`"order-" + order.id`) — which ties into the broader question of expression syntax in option values. The current `value` grammar (`STRING | DURATION | NUMBER | IDENT`) has no expression support.
+
+**Open questions:** Should `workflow_id` values support string interpolation (template syntax), concatenation expressions, or just static strings? Should `workflow_id_reuse_policy` also be added as a formal option (it appears in child-workflows.md alongside `workflow_id`)? How does this interact with the resolver — should it warn on non-unique IDs inside loops?
+
 ---
 
 ## Syntax Extensions
@@ -180,6 +203,62 @@ namespace Orders (go):
 **Why needed:** Polyglot Temporal deployments are common — a Go workflow may call Python ML activities and TypeScript frontend services. Making the SDK language a first-class part of the syntax (rather than an annotation) enables clearer design-time intent, code generation targeting the correct SDK, ownership boundaries, and better onboarding context.
 
 **Open questions:** Should the language be a fixed enum of supported SDKs (`go`, `python`, `typescript`, `java`, `dotnet`, `php`) or freeform? Should a parent declaration (e.g. on a `worker`) propagate as a default to children, with per-definition overrides? How does it interact with Nexus boundaries where language differences are already implicit? How does this relate to `@lang` annotations — should both exist, or should one replace the other?
+
+### Local Activity Option
+
+`local: true` option on activity calls to route execution to the local worker, avoiding the task queue round-trip. The Temporal SDK supports this natively via local activity APIs. The concept is referenced in activities-advanced.md topic docs but no formal TWF syntax or parser support exists.
+
+```twf
+workflow ProcessOrder(order: Order) -> (Result):
+    # Local activity: runs in-process on the same worker
+    activity ValidateInput(order) -> validated
+        options:
+            local: true
+            start_to_close_timeout: 5s
+
+    # Local activity with retry threshold
+    activity EnrichData(validated) -> enriched
+        options:
+            local: true
+            start_to_close_timeout: 10s
+            local_retry_threshold: 5s
+            retry_policy:
+                maximum_attempts: 3
+                initial_interval: 100ms
+
+    # Regular activity: goes through task queue as normal
+    activity ChargePayment(enriched) -> payment
+        options:
+            start_to_close_timeout: 60s
+```
+
+**Why deferred:** Local activities are an SDK-level execution optimization, not a workflow design concern. TWF's "skeleton, not meat" principle suggests this may be too implementation-specific. However, the choice between local and regular activities has design implications — local activities should be short, deterministic, and avoid network calls, which is valuable to capture at design time.
+
+**Open questions:** Should `local` be a boolean option in the options block, or a modifier keyword (e.g., `local activity ValidateInput(...)`)? If it is an option, should it be in the activity call options list alongside `task_queue`? Does `local: true` conflict with an explicit `task_queue` option (local activities bypass the task queue)? Should `local_retry_threshold` and `schedule_to_close_timeout` (which local activities do not support) be validated contextually?
+
+### Non-Retryable Error Types List Syntax
+
+The retry policy option `non_retryable_error_types` is listed in the grammar spec (LANGUAGE.md) as a valid retry policy key, but the option value grammar (`value ::= STRING | DURATION | NUMBER | IDENT`) has no list literal type. Specifying a list of error type strings requires a list value syntax that the lexer, parser, and AST do not currently support.
+
+```twf
+activity ChargePayment(order: Order) -> (Payment):
+    options:
+        start_to_close_timeout: 60s
+        retry_policy:
+            maximum_attempts: 5
+            initial_interval: 1s
+            non_retryable_error_types: ["InvalidInput", "NotFound", "Unauthorized"]
+
+activity SendNotification(user: User, message: Message):
+    options:
+        retry_policy:
+            maximum_attempts: 3
+            non_retryable_error_types: ["InvalidRecipient"]
+```
+
+**Why deferred:** Adding list literals requires changes across the entire parser pipeline. The lexer needs `[` and `]` tokens (or at least recognition within option value context). The AST needs a list value node type. The parser needs a production rule for `list_value ::= '[' value (',' value)* ']'`. The resolver needs to validate that `non_retryable_error_types` specifically accepts a list of strings. This is a meaningful grammar extension for a single option key.
+
+**Open questions:** Should list syntax be general-purpose (`value ::= ... | list_value`) or restricted to specific option keys? If general-purpose, what other options could benefit from list values in the future? Should the list elements be restricted to strings, or allow mixed types? Could an alternative syntax avoid brackets entirely (e.g., multi-line list under the key, one entry per line)?
 
 ### Promise Composition
 

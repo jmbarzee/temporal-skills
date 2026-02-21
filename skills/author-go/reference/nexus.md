@@ -3,26 +3,16 @@
 ## DSL
 
 ```twf
-nexus "payments" workflow ProcessPayment(order.payment) -> paymentResult
+nexus PaymentsEndpoint PaymentsService.ProcessPayment(order.payment) -> paymentResult
 ```
 
 ## Go
 
 ```go
-// Define the Nexus operation reference
-processPaymentOp := nexus.NewWorkflowRunOperation(
-    "ProcessPayment",
-    ProcessPayment,
-    func(ctx context.Context, input Payment, opts nexus.StartWorkflowOptions) (client.StartWorkflowOptions, error) {
-        return client.StartWorkflowOptions{}, nil
-    },
-)
-
-// In the calling workflow:
-nexusClient := workflow.NewNexusClient("payments", "ProcessPayment")
-paymentFuture := nexusClient.ExecuteOperation(ctx, processPaymentOp, order.Payment, workflow.NexusOperationOptions{})
+// Execute a Nexus operation from within a workflow.
+// The endpoint and operation are typed references — no string-based client construction.
 var paymentResult PaymentResult
-err := paymentFuture.Get(ctx, &paymentResult)
+err := workflow.ExecuteNexusOperation(ctx, "PaymentsEndpoint", paymentsservice.ProcessPayment, order.Payment, workflow.NexusOperationOptions{})
 if err != nil {
     return Result{}, err
 }
@@ -30,7 +20,8 @@ if err != nil {
 
 ## Notes
 
-- Nexus requires endpoint configuration on the Temporal server — the namespace string maps to a registered Nexus endpoint
-- The operation reference and client setup are boilerplate; the calling pattern mirrors child workflows
+- Endpoints and services are first-class DSL constructs: endpoints are declared inside `namespace` blocks (`nexus endpoint EndpointName`) and services are defined as top-level `nexus service Name:` blocks with typed operations
+- The Go code uses typed operation references (generated from `nexus service` definitions), not string-based clients
+- The calling pattern mirrors child workflows — execute and `.Get()` (or assign inline)
 - For fire-and-forget nexus: see [detach.md](./detach.md)
 - Nexus API is evolving — check the SDK version in `go.mod` for the exact API surface

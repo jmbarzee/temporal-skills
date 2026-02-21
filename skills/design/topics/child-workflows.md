@@ -22,21 +22,20 @@ Nested workflow execution for decomposition, reusability, and independent failur
 ## Basic Pattern
 
 ```twf
-workflow ParentWorkflow(input: Input) -> Result:
+workflow ParentWorkflow(input: Input) -> (Result):
     # Simple child workflow call
     workflow ChildWorkflow(input.data) -> childResult
     
     # Child workflow with options
     workflow ChildWorkflow(input.data) -> childResult
         options:
-            workflow_id: "child-{input.id}"
-            timeout: 1h
+            workflow_execution_timeout: 1h
             retry_policy:
                 maximum_attempts: 3
     
     close complete(Result{childResult})
 
-workflow ChildWorkflow(data: Data) -> ChildResult:
+workflow ChildWorkflow(data: Data) -> (ChildResult):
     activity Step1(data)
     activity Step2(data)
     close complete(ChildResult{success: true})
@@ -59,7 +58,7 @@ Child workflows support three execution modes:
 Parent blocks until child workflow completes and receives the result:
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     workflow ChildWorkflow(input.data) -> childResult
     close complete(Result{childResult})
 ```
@@ -69,7 +68,7 @@ workflow Parent(input: Input) -> Result:
 Start a child workflow and get a promise. Continue with other work, then await the promise later:
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     # Start child without blocking
     promise handle <- workflow SlowChild(input.data)
 
@@ -87,7 +86,7 @@ workflow Parent(input: Input) -> Result:
 Start a child workflow that runs independently. The parent never waits for it and cannot receive its result. Detached children survive parent completion, cancellation, or failure.
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     activity ProcessOrder(input) -> result
 
     # Fire-and-forget notification - runs independently
@@ -103,12 +102,18 @@ workflow Parent(input: Input) -> Result:
 Both modifiers also work with nexus calls for cross-namespace workflows:
 
 ```twf
-workflow Parent(input: Input) -> Result:
+nexus service PaymentsService:
+    async ProcessPayment workflow ProcessPayment
+
+nexus service NotificationsService:
+    async SendEmail workflow SendEmail
+
+workflow Parent(input: Input) -> (Result):
     # Async nexus call
-    promise handle <- nexus "payments" workflow ProcessPayment(input.payment)
+    promise handle <- nexus PaymentsEndpoint PaymentsService.ProcessPayment(input.payment)
 
     # Fire-and-forget nexus call
-    detach nexus "notifications" workflow SendEmail(input.customer)
+    detach nexus NotificationsEndpoint NotificationsService.SendEmail(input.customer)
 
     # Await the async promise
     await handle -> paymentResult
@@ -135,7 +140,7 @@ Parent starts
 By default, cancelling a parent cancels its children. Use `detach` for fire-and-forget children that survive parent close.
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     # Default: child cancelled if parent cancelled
     workflow ChildWorkflow(input)
     
@@ -160,7 +165,7 @@ workflow Parent(input: Input) -> Result:
 > Note: Error handling is SDK-specific. The workflow will fail if a child workflow fails (after retries). Use retry policies and timeouts to control failure behavior.
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     # Child workflow call -- if it fails, the parent workflow fails
     workflow ChildWorkflow(input) -> result
     close complete(Result{success: true, data: result})
@@ -169,7 +174,7 @@ workflow Parent(input: Input) -> Result:
 ### Retry Policies for Children
 
 ```twf
-workflow Parent(input: Input) -> Result:
+workflow Parent(input: Input) -> (Result):
     # Child with custom retry policy
     workflow ProcessOrder(input.order)
         options:
@@ -184,42 +189,19 @@ workflow Parent(input: Input) -> Result:
 
 ## Workflow ID Design
 
-Child workflow IDs determine uniqueness and idempotency.
+Child workflow IDs determine uniqueness and idempotency. Workflow ID assignment and reuse policies are SDK-level concerns and are not expressed in the TWF DSL. When implementing your workflows, use the SDK to set `workflow_id` and `workflow_id_reuse_policy` on child workflow stubs.
 
-### Patterns
+### Common Patterns (SDK-level)
 
-```twf
-workflow Parent(input: Input) -> Result:
-    # Pattern 1: Derived from parent + child identifier
-    workflow ChildWorkflow(item)
-        options:
-            workflow_id: "{workflow.id}-child-{item.id}"
-
-    # Pattern 2: Deterministic from business entity
-    workflow ProcessOrder(order)
-        options:
-            workflow_id: "order-{order.id}"
-
-    # Pattern 3: With attempt counter for retries
-    workflow RetryableOperation(data)
-        options:
-            workflow_id: "op-{data.id}-attempt-{attemptCount}"
-```
+- **Derived from parent + child identifier:** `"{parent_id}-child-{item.id}"`
+- **Deterministic from business entity:** `"order-{order.id}"`
+- **With attempt counter for retries:** `"op-{data.id}-attempt-{attemptCount}"`
 
 ### Idempotency via Workflow ID
 
-```twf
-workflow Parent(items: []Item) -> Result:
-    # Same workflow ID = same workflow execution
-    # If child already exists and completed, returns cached result
-    for (item in items):
-        workflow ProcessItem(item)
-            options:
-                workflow_id: "process-item-{item.id}"
-                workflow_id_reuse_policy: ALLOW_DUPLICATE_FAILED_ONLY
-```
+Using a deterministic workflow ID ensures idempotency: if a child with the same ID already exists and completed, the SDK returns the cached result. Configure this through workflow ID reuse policies in your SDK code.
 
-### Workflow ID Reuse Policies
+### Workflow ID Reuse Policies (SDK-level)
 
 | Policy | Behavior |
 |--------|----------|
@@ -235,7 +217,7 @@ workflow Parent(items: []Item) -> Result:
 ### Sequential Sub-Operations
 
 ```twf
-workflow DeployApplication(app: App) -> DeployResult:
+workflow DeployApplication(app: App) -> (DeployResult):
     # Each child has own failure boundary
     workflow DeployDatabase(app.database)
     workflow DeployBackend(app.backend)
@@ -248,7 +230,7 @@ workflow DeployApplication(app: App) -> DeployResult:
 ### Parallel Children
 
 ```twf
-workflow ProcessBatch(items: []Item) -> BatchResult:
+workflow ProcessBatch(items: []Item) -> (BatchResult):
     # Start all children in parallel
     await all:
         for (item in items):
@@ -260,7 +242,7 @@ workflow ProcessBatch(items: []Item) -> BatchResult:
 ### Conditional Children
 
 ```twf
-workflow Onboarding(user: User) -> OnboardingResult:
+workflow Onboarding(user: User) -> (OnboardingResult):
     workflow CreateAccount(user)
     
     if user.type == "enterprise":
@@ -358,18 +340,6 @@ workflow Parent(items: []Item):
     activity AlertOnPartialFailure(items)
 ```
 
-### Hardcoded Workflow IDs
+### Hardcoded Workflow IDs (SDK-level)
 
-```twf
-# BAD: Collision risk
-workflow Parent(order: Order):
-    workflow ProcessOrder(order)
-        options:
-            workflow_id: "process-order"  # Same ID for all orders!
-
-# GOOD: Unique per entity
-workflow Parent(order: Order):
-    workflow ProcessOrder(order)
-        options:
-            workflow_id: "process-order-{order.id}"
-```
+When setting workflow IDs in your SDK code, always derive them from business entities to avoid collisions. Using a static workflow ID like `"process-order"` for all orders causes failures; use `"process-order-{order.id}"` instead.

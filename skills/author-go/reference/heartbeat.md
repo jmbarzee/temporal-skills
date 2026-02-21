@@ -4,14 +4,22 @@
 
 ```twf
 activity ProcessLargeFile(fileId: string) -> (ProcessResult):
-    options:
-        start_to_close_timeout: 2h
-        heartbeat_timeout: 30s
     file = download(fileId)
     for (chunk in file.chunks):
         process(chunk)
         heartbeat(progress: {current: chunk, total: len(file.chunks)})
     return ProcessResult{success: true}
+```
+
+Calling the activity with heartbeat and timeout options:
+
+```twf
+workflow ProcessFiles(fileId: string) -> (ProcessResult):
+    activity ProcessLargeFile(fileId) -> result
+        options:
+            start_to_close_timeout: 2h
+            heartbeat_timeout: 30s
+    close complete(result)
 ```
 
 ## Go

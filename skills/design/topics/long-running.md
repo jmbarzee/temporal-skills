@@ -26,11 +26,11 @@ Atomically complete current workflow and start a new execution with fresh histor
 ### Basic Pattern
 
 ```twf
-workflow LongRunningProcessor(processor: Processor) -> void:
+workflow LongRunningProcessor(processor: Processor):
     eventCount = 0
     
     for:
-        await signal NewEvent -> event
+        await signal NewEvent -> (event)
         activity ProcessEvent(event)
         processor.processed += 1
         eventCount += 1
@@ -73,9 +73,9 @@ These appear in TWF as raw expressions since they're SDK-level calls, not TWF ke
 ### Data Serialization
 
 ```twf
-workflow EntityWorkflow(entity: Entity, data: EntityData) -> void:
+workflow EntityWorkflow(entity: Entity, data: EntityData):
     for:
-        await signal Command -> command
+        await signal Command -> (command)
         data = applyCommand(data, command)
         
         # Periodic continuation with current data
@@ -102,10 +102,10 @@ Long-lived workflow representing a business entity (user, order, account, subscr
 ### Structure
 
 ```twf
-workflow UserEntity(userId: string, user: User) -> void:
+workflow UserEntity(userId: string, user: User):
     # Initialize user if new
     if user == null:
-        activity LoadUser(userId) -> user
+        activity LoadUser(userId) -> (user)
 
     for:
         # Wait for commands or periodic triggers
@@ -130,10 +130,10 @@ workflow UserEntity(userId: string, user: User) -> void:
         if eventCount > 500:
             close continue_as_new(userId, user)
 
-query GetUser() -> User:
+query GetUser() -> (User):
     return user
 
-update UpdateSettings(settings: Settings) -> Result:
+update UpdateSettings(settings: Settings) -> (Result):
     user.settings = settings
     return Result{success: true}
 ```
@@ -176,7 +176,7 @@ temporal.signal("user-{userId}", Deactivate, {})
 ### Fixed Event Count
 
 ```twf
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     MAX_EVENTS = 1000
     eventCount = 0
     
@@ -191,7 +191,7 @@ workflow Processor(data: ProcessorData) -> void:
 ### Time-Based
 
 ```twf
-workflow DailyProcessor(data: ProcessorData, startTime: timestamp) -> void:
+workflow DailyProcessor(data: ProcessorData, startTime: timestamp):
     for:
         doWork()
         
@@ -203,7 +203,7 @@ workflow DailyProcessor(data: ProcessorData, startTime: timestamp) -> void:
 ### History Size Estimation
 
 ```twf
-workflow AdaptiveProcessor(data: ProcessorData) -> void:
+workflow AdaptiveProcessor(data: ProcessorData):
     heavyEventCount = 0
     lightEventCount = 0
     
@@ -240,7 +240,7 @@ Execution 2: starts with signals A, B, C in buffer (if pending)
 > Note: Signal draining logic is SDK-specific. Conceptual pseudo-code below.
 
 ```pseudo
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     for:
         # Process all pending signals before continue
         while has_pending_signals():
@@ -272,7 +272,7 @@ temporal.query("entity-123", GetState)
 > Note: `upsert_search_attributes` is an SDK-level call, not TWF notation.
 
 ```pseudo
-workflow EntityWorkflow(entityId: string, entity: Entity) -> void:
+workflow EntityWorkflow(entityId: string, entity: Entity):
     # Set search attributes for discovery (SDK call)
     upsert_search_attributes({
         EntityId: entityId,
@@ -299,17 +299,17 @@ workflow EntityWorkflow(entityId: string, entity: Entity) -> void:
 
 ```twf
 # BAD: Unbounded history growth
-workflow InfiniteLoop(data: LoopData) -> void:
+workflow InfiniteLoop(data: LoopData):
     for:
-        await signal Event -> event
+        await signal Event -> (event)
         process(event)
         # Never continues - history grows forever!
 
 # GOOD: Periodic continuation
-workflow InfiniteLoop(data: LoopData) -> void:
+workflow InfiniteLoop(data: LoopData):
     count = 0
     for:
-        await signal Event -> event
+        await signal Event -> (event)
         process(event)
         count += 1
         if count > 1000:
@@ -320,12 +320,12 @@ workflow InfiniteLoop(data: LoopData) -> void:
 
 ```twf
 # BAD: Data not passed to continuation
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     modifiedData = transform(data)
     close continue_as_new()  # Lost modifiedData!
 
 # GOOD: Pass current data
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     modifiedData = transform(data)
     close continue_as_new(modifiedData)
 ```
@@ -334,14 +334,14 @@ workflow Processor(data: ProcessorData) -> void:
 
 ```twf
 # BAD: Continue in middle of operation
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     activity Step1()
     if shouldContinue:
         close continue_as_new(data)  # Step2 never runs!
     activity Step2()
 
 # GOOD: Continue at natural boundary
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     activity Step1()
     activity Step2()
     if shouldContinue:
@@ -352,13 +352,13 @@ workflow Processor(data: ProcessorData) -> void:
 
 ```twf
 # BAD: Continue every event
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     event = await signal Event
     process(event)
     close continue_as_new(data)  # Unnecessary overhead!
 
 # GOOD: Batch before continuing
-workflow Processor(data: ProcessorData) -> void:
+workflow Processor(data: ProcessorData):
     count = 0
     for:
         event = await signal Event
@@ -384,7 +384,7 @@ workflow Processor(data: ProcessorData) -> void:
 ### Health Checks
 
 ```pseudo
-query GetHealth() -> HealthStatus:
+query GetHealth() -> (HealthStatus):
     return HealthStatus{
         eventCount: workflow.history_length(),  # SDK-specific API
         uptime: now() - startTime,

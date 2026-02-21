@@ -11,7 +11,7 @@ Durable sleep that survives worker restarts, deployments, and failures.
 ### Basic Timer
 
 ```twf
-workflow DelayedNotification(userId: string, delay: duration) -> void:
+workflow DelayedNotification(userId: string, delay: duration):
     # Durable sleep - workflow pauses but state is preserved
     await timer(delay)
 
@@ -34,7 +34,7 @@ workflow DelayedNotification(userId: string, delay: duration) -> void:
 ### Workflow-Level Deadline
 
 ```twf
-workflow OrderFulfillment(order: Order) -> OrderResult:
+workflow OrderFulfillment(order: Order) -> (OrderResult):
     # Entire workflow must complete within deadline (SDK-level config)
     # workflow_timeout: 7d
 
@@ -47,7 +47,7 @@ workflow OrderFulfillment(order: Order) -> OrderResult:
 ### Operation Deadline Pattern
 
 ```twf
-workflow ProcessWithDeadline(data: Data) -> Result:
+workflow ProcessWithDeadline(data: Data) -> (Result):
     # Race between operation and deadline
     await one:
         activity LongOperation(data) -> result:
@@ -60,7 +60,7 @@ workflow ProcessWithDeadline(data: Data) -> Result:
 ### Timeout on Signal Wait
 
 ```twf
-workflow ApprovalWorkflow(request: Request) -> Decision:
+workflow ApprovalWorkflow(request: Request) -> (Decision):
     activity NotifyApprovers(request)
 
     await one:
@@ -80,7 +80,7 @@ workflow ApprovalWorkflow(request: Request) -> Decision:
 ### Periodic Execution Within Workflow
 
 ```twf
-workflow Heartbeat(resourceId: string) -> void:
+workflow Heartbeat(resourceId: string):
     for:
         activity CheckHealth(resourceId)
         await timer(5m)
@@ -89,7 +89,7 @@ workflow Heartbeat(resourceId: string) -> void:
 ### Polling with Backoff
 
 ```twf
-workflow WaitForResource(resourceId: string) -> Resource:
+workflow WaitForResource(resourceId: string) -> (Resource):
     backoff = 1s
     max_backoff = 5m
 
@@ -105,7 +105,7 @@ workflow WaitForResource(resourceId: string) -> Resource:
 ### Deadline with Periodic Check
 
 ```twf
-workflow WaitForCompletion(jobId: string) -> JobResult:
+workflow WaitForCompletion(jobId: string) -> (JobResult):
     for:
         activity GetJobStatus(jobId) -> status
         if status.complete:

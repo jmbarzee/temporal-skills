@@ -85,8 +85,8 @@ workflow OrderFulfillment(orderId: string) -> (OrderResult):
     # Child workflow
     workflow ShipOrder(order) -> shipResult
 
-    # Cross-namespace call
-    nexus "notifications" workflow SendNotification(order.customer, "shipped")
+    # Cross-namespace nexus call
+    nexus NotificationsEndpoint NotificationsService.SendNotification(order.customer, "shipped")
 
     close complete(OrderResult{status: "completed"})
 
@@ -113,4 +113,26 @@ workflow SendNotification(customer: Customer, message: string):
 
 activity Notify(customer: Customer, message: string):
     send(customer, message)
+
+nexus service NotificationsService:
+    async SendNotification workflow SendNotification
+
+worker orderFulfillmentWorker:
+    workflow OrderFulfillment
+    workflow ShipOrder
+    workflow SendNotification
+    activity GetOrder
+    activity ValidateAddress
+    activity CancelOrder
+    activity CreateShipment
+    activity Notify
+    nexus service NotificationsService
+
+namespace default:
+    worker orderFulfillmentWorker
+        options:
+            task_queue: "orderFulfillment"
+    nexus endpoint NotificationsEndpoint
+        options:
+            task_queue: "orderFulfillment"
 ```

@@ -27,7 +27,7 @@ promise report <- workflow BuildReport(data)
 promise timeout <- timer(5m)
 promise approved <- signal Approved
 promise addr <- update ChangeAddress
-promise pay <- nexus "payments" workflow Charge(card)
+promise pay <- nexus PaymentsEndpoint PaymentsService.Charge(card)
 ```
 
 ### Awaiting a Promise

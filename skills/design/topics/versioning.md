@@ -38,9 +38,9 @@ Add conditional logic to handle old vs new code paths during replay.
 ### Basic Pattern
 
 ```twf
-workflow OrderWorkflow(order: Order) -> OrderResult:
+workflow OrderWorkflow(order: Order) -> (OrderResult):
     activity ValidateOrder(order)
-    
+
     # Version gate: new code only runs for new executions
     if patched("add-fraud-check"):
         activity FraudCheck(order)  # New step, only for new workflows
@@ -74,9 +74,9 @@ Replay of New Execution (started after patch):
 
 **Adding a Step:**
 ```twf
-workflow Process(data: Data) -> Result:
+workflow Process(data: Data) -> (Result):
     activity Step1(data)
-    
+
     if patched("v2-add-validation"):
         activity NewValidation(data)  # Added in V2
     
@@ -86,7 +86,7 @@ workflow Process(data: Data) -> Result:
 
 **Removing a Step:**
 ```twf
-workflow Process(data: Data) -> Result:
+workflow Process(data: Data) -> (Result):
     activity Step1(data)
 
     if not patched("v3-remove-legacy"):
@@ -98,7 +98,7 @@ workflow Process(data: Data) -> Result:
 
 **Changing a Step:**
 ```twf
-workflow Process(data: Data) -> Result:
+workflow Process(data: Data) -> (Result):
     activity Step1(data)
 
     if patched("v4-improved-processing"):
@@ -207,12 +207,12 @@ Create a new workflow type for breaking changes.
 
 ```twf
 # Version 1
-workflow OrderWorkflowV1(order: OrderV1) -> ResultV1:
+workflow OrderWorkflowV1(order: OrderV1) -> (ResultV1):
     # Original implementation
     ...
 
 # Version 2 (breaking changes)
-workflow OrderWorkflowV2(order: OrderV2) -> ResultV2:
+workflow OrderWorkflowV2(order: OrderV2) -> (ResultV2):
     # New implementation with different structure
     ...
 ```

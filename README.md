@@ -36,9 +36,9 @@ The language server provides real-time diagnostics, symbol resolution, completio
 
 A React + TypeScript webview (Vite-built) that renders parsed `.twf` ASTs. Runs standalone for development or embedded in the VS Code extension.
 
-**[Tree View](./tools/visualizer/TREE_VIEW.md)** — Renders every definition as a collapsible, color-coded block in a vertical list. Supports inline expansion of cross-references (a workflow call expands to show the target workflow's body in place), file filtering, definition type toggles, and search. Full light/dark theme support.
+**[Tree View](./tools/visualizer/spec/TREE_VIEW.md)** — Renders every definition as a collapsible, color-coded block in a vertical list. Supports inline expansion of cross-references (a workflow call expands to show the target workflow's body in place), file filtering, definition type toggles, and search. Full light/dark theme support.
 
-**[Graph View](./tools/visualizer/GRAPH_VIEW.md)** — A force-directed graph showing how definitions relate to each other. Three node levels (Namespace → Worker → Workflow) form a containment hierarchy with dependency edges derived by graph coarsening. Semantic zoom lets you select which abstraction levels are visible. Includes interactive force-tuning controls, animated level transitions, and hover/selection highlighting.
+**[Graph View](./tools/visualizer/spec/GRAPH_VIEW.md)** — A force-directed graph showing how definitions relate to each other. Three node levels (Namespace → Worker → Workflow) form a containment hierarchy with dependency edges derived by graph coarsening. Semantic zoom lets you select which abstraction levels are visible. Includes interactive force-tuning controls, animated level transitions, and hover/selection highlighting.
 
 ## Temporal Features
 

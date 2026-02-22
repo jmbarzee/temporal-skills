@@ -179,4 +179,4 @@ The CLI uses the same parser and resolver as the LSP server, ensuring consistent
 
 ## See Also
 
-- [Language Specification](../../LANGUAGE.md) - TWF syntax reference
+- [Language Specification](../../LANGUAGE_SPEC.md) - TWF syntax reference

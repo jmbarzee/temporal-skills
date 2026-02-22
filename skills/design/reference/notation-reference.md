@@ -44,4 +44,4 @@
 | `namespace name:` | Namespace definition (deployment with options) |
 | `nexus endpoint Name` (in namespace) | Nexus endpoint instantiation with task_queue |
 
-Full grammar: [`LANGUAGE.md`](../../tools/lsp/LANGUAGE.md).
+Full grammar: [`LANGUAGE_SPEC.md`](../../tools/lsp/LANGUAGE_SPEC.md).

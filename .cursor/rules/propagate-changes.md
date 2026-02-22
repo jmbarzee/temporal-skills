@@ -1,0 +1,1 @@
+../../.claude/commands/propagate-changes.md

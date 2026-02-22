@@ -73,11 +73,12 @@ workflow ProcessOrder(order: Order) -> (Result):
     else:
         activity StandardProcessing(order)
 
-    # Loops
+    # Sequential loop — use for when each iteration depends on order or shared state
+    # For independent iterations, consider await all with parallel activities instead
     for (item in order.items):
         activity ProcessItem(item)
 
-    # Parallel execution
+    # Parallel execution — use await all when tasks are independent and all results needed
     await all:
         activity ReserveInventory(order) -> inventory
         activity ProcessPayment(order) -> payment
@@ -196,4 +197,106 @@ namespace default:
     nexus endpoint NotificationsEndpoint
         options:
             task_queue: "orderFulfillment"
+```
+
+## Async Patterns
+
+```twf
+workflow OrderPipeline(order: Order) -> (PipelineResult):
+    state:
+        condition paymentConfirmed
+
+    # Update handler — validates and confirms payment
+    update ConfirmPayment(txn: Transaction) -> (ConfirmResult):
+        activity ValidateTxn(txn) -> validation
+        if (validation.ok):
+            set paymentConfirmed
+            return ConfirmResult{accepted: true}
+        else:
+            return ConfirmResult{accepted: false, reason: validation.error}
+
+    # Promise — start async, await later
+    promise inventory <- activity CheckInventory(order)
+
+    # Detach — fire-and-forget, no result observation
+    detach workflow AuditLog(order)
+
+    # Await condition — blocks until handler sets it
+    await paymentConfirmed
+
+    # Await promise — get the result started earlier
+    await inventory -> stock
+
+    # Switch — multi-branch dispatch
+    switch (stock.level):
+        case "high":
+            activity ShipStandard(order) -> shipment
+        case "low":
+            activity ShipFromWarehouse(order, stock.warehouseId) -> shipment
+        case "none":
+            close fail(PipelineResult{error: "out of stock"})
+
+    close complete(PipelineResult{shipment})
+
+# Heartbeat — report progress from long-running activity
+activity ProcessLargeDataset(datasetId: string) -> (ProcessResult):
+    # Call heartbeat() periodically to report progress
+    # If worker dies, Temporal detects missed heartbeat and retries on another worker
+    heartbeat()
+    return process(datasetId)
+
+# Call-level options — override timeout, routing, retry for a specific call
+workflow DeployService(config: DeployConfig) -> (DeployResult):
+    activity BuildArtifact(config) -> artifact
+    activity Deploy(artifact) -> result
+        options:
+            start_to_close_timeout: 30m
+            heartbeat_timeout: 5m
+            retry_policy:
+                maximum_attempts: 3
+    close complete(DeployResult{result})
+
+# Supporting definitions
+activity CheckInventory(order: Order) -> (InventoryStatus):
+    return inventory.check(order)
+
+activity ValidateTxn(txn: Transaction) -> (TxnValidation):
+    return payments.validate(txn)
+
+workflow AuditLog(order: Order):
+    activity RecordAudit(order)
+    close complete
+
+activity RecordAudit(order: Order):
+    audit.record(order)
+
+activity ShipStandard(order: Order) -> (Shipment):
+    return shipping.standard(order)
+
+activity ShipFromWarehouse(order: Order, warehouseId: string) -> (Shipment):
+    return shipping.fromWarehouse(order, warehouseId)
+
+activity BuildArtifact(config: DeployConfig) -> (Artifact):
+    return build(config)
+
+activity Deploy(artifact: Artifact) -> (DeployStatus):
+    return deploy(artifact)
+
+worker pipelineWorker:
+    workflow OrderPipeline
+    workflow AuditLog
+    workflow DeployService
+    activity CheckInventory
+    activity ValidateTxn
+    activity RecordAudit
+    activity ShipStandard
+    activity ShipFromWarehouse
+    activity ProcessLargeDataset
+    activity BuildArtifact
+    activity Deploy
+
+namespace default:
+    worker pipelineWorker
+        options:
+            task_queue: "pipeline"
 ```

@@ -142,7 +142,7 @@ Read only what the current design requires.
 
 | Topic | When to Consult | File |
 |-------|-----------------|------|
-| Core Principles | Determinism/idempotency review | [core-principles.md](./reference/core-principles.md) |
+| Determinism & Idempotency | Replay safety and retry resilience review | [core-principles.md](./reference/core-principles.md) |
 | Workflow Boundaries | Activity vs child workflow decision | [workflow-boundaries.md](./reference/workflow-boundaries.md) |
 | Signal vs Update | Choosing between signal and update for external input | [signals-queries-updates.md](./topics/signals-queries-updates.md) |
 | Notation Examples | Control flow, handlers, timers, nexus in TWF | [notation-examples.md](./reference/notation-examples.md) |

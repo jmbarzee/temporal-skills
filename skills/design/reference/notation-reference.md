@@ -2,28 +2,29 @@
 
 | Syntax | Meaning |
 |--------|---------|
-| `activity Name(args) -> result` | Call activity, bind result |
-| `workflow Name(args) -> result` | Call child workflow, bind result |
+| `activity Name(args) -> result` | Call activity, bind result (default for single operations) |
+| `workflow Name(args) -> result` | Call child workflow, bind result (multi-step with own failure boundary) |
 | `nexus Endpoint Service.Op(args) -> result` | Nexus service operation call |
-| `detach nexus Endpoint Service.Op(args)` | Fire-and-forget nexus call |
+| `detach nexus Endpoint Service.Op(args)` | Fire-and-forget nexus call (no result observation possible) |
 | `promise p <- nexus Endpoint Service.Op(args)` | Start async nexus call |
-| `promise p <- activity Name(args)` | Start async activity |
-| `promise p <- workflow Name(args)` | Start async child workflow |
+| `promise p <- activity Name(args)` | Start async activity (use when you need the result later, not immediately) |
+| `promise p <- workflow Name(args)` | Start async child workflow (parallel child execution) |
 | `promise p <- timer(duration)` | Start async timer |
 | `promise p <- signal Name` | Promise for signal |
 | `await p -> result` | Await promise, bind result |
-| `state:` | Workflow state block |
-| `condition name` | Named condition (in `state:` block) |
-| `set name` | Set condition true |
-| `unset name` | Set condition false |
+| `state:` | Workflow state block (conditions and variable initializations) |
+| `condition name` | Named boolean awaitable (in `state:` block) |
+| `set name` | Set condition to true (coordinate between handlers and main body) |
+| `unset name` | Set condition to false |
 | `await name` | Await condition |
-| `detach workflow Name(args)` | Fire-and-forget child workflow |
+| `detach workflow Name(args)` | Fire-and-forget child workflow (no result observation possible) |
 | `await timer(duration)` | Durable sleep |
 | `await signal Name` | Wait for signal |
 | `await update Name` | Wait for update |
 | `await nexus Endpoint Service.Op(args) -> result` | Wait for nexus call |
-| `await one:` | Race: first to complete wins |
-| `await all:` | Join: wait for all |
+| `await one:` | Race: first to complete wins (timeouts, signal-or-timer patterns) |
+| `await all:` | Join: wait for all (parallel execution) |
+| `heartbeat()` | Report progress from long-running activity (detect worker death) |
 | `options: key: value` | Options block for activity/workflow/nexus calls |
 | `-> (Type)` | Return type (always parenthesized) |
 | `-> result` | Bind preceding result |
@@ -44,4 +45,4 @@
 | `namespace name:` | Namespace definition (deployment with options) |
 | `nexus endpoint Name` (in namespace) | Nexus endpoint instantiation with task_queue |
 
-Full grammar: [`LANGUAGE_SPEC.md`](../../tools/lsp/LANGUAGE_SPEC.md).
+Full grammar: [`LANGUAGE_SPEC.md`](../../../tools/lsp/LANGUAGE_SPEC.md).

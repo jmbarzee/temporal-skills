@@ -99,13 +99,15 @@ At 13 lines with no judgment content, this file doesn't justify its context-load
 
 ---
 
-## Group 3: Enrich Reference File Judgment
+## Group 3: Enrich Reference File Judgment ✅ COMPLETED
 
 **Goal:** Transform reference files from pure lookup tables into judgment-teaching documents. Add *when to use*, *when not to use*, and decision criteria.
 
 **Why third:** These are the highest-risk files for wrong AI output. An AI that consults primitives-reference and gets no selection guidance will guess.
 
 **Depends on:** Group 1 (grammar links settled), Group 2 (extracted content landed in reference files)
+
+**Result:** All 6 reference files enriched. primitives-reference gained Selection paragraphs + misuse warnings. core-principles renamed to "Determinism & Idempotency" (Option B) with 3 new non-determinism traps, idempotency selection criteria, and Temporal docs link. workflow-boundaries expanded from 23→40 lines with Nexus section and Common Mistakes. notation-reference gained decision hints on 12 rows + heartbeat row. notation-examples gained Async Patterns section (promise, detach, condition, switch, heartbeat, options — all passing `twf check`). design-checklist gained resolution pointers and 2 missing checks.
 
 ### 3a. `reference/primitives-reference.md` — add selection guidance and misuse warnings
 

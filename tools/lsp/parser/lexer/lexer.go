@@ -189,26 +189,27 @@ func (l *Lexer) emitEOF() token.Token {
 	// the parser always sees NEWLINE before DEDENT/EOF.
 	if len(l.input) > 0 && l.input[len(l.input)-1] != '\n' {
 		nl := l.makeToken(token.NEWLINE, "")
-		// Queue remaining dedents and EOF after the newline.
-		for len(l.indentStack) > 1 {
-			l.indentStack = l.indentStack[:len(l.indentStack)-1]
-			l.pending = append(l.pending, l.makeToken(token.DEDENT, ""))
-		}
+		l.emitPendingDedents()
 		l.pending = append(l.pending, l.makeToken(token.EOF, ""))
 		return nl
 	}
 
 	if len(l.indentStack) > 1 {
-		for len(l.indentStack) > 1 {
-			l.indentStack = l.indentStack[:len(l.indentStack)-1]
-			l.pending = append(l.pending, l.makeToken(token.DEDENT, ""))
-		}
+		l.emitPendingDedents()
 		l.pending = append(l.pending, l.makeToken(token.EOF, ""))
 		tok := l.pending[0]
 		l.pending = l.pending[1:]
 		return tok
 	}
 	return l.makeToken(token.EOF, "")
+}
+
+// emitPendingDedents queues DEDENT tokens for all remaining indent levels.
+func (l *Lexer) emitPendingDedents() {
+	for len(l.indentStack) > 1 {
+		l.indentStack = l.indentStack[:len(l.indentStack)-1]
+		l.pending = append(l.pending, l.makeToken(token.DEDENT, ""))
+	}
 }
 
 func (l *Lexer) scanComment() token.Token {

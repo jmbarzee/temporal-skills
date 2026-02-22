@@ -87,7 +87,13 @@ const (
 	ARGS     // raw content between ( and ), no nested parens
 	COMMENT  // text after #
 	RAW_TEXT // anything else
+
+	tokenCount // sentinel: must be last — used for compile-time table size check
 )
+
+// Compile-time assertion: tokenTable has exactly tokenCount entries.
+// If a new TokenType const is added without a table entry (or vice versa), this fails.
+var _ [tokenCount]struct{} = [len(tokenTable)]struct{}{}
 
 // tokenInfo describes a token type's display name and whether it is a keyword.
 type tokenInfo struct {
@@ -189,6 +195,9 @@ func (t Token) String() string {
 // LookupIdent returns the TokenType for an identifier string.
 // If the identifier is a keyword, the keyword token type is returned.
 // Otherwise, IDENT is returned.
+// Note: lookup is case-sensitive. Keywords are lowercase, so "Workflow" is
+// treated as an IDENT, not a keyword. This is intentional — the DSL is
+// case-sensitive.
 func LookupIdent(ident string) TokenType {
 	if tt, ok := keywords[ident]; ok {
 		return tt

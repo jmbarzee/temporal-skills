@@ -37,124 +37,6 @@ func hoverHandler(store *DocumentStore) protocol.TextDocumentHoverFunc {
 	}
 }
 
-// findNodeAtLine returns the most specific AST node on the given line.
-func findNodeAtLine(file *ast.File, line int) ast.Node {
-	for _, def := range file.Definitions {
-		switch d := def.(type) {
-		case *ast.WorkflowDef:
-			if d.Line == line {
-				return d
-			}
-			for _, s := range d.Signals {
-				if s.Line == line {
-					return s
-				}
-			}
-			for _, q := range d.Queries {
-				if q.Line == line {
-					return q
-				}
-			}
-			for _, u := range d.Updates {
-				if u.Line == line {
-					return u
-				}
-			}
-			// Search handler bodies.
-			for _, s := range d.Signals {
-				if n := findNodeInStmts(s.Body, line); n != nil {
-					return n
-				}
-			}
-			for _, q := range d.Queries {
-				if n := findNodeInStmts(q.Body, line); n != nil {
-					return n
-				}
-			}
-			for _, u := range d.Updates {
-				if n := findNodeInStmts(u.Body, line); n != nil {
-					return n
-				}
-			}
-			if n := findNodeInStmts(d.Body, line); n != nil {
-				return n
-			}
-
-		case *ast.ActivityDef:
-			if d.Line == line {
-				return d
-			}
-			if n := findNodeInStmts(d.Body, line); n != nil {
-				return n
-			}
-
-		case *ast.NexusServiceDef:
-			if d.Line == line {
-				return d
-			}
-			// Check operations for sync operation bodies.
-			for _, op := range d.Operations {
-				if op.OpType == ast.NexusOpSync {
-					if n := findNodeInStmts(op.Body, line); n != nil {
-						return n
-					}
-				}
-			}
-
-		case *ast.WorkerDef:
-			if d.Line == line {
-				return d
-			}
-			for i := range d.Workflows {
-				if d.Workflows[i].Line == line {
-					return &d.Workflows[i]
-				}
-			}
-			for i := range d.Activities {
-				if d.Activities[i].Line == line {
-					return &d.Activities[i]
-				}
-			}
-			for i := range d.Services {
-				if d.Services[i].Line == line {
-					return &d.Services[i]
-				}
-			}
-
-		case *ast.NamespaceDef:
-			if d.Line == line {
-				return d
-			}
-			// Check namespace worker entries.
-			for i := range d.Workers {
-				if d.Workers[i].Line == line {
-					return &d.Workers[i]
-				}
-			}
-			// Check namespace endpoint entries.
-			for i := range d.Endpoints {
-				if d.Endpoints[i].Line == line {
-					return &d.Endpoints[i]
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// findNodeInStmts searches statements recursively for a node on the given line.
-func findNodeInStmts(stmts []ast.Statement, line int) ast.Node {
-	var found ast.Node
-	ast.WalkStatements(stmts, func(s ast.Statement) bool {
-		if s.NodeLine() == line {
-			found = s
-			return false
-		}
-		return true
-	})
-	return found
-}
-
 // signatureFor builds a human-readable signature for a node.
 func signatureFor(node ast.Node) string {
 	switch n := node.(type) {
@@ -301,50 +183,7 @@ func signatureFor(node ast.Node) string {
 		}
 		return sig
 	case *ast.AwaitStmt:
-		if n.Target == nil {
-			return "await"
-		}
-		switch t := n.Target.(type) {
-		case *ast.TimerTarget:
-			return fmt.Sprintf("await timer(%s)", t.Duration)
-		case *ast.SignalTarget:
-			if t.Params != "" {
-				return fmt.Sprintf("await signal %s -> %s", t.Signal.Name, t.Params)
-			}
-			return fmt.Sprintf("await signal %s", t.Signal.Name)
-		case *ast.UpdateTarget:
-			if t.Params != "" {
-				return fmt.Sprintf("await update %s -> %s", t.Update.Name, t.Params)
-			}
-			return fmt.Sprintf("await update %s", t.Update.Name)
-		case *ast.ActivityTarget:
-			if t.Result != "" {
-				return fmt.Sprintf("await activity %s(%s) -> %s", t.Activity.Name, t.Args, t.Result)
-			}
-			return fmt.Sprintf("await activity %s(%s)", t.Activity.Name, t.Args)
-		case *ast.WorkflowTarget:
-			prefix := "await workflow"
-			if t.Mode == ast.CallDetach {
-				prefix = "await detach workflow"
-			}
-			if t.Result != "" {
-				return fmt.Sprintf("%s %s(%s) -> %s", prefix, t.Workflow.Name, t.Args, t.Result)
-			}
-			return fmt.Sprintf("%s %s(%s)", prefix, t.Workflow.Name, t.Args)
-		case *ast.NexusTarget:
-			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint.Name, t.Service.Name, t.Operation.Name, t.Args)
-			if t.Result != "" {
-				sig += " -> " + t.Result
-			}
-			if t.Endpoint.Resolved != nil {
-				tq := extractEndpointTaskQueue(t.Endpoint.Resolved)
-				if tq != "" {
-					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, t.Endpoint.Resolved.Namespace)
-				}
-			}
-			return sig
-		}
-		return "await"
+		return signatureForAwait(n)
 	default:
 		return ""
 	}
@@ -366,6 +205,54 @@ func activitySig(a *ast.ActivityDef) string {
 		parts = append(parts, "-> ("+a.ReturnType+")")
 	}
 	return strings.Join(parts, " ")
+}
+
+// signatureForAwait builds a human-readable signature for an await statement.
+func signatureForAwait(n *ast.AwaitStmt) string {
+	if n.Target == nil {
+		return "await"
+	}
+	switch t := n.Target.(type) {
+	case *ast.TimerTarget:
+		return fmt.Sprintf("await timer(%s)", t.Duration)
+	case *ast.SignalTarget:
+		if t.Params != "" {
+			return fmt.Sprintf("await signal %s -> %s", t.Signal.Name, t.Params)
+		}
+		return fmt.Sprintf("await signal %s", t.Signal.Name)
+	case *ast.UpdateTarget:
+		if t.Params != "" {
+			return fmt.Sprintf("await update %s -> %s", t.Update.Name, t.Params)
+		}
+		return fmt.Sprintf("await update %s", t.Update.Name)
+	case *ast.ActivityTarget:
+		if t.Result != "" {
+			return fmt.Sprintf("await activity %s(%s) -> %s", t.Activity.Name, t.Args, t.Result)
+		}
+		return fmt.Sprintf("await activity %s(%s)", t.Activity.Name, t.Args)
+	case *ast.WorkflowTarget:
+		prefix := "await workflow"
+		if t.Mode == ast.CallDetach {
+			prefix = "await detach workflow"
+		}
+		if t.Result != "" {
+			return fmt.Sprintf("%s %s(%s) -> %s", prefix, t.Workflow.Name, t.Args, t.Result)
+		}
+		return fmt.Sprintf("%s %s(%s)", prefix, t.Workflow.Name, t.Args)
+	case *ast.NexusTarget:
+		sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint.Name, t.Service.Name, t.Operation.Name, t.Args)
+		if t.Result != "" {
+			sig += " -> " + t.Result
+		}
+		if t.Endpoint.Resolved != nil {
+			tq := extractEndpointTaskQueue(t.Endpoint.Resolved)
+			if tq != "" {
+				sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, t.Endpoint.Resolved.Namespace)
+			}
+		}
+		return sig
+	}
+	return "await"
 }
 
 // extractEndpointTaskQueue returns the task_queue value from a namespace endpoint's options.

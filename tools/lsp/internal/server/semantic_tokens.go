@@ -8,24 +8,29 @@ import (
 )
 
 // Semantic token type indices (must match legend order).
+type semanticTokenType = uint32
+
 const (
-	semKeyword   = 0
-	semFunction  = 1
-	semMethod    = 2
-	semEvent     = 3
-	semString    = 4
-	semComment   = 5
-	semOperator  = 6
-	semParameter = 7
-	semType      = 8
-	semVariable  = 9
-	semProperty  = 10
-	semNumber    = 11
+	semKeyword   semanticTokenType = iota
+	semFunction
+	semMethod
+	semEvent
+	semString
+	semComment
+	semOperator
+	semParameter
+	semType
+	semVariable
+	semProperty
+	semNumber
+	semCount // sentinel for compile-time check
 )
 
 // Semantic token modifier bits.
+type semanticTokenModifier = uint32
+
 const (
-	modDeclaration = 1 << 0
+	modDeclaration semanticTokenModifier = 1 << iota
 )
 
 func semanticTokensHandler(store *DocumentStore) protocol.TextDocumentSemanticTokensFullFunc {

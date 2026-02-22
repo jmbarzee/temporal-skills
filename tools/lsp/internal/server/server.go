@@ -6,6 +6,12 @@ import (
 	protocol "github.com/tliron/glsp/protocol_3_17"
 )
 
+// tokenTypeLegend defines the semantic token type names advertised to the client.
+// Order must match the semXxx iota constants in semantic_tokens.go.
+// The array size [semCount] is a compile-time assertion: if the number of
+// iota constants changes without updating this list, the build breaks.
+var tokenTypeLegend = [semCount]string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter", "type", "variable", "property", "number"}
+
 // NewHandler creates a protocol.Handler with all LSP methods registered.
 func NewHandler(name, version string) (*protocol.Handler, *DocumentStore) {
 	store := NewDocumentStore()
@@ -32,8 +38,7 @@ func NewHandler(name, version string) (*protocol.Handler, *DocumentStore) {
 			TextDocumentSignatureHelp:      signatureHelpHandler(store),
 			TextDocumentCodeAction:         codeActionHandler(store),
 		},
-		Initialize:            initializeHandler(name, version),
-		TextDocumentInlayHint: inlayHintHandler(store),
+		Initialize: initializeHandler(name, version),
 	}
 
 	return handler, store
@@ -66,13 +71,12 @@ func initializeHandler(name, version string) protocol.InitializeFunc {
 					},
 					SemanticTokensProvider: &protocol316.SemanticTokensOptions{
 						Legend: protocol316.SemanticTokensLegend{
-							TokenTypes:     []string{"keyword", "function", "method", "event", "string", "comment", "operator", "parameter", "type", "variable", "property", "number"},
+							TokenTypes:     tokenTypeLegend[:],
 							TokenModifiers: []string{"declaration"},
 						},
 						Full: true,
 					},
 				},
-				InlayHintProvider: &protocol.InlayHintOptions{},
 			},
 			ServerInfo: &protocol316.InitializeResultServerInfo{
 				Name:    name,

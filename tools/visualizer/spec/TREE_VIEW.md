@@ -1,6 +1,17 @@
 # Tree View
 
-The tree view is the existing primary view for the TWF Visualizer. It renders every definition from the AST as a collapsible, color-coded block in a vertical list. Nesting is achieved through progressive disclosure — clicking a block header expands it to reveal its children.
+The tree view is the primary view for the TWF Visualizer. It renders every definition from the AST as a collapsible, color-coded block in a vertical list. Nesting is achieved through progressive disclosure — clicking a block header expands it to reveal its children.
+
+
+## User Goals
+
+The tree view answers questions about **individual definitions and their contents**:
+
+1. **"What do these workflows do?"** — Read the step-by-step logic of any workflow, activity, or handler through recursive expand/collapse.
+2. **"What are the inputs and outputs?"** — See signatures (params → return type) on every definition and call.
+3. **"What handlers do these workflows expose?"** — See signal, query, and update declarations grouped at the top of each workflow body.
+4. **"What does this call expand to?"** — Inline expansion shows the full body of any referenced workflow, activity, or nexus operation without navigating away.
+5. **"What definitions exist in this file or package?"** — Filter and browse definitions by type, source file, and name.
 
 
 ## Existing codebase context
@@ -228,6 +239,35 @@ The tree view supports **inline expansion** of referenced definitions. When a ca
 Unresolved references (name not found in context) are marked visually but do not prevent rendering.
 
 
+## Contextual navigation buttons
+
+Every block in the tree view supports **contextual navigation** — small action buttons that appear on hover, positioned at the top-right of the block header, half-overlapping the upper border. These provide focus-shifting actions: navigating to callers, parent containers, or the graph view.
+
+### Available actions by block type
+
+| Block type | Available buttons |
+|------------|-------------------|
+| Workflow definition | Show callers, Show worker, Show in Graph |
+| Activity definition | Show callers, Show worker, Show in Graph |
+| NexusService definition | Show callers, Show worker, Show in Graph |
+| Worker definition | Show namespace, Show in Graph |
+| Namespace definition | Show in Graph |
+| Call block (activity/workflow/nexus call) | Show definition, Show in Graph |
+| Handler declaration (signal/query/update) | Show callers (workflows that send to this handler) |
+
+Buttons only appear when the action has at least one valid target. If a definition has no callers, "Show callers" does not appear.
+
+### Behavior
+
+- **Single target:** Clicking the button scrolls the tree view to the target, expanding its ancestry if needed, and flashes the target. Same animation sequence as "Show in [View]" (see [NAVIGATION.md](./NAVIGATION.md)).
+- **Multiple targets:** Clicking the button opens a small popover listing the targets. The user selects one, then the view navigates to it.
+- **Show in Graph:** Follows the cross-view "Show in [View]" sequence from NAVIGATION.md.
+
+### Data requirements
+
+The visualizer builds a **reverse reference index** client-side from the AST's forward references. For each definition, the index maps its name to the set of call sites (workflow + statement location) that reference it. This is computed from the same data already used by `DefinitionContext` — no parser changes needed.
+
+
 ## Visual design
 
 ### Color system
@@ -248,3 +288,8 @@ Icons are defined in the central theme map (`temporal-theme.tsx`). Most are Unic
 - Dark theme activates via `.vscode-dark` class (VS Code webview) or `[data-theme="dark"]` attribute
 - Every color palette has a matching dark variant defined in the CSS
 - Hover brightness shifts direction between themes (`0.95` in light, `1.1` in dark)
+
+
+## Cross-View Navigation
+
+The tree view participates in the visualizer's cross-view navigation system. See [NAVIGATION.md](./NAVIGATION.md) for the full spec covering view switching, "Show in Graph" actions, and shared filter vocabulary.

@@ -8,10 +8,10 @@ A second view for the Visualizer. The existing tree view shows definitions in is
 
 The graph view answers questions that the tree view cannot:
 
-1. **"What does this system look like?"** — A spatial overview of all namespaces, workers, and workflows, and the edges between them.
-2. **"What depends on what?"** — Trace a workflow's cross-worker and cross-namespace calls visually.
+1. **"What does this system look like?"** — A spatial overview of all namespaces, workers, and the definitions they host, with edges showing cross-boundary dependencies.
+2. **"What depends on what?"** — Trace cross-worker and cross-namespace calls visually.
 3. **"What is the blast radius of a change?"** — Select a node and see its transitive dependents at any level of abstraction.
-4. **"How is this namespace composed?"** — Zoom into a namespace to see its workers, then into a worker to see its workflows.
+4. **"How is this namespace composed?"** — Zoom into a namespace to see its workers, then into a worker to see its workflows, activities, and services.
 
 ---
 
@@ -23,32 +23,46 @@ The graph view answers questions that the tree view cannot:
 |-------|--------------|-----------------------------------------|
 | 1     | **Namespace** | Namespace definition                   |
 | 2     | **Worker**    | Worker instantiation within a namespace |
-| 3     | **Workflow**  | Workflow implementation within a worker |
+| 3     | **Workflow**  | Workflow registered on a worker         |
+| 3     | **Activity**  | Activity registered on a worker         |
+| 3     | **NexusService** | Nexus service registered on a worker |
 
-These form a strict containment hierarchy: every Workflow belongs to exactly one Worker, and every Worker belongs to exactly one Namespace.
+Level 3 contains all definition types that are registered on a Worker. These form a strict containment hierarchy: every Level 3 node belongs to exactly one Worker, and every Worker belongs to exactly one Namespace.
+
+**Future:** Per-type visibility toggle at Level 3, allowing users to show/hide Workflows, Activities, and NexusServices independently.
 
 ### Fundamental Edges
 
-These edges come directly from the data:
+**Containment edges** come from registration:
 
-1. **Workflow → Workflow** ("depends on") — A workflow calls or awaits another workflow.
-2. **Workflow → Worker** ("member of") — A workflow is registered on a specific worker.
-3. **Worker → Namespace** ("member of") — A worker is instantiated within a specific namespace.
+1. **Level 3 node → Worker** ("member of") — A workflow, activity, or nexus service is registered on a specific worker.
+2. **Worker → Namespace** ("member of") — A worker is instantiated within a specific namespace.
+
+**Dependency edges** come from cross-boundary calls. Only calls that cross a Worker boundary are included — same-worker calls are implicit in the containment hierarchy.
+
+1. **Workflow → Workflow** ("calls") — A workflow calls or awaits another workflow on a different worker.
+2. **Workflow → Activity** ("calls") — A workflow calls an activity on a different worker.
+3. **Workflow → Workflow via nexus** ("calls via nexus") — A workflow calls a nexus operation whose backing workflow is on a different worker (or in a different namespace). The edge connects caller to backing workflow directly; the nexus service and operation are metadata on the edge, not intermediary nodes.
+
+Nexus edges are visually distinct from direct call edges. Hovering a nexus edge reveals the endpoint, service, and operation. Edges sharing a nexus service or endpoint can be highlighted together to show shared scope.
 
 ### Derived Edges (Graph Coarsening)
 
-Higher-level dependency edges are **derived** by projecting lower-level edges upward through the containment hierarchy:
+Higher-level dependency edges are **derived** by projecting Level 3 dependency edges upward through the containment hierarchy:
 
-1. **Worker → Worker** ("depends on") — Exists when any workflow in Worker A depends on any workflow in Worker B. Discard self-loops (both ends resolve to the same worker).
-2. **Namespace → Namespace** ("depends on") — Exists when any worker in Namespace A depends on any worker in Namespace B. Discard self-loops (both ends resolve to the same namespace).
+1. **Worker → Worker** ("depends on") — Exists when any Level 3 node in Worker A depends on any Level 3 node in Worker B. Discard self-loops.
+2. **Namespace → Namespace** ("depends on") — Exists when any Worker in Namespace A depends on any Worker in Namespace B. Discard self-loops.
 
 ### Graph Construction Order
 
 1. Build Namespace nodes from namespace definitions.
 2. Build Worker nodes from worker instantiations; attach each to its parent Namespace.
-3. Build Workflow nodes from workflow implementations; attach each to its parent Worker.
-4. Resolve Workflow → Workflow dependency edges from call/await references.
-5. Project Workflow-level dependencies up to Worker-level; discard self-loops.
+3. Build Workflow, Activity, and NexusService nodes from registrations on each worker; attach each to its parent Worker.
+4. Resolve cross-worker dependency edges:
+   a. Workflow → Workflow edges from cross-worker workflow calls and awaits.
+   b. Workflow → Activity edges from cross-worker activity calls.
+   c. Workflow → Workflow (via nexus) edges by tracing nexus calls through to their backing workflows.
+5. Project Level 3 dependencies up to Worker-level; discard self-loops.
 6. Project Worker-level dependencies up to Namespace-level; discard self-loops.
 
 ---
@@ -67,19 +81,19 @@ The graph is rendered using a **force-directed layout** (also called a force sim
 
 Each force has a **strength** parameter that controls its magnitude. These strengths are the primary tuning knobs for the layout.
 
-### Per-Type Strength Parameters (8 total)
+### Per-Level Strength Parameters (8 total)
 
-Three **charge strengths** (one per node type):
-- Namespace node repulsion
-- Worker node repulsion
-- Workflow node repulsion
+Three **charge strengths** (one per level):
+- Level 1 (Namespace) node repulsion
+- Level 2 (Worker) node repulsion
+- Level 3 (Workflow/Activity/NexusService) node repulsion
 
 Five **link strengths** (one per edge type):
 - Namespace ↔ Namespace (dependency)
 - Namespace ↔ Worker (containment)
 - Worker ↔ Worker (dependency)
-- Worker ↔ Workflow (containment)
-- Workflow ↔ Workflow (dependency)
+- Worker ↔ Level 3 (containment)
+- Level 3 ↔ Level 3 (dependency)
 
 ### Simulation Lifecycle
 
@@ -94,7 +108,7 @@ The simulation should use **requestAnimationFrame** for rendering, decoupled fro
 
 ## Semantic Zoom: Level Selection
 
-The three node levels (Namespace, Worker, Workflow) represent a **semantic zoom** — not a geometric magnification, but a change in the *level of abstraction* being displayed. The user selects which levels are visible.
+The three node levels (Namespace, Worker, Level 3 definitions) represent a **semantic zoom** — not a geometric magnification, but a change in the *level of abstraction* being displayed. The user selects which levels are visible.
 
 ### Level Selector Control
 
@@ -103,8 +117,8 @@ A **range selector** (not a dropdown, not independent toggles) that enforces a s
 - Level 1 only (Namespaces)
 - Levels 1–2 (Namespaces + Workers)
 - Level 2 only (Workers)
-- Levels 2–3 (Workers + Workflows)
-- Level 3 only (Workflows)
+- Levels 2–3 (Workers + Definitions)
+- Level 3 only (Definitions)
 - Levels 1–3 (all)
 
 Display this as three horizontally arranged segments. A **bubble** or **highlight region** covers the selected span. Interaction model:
@@ -124,9 +138,11 @@ When a level is selected, its nodes and its **intra-level** dependency edges are
 | 1               | Namespaces                  | Namespace → Namespace                              |
 | 1–2             | Namespaces, Workers         | Namespace → Namespace, Namespace ↔ Worker, Worker → Worker |
 | 2               | Workers                     | Worker → Worker                                    |
-| 2–3             | Workers, Workflows          | Worker → Worker, Worker ↔ Workflow, Workflow → Workflow |
-| 3               | Workflows                   | Workflow → Workflow                                |
+| 2–3             | Workers, Level 3 nodes      | Worker → Worker, Worker ↔ Level 3, Level 3 → Level 3 |
+| 3               | Level 3 nodes               | Level 3 → Level 3                                  |
 | 1–3             | All                         | All                                                |
+
+Level 3 includes all node types registered on workers (Workflows, Activities, NexusServices). All types are shown by default. **Future:** per-type visibility toggle to show/hide specific Level 3 node types.
 
 ---
 
@@ -164,11 +180,15 @@ All strength transitions should be **interpolated over time** (not snapped). Use
 
 Each node type should be visually distinct using redundant encoding (don't rely on color alone):
 
-| Node Type   | Shape Suggestion      | Size      |
-|-------------|-----------------------|-----------|
-| Namespace   | Rounded rectangle     | Large     |
-| Worker      | Rectangle             | Medium    |
-| Workflow    | Circle or pill        | Small     |
+| Node Type      | Shape Suggestion      | Size      |
+|----------------|-----------------------|-----------|
+| Namespace      | Rounded rectangle     | Large     |
+| Worker         | Rectangle             | Medium    |
+| Workflow       | Circle or pill        | Small     |
+| Activity       | Circle or pill        | Small     |
+| NexusService   | Circle or pill        | Small     |
+
+Level 3 node types share the same size tier but are distinguished by color and icon (matching the tree view's existing color system: purple for workflows, blue for activities, pink for nexus services).
 
 All nodes display their name as a label. Labels should remain legible at typical zoom levels — consider truncation with a tooltip for long names.
 
@@ -176,10 +196,13 @@ All nodes display their name as a label. Labels should remain legible at typical
 
 | Edge Type                        | Line Style   | Direction Indicator |
 |----------------------------------|--------------|---------------------|
-| Dependency (→ same level)        | Solid        | Arrowhead           |
+| Direct dependency (→ same level) | Solid        | Arrowhead           |
+| Nexus dependency (→ via nexus)   | Solid, distinct color | Arrowhead    |
 | Containment (↔ adjacent levels)  | Dashed       | None (undirected)   |
 
 Edge opacity and thickness can be secondary signals — thicker or more opaque for higher-traffic connections if multiplicity data is available in the future.
+
+Nexus edges carry metadata (endpoint, service, operation) shown on hover. Hovering a nexus edge can highlight all edges sharing the same nexus scope (endpoint, service, or operation) to reveal shared routing.
 
 ### Color
 
@@ -214,7 +237,7 @@ A collapsible sidebar or bottom drawer containing the tuning controls. This serv
 
 1. **Level selector** — The contiguous range selector described above.
 2. **Force strength sliders** — The 8 sliders (3 charge, 5 link). Grouped visually:
-   - *Node repulsion* group (Namespace, Worker, Workflow)
+   - *Node repulsion* group (Level 1: Namespace, Level 2: Worker, Level 3: Definitions)
    - *Edge attraction* group (organized by edge type)
 3. **Simulation controls** — Play/pause the simulation. Optionally a "shake" or reheat button to escape local minima.
 4. **Presets** (optional, future) — Named slider configurations (e.g., "Tight clusters", "Spread out", "Namespace focus") that animate the sliders to known-good values.
@@ -228,7 +251,8 @@ Sliders should show their current numeric value and respond to direct input (cli
 ### Hover
 
 Hovering a node should:
-- Highlight the node and all its immediate edges.
+- Highlight the node and all its **immediate edges** — both outgoing (what this node depends on) and incoming (what depends on this node).
+- Highlight the nodes at the other end of those edges.
 - Dim all other nodes and edges (reduce opacity to ~20–30%).
 - Show a **tooltip** with the node's full name and type.
 
@@ -236,7 +260,8 @@ Hovering a node should:
 
 Clicking a node selects it. A selected node:
 - Stays highlighted even after the cursor moves away.
-- Optionally reveals an info panel showing the node's properties (name, type, parent, connected nodes).
+- Shows both incoming and outgoing dependency edges highlighted.
+- Optionally reveals an info panel showing the node's properties (name, type, parent, connected nodes, callers, callees).
 - Click the background or press Escape to deselect.
 
 ### Multi-Select (future consideration)
@@ -265,3 +290,8 @@ Shift-click or lasso to select multiple nodes. Useful for "what connects these t
 | **Focus + context (dimming)**  | Highlight what matters; push everything else to the background |
 | **Direct manipulation**        | Drag nodes, drag the viewport, scrub sliders — all immediate |
 | **Linked views (sliders ↔ simulation)** | Controls reflect simulation state; changes flow both ways  |
+
+
+## Cross-View Navigation
+
+The graph view participates in the visualizer's cross-view navigation system. See [NAVIGATION.md](./NAVIGATION.md) for the full spec covering view switching, "Show in Tree" actions, and shared filter vocabulary.

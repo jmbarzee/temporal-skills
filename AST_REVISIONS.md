@@ -148,87 +148,55 @@ Added category headers and per-constant doc comments to all 23 ErrorKind constan
 
 ---
 
-## Group 4: JSON Serialization Redesign
+## Group 4: JSON Serialization Redesign ✅ COMPLETED
 
 **Goal:** JSON output is a clean, complete representation of the resolved AST. No dropped data, no field bleeding, no historical cruft.
 
 **Depends on:** Groups 1, 2, 3
 
-### 4a. Emit resolved refs everywhere
+### 4a. Emit resolved refs everywhere ✅
 
-Currently `json.go` drops `Ref[T].Resolved` for ActivityCall, WorkflowCall, and WorkerDef refs. Only NexusCall emits resolved data. Fix: emit `resolvedRefJSON` (`{name, line, column}`) on every `Ref[T]` that has a non-nil Resolved.
+`activityCallJSON` and `workflowCallJSON` now include `Resolved *resolvedRefJSON`. Populated when `Ref[T].Resolved` is non-nil, matching the existing NexusCall and WorkerDef patterns. Also emitted on async target activity/workflow variants.
 
-This is the single highest-impact change for downstream consumers. The visualizer currently re-resolves every reference in TypeScript because the parser throws away its own work.
+### 4b. AsyncTarget → discriminated union JSON ✅
 
-### 4b. AsyncTarget → discriminated union JSON
+Replaced flat 22-field `asyncTargetFieldsJSON` with nested `asyncTargetJSON` discriminated union. Each kind populates exactly one per-kind field (`timer`, `signal`, `update`, `activity`, `workflow`, `nexus`, `ident`). Per-kind types include resolved refs where applicable.
 
-Replace the flat 22-field `asyncTargetFieldsJSON` with a nested structure:
+### 4c. Always emit empty arrays ✅
+
+Removed `omitempty` from `signals`, `queries`, `updates` on `WorkflowDefJSON`. Always emits `[]` instead of omitting the key.
+
+### 4d. Break apart marshalStatement ✅
+
+Extracted each case from `marshalStatement` into named per-type functions (`marshalActivityCall`, `marshalWorkflowCall`, etc.). The switch is now a clean dispatch table. Default case returns `fmt.Errorf` instead of silently marshaling.
+
+### 4e. Extract marshalDeclList helper ✅
+
+Generic `marshalDeclList[D, J]` replaces three identical loops in `WorkflowDef.MarshalJSON`. Companion functions: `marshalSignalDecl`, `marshalQueryDecl`, `marshalUpdateDecl`.
+
+### 4f. Add summary metadata ✅
+
+Top-level JSON output now includes a `summary` object counting definitions by type:
 ```json
-{
-  "kind": "activity",
-  "activity": {
-    "name": "ValidateOrder",
-    "args": "order",
-    "result": "valid",
-    "resolved": { "name": "ValidateOrder", "line": 45, "column": 1 }
-  }
-}
+{"summary": {"namespaces": 1, "workers": 3, "workflows": 6, "activities": 8, "nexusServices": 2}, "definitions": [...]}
 ```
 
-Each `kind` emits only its own fields. No more `workflowMode: "child"` on timer cases.
+### 4g. marshalDefinition + marshalStatement exhaustiveness ✅
 
-### 4c. Always emit empty arrays
+Both `marshalDefinition` and `marshalStatement` default cases now return `fmt.Errorf` instead of silently marshaling. New types get an immediate error signal.
 
-Remove `omitempty` from `signals`, `queries`, `updates` on WorkflowDefJSON. Always emit `"signals": []` instead of omitting the key. Eliminates a class of runtime bugs in TypeScript consumers.
+### Files changed
+- `parser/ast/json.go` (all changes)
 
-### 4d. Break apart marshalStatement
-
-The 214-line switch in `marshalStatement` should become per-type marshal functions (`marshalActivityCall`, `marshalWorkflowCall`, etc.). Each function returns `json.RawMessage`.
-
-### 4e. Extract marshalDeclList helper
-
-WorkflowDef.MarshalJSON has three nearly-identical loops for signals/queries/updates. Extract a generic `marshalDeclList[T]()` helper.
-
-### 4f. Add summary metadata
-
-Add a top-level `summary` object to parse output:
-```json
-{
-  "summary": {
-    "namespaces": 1,
-    "workers": 3,
-    "workflows": 6,
-    "activities": 8,
-    "nexusServices": 2,
-    "errors": 0
-  },
-  "definitions": [...]
-}
-```
-
-### 4g. marshalDefinition exhaustiveness
-
-Replace the silent `default` case in `marshalDefinition` with a panic or error. New Definition types must be explicitly handled.
-
-### Parallelism
-
-4a and 4c are small, surgical changes — **one agent for both**.
-4b is the largest change (new JSON shape for all async targets) — **dedicated agent**.
-4d and 4e are DRY refactors — **one agent for both**.
-4f and 4g are independent additions — **one agent for both**.
-
-### Files touched
-- `parser/ast/json.go` (primary)
-- `parser/ast/ast.go` (if File struct needs summary field)
-- `cmd/twf/parse.go` (if top-level JSON wrapper changes)
-
-### Breaking changes (document all for TS team)
-- Every Ref[T] now emits `resolved` field when resolved
-- AsyncTarget JSON is nested by kind, not flat
-- `signals`, `queries`, `updates` always present (empty array, not absent)
-- Top-level JSON gains `summary` object
-- NexusTarget/NexusCall JSON fields restructured (from Group 1)
-- CloseStmt reason is enum string, not freeform string
+### Breaking changes (for TS propagation)
+- **`activityCall` and `workflowCall`** gain optional `resolved` field (`{name, line, column}`)
+- **`signals`, `queries`, `updates`** always present on `workflowDef` (empty array, never omitted)
+- **AsyncTarget JSON restructured**: flat fields replaced by nested `"target"` object with discriminated union by `kind`. Each kind has its own sub-object with only relevant fields. Affects `await`, `awaitOne` cases, and `promise` statements
+- **Top-level JSON** gains `summary` object before `definitions`
+- **Propagation needed** in:
+  - `tools/visualizer/src/types/ast.ts` — update `ActivityCall`, `WorkflowCall`, `AwaitStmt`, `AwaitOneCase`, `PromiseStmt` interfaces
+  - `tools/visualizer/src/components/blocks/AwaitBlocks.tsx` — update `getAwaitTargetDisplay` to read nested `target` object
+  - `tools/visualizer/src/components/blocks/LeafBlocks.tsx` — update `PromiseBlock` to read nested `target` object
 
 ---
 

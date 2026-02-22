@@ -1,8 +1,8 @@
-# Skills Review
+# Skill DSL Alignment Review
 
-Review the AI skill definitions in `skills/` for accuracy, completeness, and alignment with the current DSL and parser state.
+Review the AI skill definitions in `skills/` for accuracy and alignment with the current DSL and parser state.
 
-Skills drift silently — they don't fail tests when the DSL changes. This review catches that drift.
+Skills drift silently — they don't fail tests when the DSL changes. This review catches that drift. For skill craft and structure, use `/project:review-skill`.
 
 ## Context
 
@@ -27,11 +27,6 @@ Before starting, read:
 ### 3. Coverage Gaps
 - What DSL features are new (per CHANGELOG) that lack skill documentation?
 - What skill documentation covers deprecated or removed features?
-
-### 4. Clarity & Quality
-- Are examples succinct and non-contrived?
-- Do examples use the full expressiveness of the DSL, or fall back on simpler constructs?
-- Is the skill documentation consistent in voice and structure across topics?
 
 ## Workflow
 

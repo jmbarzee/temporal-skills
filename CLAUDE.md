@@ -60,8 +60,12 @@ These project commands drive the development loop. Invoke with `/project:<name>`
 | `review-parser-internals` | Deep review of Go parser, AST, resolver implementation |
 | `review-parser-output` | Review JSON contract from the consumer's perspective |
 | `review-visualizer` | Review TypeScript visualizer against current JSON contract |
-| `review-skills` | Review design and author-go skills for DSL accuracy |
-| `propagate-changes` | Assess and plan downstream updates for changes in AST_REVISIONS.md |
+| `review-visualizer-spec` | Review visualizer from a product and UX perspective |
+| `review-dsl-spec` | Review DSL coverage and representation against Temporal primitives |
+| `review-skill` | Review a single skill for craft, focus, and density |
+| `review-skill-dsl-alignment` | Align skill content with current DSL and parser state |
+| `address-review` | Execute an approved review group (inner loop) |
+| `propagate-changes` | Identify downstream review commands needed after parser changes |
 
 **Start here for a new cycle:** `/project:dev-cycle`
 **Start here for targeted work:** pick the specific review command for the layer you're focused on.

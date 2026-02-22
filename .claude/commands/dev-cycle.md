@@ -23,7 +23,7 @@ Before launching any reviews, ask the user:
    - Parser internals (`/review-parser-internals`)
    - Parser output / JSON contract (`/review-parser-output`)
    - Visualizer TypeScript (`/review-visualizer`)
-   - Skills alignment (`/review-skills`)
+   - Skills alignment (`/review-skill-dsl-alignment`)
    - All of the above
 
 Present the proposed review scope and **wait for confirmation** before starting.

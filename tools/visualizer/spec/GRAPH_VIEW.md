@@ -6,12 +6,7 @@ A second view for the Visualizer. The existing tree view shows definitions in is
 
 ## User Goals
 
-The graph view answers questions that the tree view cannot:
-
-1. **"What does this system look like?"** — A spatial overview of all namespaces, workers, and the definitions they host, with edges showing cross-boundary dependencies.
-2. **"What depends on what?"** — Trace cross-worker and cross-namespace calls visually.
-3. **"What is the blast radius of a change?"** — Select a node and see its transitive dependents at any level of abstraction.
-4. **"How is this namespace composed?"** — Zoom into a namespace to see its workers, then into a worker to see its workflows, activities, and services.
+This view serves goals 6–9 (system architecture questions) from [PRODUCT.md](./PRODUCT.md) § User Goals.
 
 ---
 
@@ -64,6 +59,19 @@ Higher-level dependency edges are **derived** by projecting Level 3 dependency e
    c. Workflow → Workflow (via nexus) edges by tracing nexus calls through to their backing workflows.
 5. Project Level 3 dependencies up to Worker-level; discard self-loops.
 6. Project Worker-level dependencies up to Namespace-level; discard self-loops.
+
+### Orphan Definitions
+
+The containment hierarchy assumes every Level 3 node belongs to a Worker and every Worker belongs to a Namespace. But the DSL allows definitions without assignments — a workflow not registered on any worker, a worker not placed in any namespace.
+
+**Treatment:** Orphan definitions appear in the graph as uncontained nodes, visually distinct from contained ones (e.g., positioned outside any grouping, with a subtle "unassigned" indicator such as a dashed outline or muted badge). They participate in dependency edges normally.
+
+**Semantic zoom behavior:**
+- Orphan workers (no namespace) are visible when Level 2 is selected.
+- Orphan Level 3 nodes (no worker) are visible when Level 3 is selected.
+- When their level is not in the selected range, orphans are hidden like any other node at that level.
+
+**Data:** Orphan status is derivable from the AST — a definition is orphan if no worker or namespace references it. No parser changes needed.
 
 ---
 
@@ -206,7 +214,7 @@ Nexus edges carry metadata (endpoint, service, operation) shown on hover. Hoveri
 
 ### Color
 
-Use the existing visualizer color palette as a starting point. Assign a distinct hue per node type. Edges inherit the color of their source node, or use a neutral color to reduce visual noise.
+See [PRODUCT.md](./PRODUCT.md) § Visual Identity for the shared color palette. Edges inherit the color of their source node, or use a neutral color to reduce visual noise.
 
 ---
 
@@ -219,7 +227,7 @@ The graph lives on an infinite 2D canvas. Standard viewport interactions:
 | **Scroll / pinch** | Geometric zoom in/out      |
 | **Click-drag on background** | Pan the viewport  |
 | **Click-drag on a node**     | Drag the node; pin its position while dragging, release to unpin |
-| **Double-click a node**      | Center and zoom to fit the node and its immediate neighbors |
+| **Double-click a node**      | Center and zoom to fit the node and its immediate neighbors (graph-native; not used for cross-view navigation) |
 
 Dragging a node should **reheat** the simulation locally so nearby nodes can adjust.
 
@@ -246,9 +254,15 @@ Sliders should show their current numeric value and respond to direct input (cli
 
 ---
 
+## Errors Header
+
+The graph view surfaces parse errors using the shared error handling pattern. See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Error Handling. The error bar appears between the graph header controls (filter chips, level selector) and the graph canvas. The canvas still renders whatever valid nodes and edges exist in the partial AST.
+
+---
+
 ## Search and Filtering
 
-The graph view shares a filtering vocabulary with the tree view (see [NAVIGATION.md](./NAVIGATION.md)) but adds graph-specific dimensions.
+The graph view shares a filtering vocabulary with the tree view (see [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Shared Filter Vocabulary) but adds graph-specific dimensions.
 
 ### Filter Controls
 
@@ -275,10 +289,6 @@ This lets the user discover that matches exist, understand *why* they're hidden,
 ### Selecting a Search Result
 
 Clicking a visible search match centers the viewport on it and selects it (triggering the dependency highlight from the Interaction States spec).
-
-### Design Principle: Reactive Composition
-
-The graph view combines multiple reactive features (search, filters, semantic zoom, hover highlighting, force simulation) that interact with each other. The implementation should keep these concerns loosely coupled — each feature reads from shared state but doesn't directly manipulate another feature's state. This prevents cascading complexity as new features are added. The spec describes *what* each feature does; the implementation should compose them through shared data, not inter-feature wiring.
 
 ---
 
@@ -310,7 +320,7 @@ Clicking a node selects it. A selected node:
 
 ### Multi-Select (future consideration)
 
-Shift-click or lasso to select multiple nodes. Useful for "what connects these two namespaces?" queries.
+Lasso or modifier+click to select multiple nodes. Useful for "what connects these two namespaces?" queries. See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Keyboard Modifier Vocabulary for modifier key assignments — multi-select should use Ctrl/Meta+click (not Shift, which is reserved for dependency direction).
 
 ### Hotkey Discoverability
 
@@ -365,50 +375,11 @@ The edge data model, visual encoding tables, and interaction specs in this docum
 
 ---
 
-## Live Reload Behavior
+## Live Reload
 
-When the AST updates, the graph view preserves the user's spatial context.
-
-### Identity Matching
-
-Nodes are matched across AST versions **by name**. A node with the same name in the new AST is considered the same node. Renames are treated as a removal plus an addition.
-
-### State Preserved Across Reloads
-
-| State | Behavior |
-|-------|----------|
-| Node positions | Preserved for nodes that still exist. Simulation does not restart for surviving nodes. |
-| Viewport (zoom/pan) | Preserved. |
-| Semantic zoom level | Preserved. |
-| Force parameters | Preserved (slider values unchanged). |
-| Filter selections | Preserved. If a filtered file no longer exists, remove it from the selection. |
-| Search query | Preserved. Results recomputed against new nodes. |
-| Selection | Preserved if the selected node still exists. Cleared if the selected node was removed. |
-
-### Additions and Removals
-
-- **New nodes** are seeded at the position of their parent node (same as level transition seeding). The simulation reheats locally — new nodes spread out from their parent while existing nodes remain stable.
-- **Removed nodes** fade out over a short duration (~200 ms). Their edges disappear with them. The simulation reheats locally to let surviving neighbors adjust.
-
-### Transition Indicator
-
-A brief, non-blocking indicator signals the AST has been refreshed (same pattern as tree view). This should not interrupt hover or selection state.
+See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Live Reload for the shared reload behavior (identity matching, state preservation, transition indicator). Graph-view-specific reload details are documented there.
 
 ---
-
-## Summary of Patterns Used
-
-| Pattern                        | Purpose                                                     |
-|--------------------------------|-------------------------------------------------------------|
-| **Force-directed layout**      | Automatic, aesthetically pleasing spatial arrangement        |
-| **Semantic zoom**              | Navigate abstraction levels, not just magnification         |
-| **Graph coarsening**           | Derive higher-level relationships from lower-level data      |
-| **Containment hierarchy**      | Strict parent-child nesting gives structure to the graph     |
-| **Animated interpolation**     | Smooth transitions preserve spatial context during changes   |
-| **Focus + context (dimming)**  | Highlight what matters; push everything else to the background |
-| **Direct manipulation**        | Drag nodes, drag the viewport, scrub sliders — all immediate |
-| **Linked views (sliders ↔ simulation)** | Controls reflect simulation state; changes flow both ways  |
-
 
 ## Keyboard Navigation
 
@@ -433,15 +404,15 @@ The graph view supports keyboard navigation for node selection, viewport control
 
 The currently focused node has a visible focus ring (distinct from hover highlight and selection highlight). When a node is focused via keyboard, the tooltip appears as it would on mouse hover.
 
-### Modifier Keys with Keyboard
+### Modifier Keys
 
-The Shift modifier for upstream dependency highlighting (see Interaction States) also works with keyboard focus — holding Shift while a node is focused reverses the transitive highlight direction.
+See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Keyboard Modifier Vocabulary for modifier key semantics. The Shift modifier for upstream dependency highlighting (see § Interaction States) also works with keyboard focus — holding Shift while a node is focused reverses the transitive highlight direction.
 
 ### Accessibility
 
-ARIA roles should follow WAI-ARIA guidance for interactive graphics. Nodes should be focusable elements with labels announcing node type and name. Specific ARIA attributes are an implementation concern — the key requirement is that screen readers can announce node identity and dependency relationships.
+See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Accessibility for the shared accessibility approach (ARIA roles, focus indicators). Graph nodes are focusable elements with labels announcing node type and name.
 
 
 ## Cross-View Navigation
 
-The graph view participates in the visualizer's cross-view navigation system. See [NAVIGATION.md](./NAVIGATION.md) for the full spec covering view switching, "Show in Tree" actions, and shared filter vocabulary.
+The graph view participates in the visualizer's cross-view navigation system. See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) for view switching, "Show in Tree" actions, shared filter vocabulary, and other shared behaviors.

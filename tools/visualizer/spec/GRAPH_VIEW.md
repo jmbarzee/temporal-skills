@@ -246,27 +246,78 @@ Sliders should show their current numeric value and respond to direct input (cli
 
 ---
 
+## Search and Filtering
+
+The graph view shares a filtering vocabulary with the tree view (see [NAVIGATION.md](./NAVIGATION.md)) but adds graph-specific dimensions.
+
+### Filter Controls
+
+| Filter | Behavior | Shared with Tree View |
+|--------|----------|----------------------|
+| **Source file** | Filter visible nodes by which `.twf` file defines them. Same chip-based UI as tree view. | Yes (same vocabulary, independent state) |
+| **Name search** | Text input that matches node names (case-insensitive substring). Matching visible nodes highlight; non-matching visible nodes dim. | Yes (same vocabulary, independent state) |
+| **Semantic zoom** | Level selector (described above). Controls which hierarchy levels are visible. | No (graph-specific) |
+| **Level 3 type toggle** | Show/hide Workflows, Activities, NexusServices independently within Level 3. | Future |
+
+### Search and Hidden Matches
+
+Search matches against **all** nodes, not just visible ones. The results are split:
+
+- **Visible matches** — nodes that match the search AND are shown at the current semantic zoom level and filter state. These are highlighted in the graph.
+- **Hidden matches** — nodes that match the search but are excluded by filters (wrong zoom level, filtered file, toggled-off type). These are NOT shown in the graph.
+
+Hidden match counts appear as **badge overlays** on the filter controls that are hiding them:
+- If 3 matching workflows are hidden because semantic zoom is at Namespace-only, the level selector shows a badge: "3".
+- If 2 matching nodes are hidden because their source file is filtered out, the corresponding file chip shows a badge: "2".
+
+This lets the user discover that matches exist, understand *why* they're hidden, and decide whether to adjust filters to reveal them. Search informs but never overrides filters.
+
+### Selecting a Search Result
+
+Clicking a visible search match centers the viewport on it and selects it (triggering the dependency highlight from the Interaction States spec).
+
+### Design Principle: Reactive Composition
+
+The graph view combines multiple reactive features (search, filters, semantic zoom, hover highlighting, force simulation) that interact with each other. The implementation should keep these concerns loosely coupled — each feature reads from shared state but doesn't directly manipulate another feature's state. This prevents cascading complexity as new features are added. The spec describes *what* each feature does; the implementation should compose them through shared data, not inter-feature wiring.
+
+---
+
 ## Interaction States
 
-### Hover
+### Hover: Dependency Highlighting
 
-Hovering a node should:
-- Highlight the node and all its **immediate edges** — both outgoing (what this node depends on) and incoming (what depends on this node).
-- Highlight the nodes at the other end of those edges.
-- Dim all other nodes and edges (reduce opacity to ~20–30%).
-- Show a **tooltip** with the node's full name and type.
+Hovering a node highlights its **transitive dependency chain**, not just immediate neighbors. The direction of traversal is controlled by a modifier key:
+
+**Default hover (downstream):** Highlight the hovered node and all nodes it **transitively depends on** — follow outgoing dependency edges through the full call chain. This answers: "what does this node need?"
+
+**Modifier+hover (upstream):** Hold a modifier key (e.g., Shift) while hovering to reverse direction. Highlight the hovered node and all nodes that **transitively depend on it** — follow incoming dependency edges through the full caller chain. This answers: "what breaks if I change this?" (blast radius).
+
+In both modes:
+- The hovered node and all highlighted nodes are shown at full opacity.
+- All edges along the traversal path are highlighted.
+- All other nodes and edges dim (reduce opacity to ~20–30%).
+- Show a **tooltip** with the hovered node's full name and type.
+
+The transitive chain follows edges at the **currently visible** abstraction level. If only Namespace-level is shown, the chain follows Namespace → Namespace edges. If all levels are shown, it follows the finest-grained edges available.
 
 ### Selection
 
 Clicking a node selects it. A selected node:
 - Stays highlighted even after the cursor moves away.
-- Shows both incoming and outgoing dependency edges highlighted.
+- Retains the dependency highlight from hover (downstream by default, upstream if modifier was held during click).
 - Optionally reveals an info panel showing the node's properties (name, type, parent, connected nodes, callers, callees).
 - Click the background or press Escape to deselect.
 
 ### Multi-Select (future consideration)
 
 Shift-click or lasso to select multiple nodes. Useful for "what connects these two namespaces?" queries.
+
+### Hotkey Discoverability
+
+The graph view uses modifier keys for interaction variants (e.g., Shift+hover for upstream dependencies). These need to be discoverable:
+- Tooltip hint on first hover (e.g., "Hold Shift to show dependents").
+- A keyboard shortcut reference accessible from the control panel or a `?` button.
+- Modifier state reflected in the UI — when Shift is held, a subtle indicator appears (e.g., the cursor changes, or a small label like "upstream" appears near the hovered node).
 
 ---
 

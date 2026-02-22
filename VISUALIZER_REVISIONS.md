@@ -188,9 +188,11 @@ Computable client-side from the AST. The visualizer already builds `DefinitionCo
 
 ---
 
-## Group 5: Blast Radius Spec
+## Group 5: Blast Radius Spec ✅
 
 **Priority:** Tier 2 — depends on Group 2 (complete edges) and Group 4 (reverse references). Elevates an existing user goal from "declared" to "designed."
+
+**Status:** Complete. Reframed from selection-based to hover-based: default hover shows transitive downstream dependencies, modifier+hover shows transitive upstream (blast radius). Selection locks the highlight. Added hotkey discoverability spec. Note: Shift modifier conflicts with future multi-select spec — needs reconciliation later.
 
 ### Problem
 
@@ -223,9 +225,11 @@ Transitive dependency graph is computable from the edge set. Requires Group 2 (c
 
 ---
 
-## Group 6: Graph Search and Filtering
+## Group 6: Graph Search and Filtering ✅
 
 **Priority:** Tier 2 — the tree view has rich filtering; the graph has none.
+
+**Status:** Complete. Added search and filtering spec to GRAPH_VIEW.md: source file filter, name search, hidden-match badges on filter controls, search result selection. Added reactive composition design principle. Future note: hidden-match badge pattern may be useful for tree view too.
 
 ### Problem
 

@@ -58,11 +58,13 @@ Add the missing error types from `LANGUAGE_SPEC.md`:
 
 ---
 
-## Group 2: Tighten SKILL.md Top Level
+## Group 2: Tighten SKILL.md Top Level ✅ COMPLETED
 
 **Goal:** Remove reference content from the top-level entry point. Every line in SKILL.md should create directional momentum, not pre-load syntax.
 
 **Why second:** This affects every invocation of the skill. Reducing top-level noise amplifies all downstream improvements.
+
+**Result:** SKILL.md reduced from 219 to 157 lines (-28%). TWF Syntax section (65 lines of rules, examples, basic structure) replaced with 4-line pointer. Content landed in `notation-examples.md` (Basic Structure + Activity Body Detail sections). `editor-setup.md` deleted; visualizer mention folded into Completion section.
 
 ### 2a. Extract TWF Syntax section to reference files
 

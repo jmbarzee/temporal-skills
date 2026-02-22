@@ -109,69 +109,9 @@ To revise an existing `.twf` file: run `twf symbols` to understand current struc
 
 ## TWF Syntax
 
-Full grammar: [`LANGUAGE_SPEC.md`](../../../tools/lsp/LANGUAGE_SPEC.md). All `.twf` must pass `twf check` before presenting to user.
+Full grammar: [`LANGUAGE_SPEC.md`](../../../tools/lsp/LANGUAGE_SPEC.md). Quick reference: [`notation-reference.md`](./reference/notation-reference.md). Examples: [`notation-examples.md`](./reference/notation-examples.md). Common errors: [`common-errors.md`](./reference/common-errors.md).
 
-Activity bodies are intentionally free-form (`raw_stmt`) — they represent SDK-level implementation, not orchestration. Use pseudocode or descriptive text. The right level of detail depends on how obvious the behavior is from the name and signature:
-
-- **Obvious** — minimal body. `activity SendEmail(to: string, body: string)` doesn't need elaboration.
-- **Non-obvious** — describe key operations and external systems:
-
-```twf
-activity ExecuteToolCalls(toolCalls: ToolCalls) -> (ToolResults):
-    # Look up each tool by name in the tool registry
-    # Execute calls in parallel where possible
-    # If a tool is not found, return an error result (don't fail the activity)
-```
-
-- **Complex contract** — describe error conditions, ordering, and idempotency requirements:
-
-```twf
-activity ReconcileInventory(warehouseId: string, expected: Inventory) -> (ReconcileResult):
-    # Fetch current inventory, diff against expected, flag discrepancies
-    # Must be idempotent — running twice with same input produces same flags
-    # Warehouse API is rate-limited: max 10 requests/second
-```
-
-### Rules (enforced by `twf check`)
-
-| Rule | Correct | Wrong |
-|------|---------|-------|
-| Return types parenthesized | `-> (Result)` | `-> Result` |
-| `if`/`for` require parentheses | `if (expr):` / `for (x in items):` | `if expr:` / `for x in items:` |
-| Handlers inside workflows, before body | `signal`/`query`/`update` in workflow | At top level |
-| All calls need matching definitions | `activity Foo()` requires `activity Foo(...):` | Calling undefined |
-| Activities: no temporal primitives | — | `timer`, `signal`, `await` in activity body |
-| Files self-contained | All referenced definitions present | — |
-
-### Basic Structure
-
-```twf
-workflow WorkflowName(input: InputType) -> (OutputType):
-    activity ActivityName(input) -> result
-    workflow ChildWorkflowName(input) -> childResult
-    close complete(OutputType{result, childResult})
-
-workflow ChildWorkflowName(input: InputType) -> (ChildResult):
-    activity DoWork(input) -> result
-    close complete(ChildResult{result})
-
-activity ActivityName(input: InputType) -> (Result):
-    return process(input)
-
-activity DoWork(input: InputType) -> (WorkResult):
-    return work(input)
-
-worker mainWorker:
-    workflow WorkflowName
-    workflow ChildWorkflowName
-    activity ActivityName
-    activity DoWork
-
-namespace default:
-    worker mainWorker
-        options:
-            task_queue: "main"
-```
+All `.twf` must pass `twf check` before presenting to user. Activity bodies are free-form pseudocode — detail level depends on how obvious the behavior is (see [notation-examples.md](./reference/notation-examples.md#activity-body-detail)).
 
 ---
 
@@ -186,7 +126,7 @@ The design is ready to present when:
 5. Activities are idempotent (retries produce same result)
 6. Failure modes have recovery strategies
 
-For the full checklist: [design-checklist.md](./reference/design-checklist.md). Present a summary alongside the `.twf` file: key workflows, activity purposes, and notable design decisions.
+For the full checklist: [design-checklist.md](./reference/design-checklist.md). For complex control flow, parallel execution, or signal/timer races, suggest the TWF visualizer extension. Present a summary alongside the `.twf` file: key workflows, activity purposes, and notable design decisions.
 
 ---
 
@@ -213,6 +153,4 @@ Read only what the current design requires.
 | Primitives Reference | Temporal primitive lookup | [primitives-reference.md](./reference/primitives-reference.md) |
 | Workers & Task Queues | Worker grouping, task queue routing, deployment | [task-queues.md](./topics/task-queues.md) |
 | Nexus | Cross-namespace communication | [nexus.md](./topics/nexus.md) |
-| Editor Setup | VS Code/Cursor extension | [editor-setup.md](./reference/editor-setup.md) |
-
 Topic deep-dives are in `reference/` and `topics/` — consult as needed during design.

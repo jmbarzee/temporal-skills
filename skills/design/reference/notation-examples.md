@@ -1,5 +1,66 @@
 # TWF Notation Examples
 
+## Basic Structure
+
+A complete `.twf` file: workflows, activities, worker registration, and namespace deployment.
+
+```twf
+workflow WorkflowName(input: InputType) -> (OutputType):
+    activity ActivityName(input) -> result
+    workflow ChildWorkflowName(input) -> childResult
+    close complete(OutputType{result, childResult})
+
+workflow ChildWorkflowName(input: InputType) -> (ChildResult):
+    activity DoWork(input) -> result
+    close complete(ChildResult{result})
+
+activity ActivityName(input: InputType) -> (Result):
+    return process(input)
+
+activity DoWork(input: InputType) -> (WorkResult):
+    return work(input)
+
+worker mainWorker:
+    workflow WorkflowName
+    workflow ChildWorkflowName
+    activity ActivityName
+    activity DoWork
+
+namespace default:
+    worker mainWorker
+        options:
+            task_queue: "main"
+```
+
+## Activity Body Detail
+
+Activity bodies are intentionally free-form (`raw_stmt`) — pseudocode or descriptive text representing SDK-level implementation. Detail level depends on how obvious the behavior is from name and signature:
+
+**Obvious** — minimal body:
+
+```twf
+activity SendEmail(to: string, body: string):
+    send(to, body)
+```
+
+**Non-obvious** — describe key operations and external systems:
+
+```twf
+activity ExecuteToolCalls(toolCalls: ToolCalls) -> (ToolResults):
+    # Look up each tool by name in the tool registry
+    # Execute calls in parallel where possible
+    # If a tool is not found, return an error result (don't fail the activity)
+```
+
+**Complex contract** — describe error conditions, ordering, and idempotency requirements:
+
+```twf
+activity ReconcileInventory(warehouseId: string, expected: Inventory) -> (ReconcileResult):
+    # Fetch current inventory, diff against expected, flag discrepancies
+    # Must be idempotent — running twice with same input produces same flags
+    # Warehouse API is rate-limited: max 10 requests/second
+```
+
 ## Control Flow
 
 ```twf

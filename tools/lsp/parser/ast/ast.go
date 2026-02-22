@@ -53,6 +53,7 @@ type WorkflowDef struct {
 	Queries    []*QueryDecl
 	Updates    []*UpdateDecl
 	Body       []Statement
+	SourceFile string
 }
 
 func (*WorkflowDef) defNode() {}
@@ -63,6 +64,7 @@ type ActivityDef struct {
 	Params     string
 	ReturnType string
 	Body       []Statement
+	SourceFile string
 }
 
 func (*ActivityDef) defNode() {}
@@ -73,6 +75,7 @@ type WorkerDef struct {
 	Workflows  []Ref[*WorkflowDef]
 	Activities []Ref[*ActivityDef]
 	Services   []Ref[*NexusServiceDef] // nexus service references
+	SourceFile string
 }
 
 func (*WorkerDef) defNode() {}
@@ -95,9 +98,10 @@ type NamespaceEndpoint struct {
 // NamespaceDef is a namespace definition that instantiates workers with options.
 type NamespaceDef struct {
 	Pos
-	Name      string
-	Workers   []NamespaceWorker
-	Endpoints []NamespaceEndpoint
+	Name       string
+	Workers    []NamespaceWorker
+	Endpoints  []NamespaceEndpoint
+	SourceFile string
 }
 
 func (*NamespaceDef) defNode() {}
@@ -465,6 +469,7 @@ type NexusServiceDef struct {
 	Pos
 	Name       string
 	Operations []*NexusOperation
+	SourceFile string
 }
 
 func (*NexusServiceDef) defNode() {}

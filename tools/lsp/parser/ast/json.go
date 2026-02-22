@@ -194,6 +194,7 @@ type WorkflowDefJSON struct {
 	Type       string             `json:"type"`
 	Line       int                `json:"line"`
 	Column     int                `json:"column"`
+	SourceFile string             `json:"sourceFile,omitempty"`
 	Name       string             `json:"name"`
 	Params     string             `json:"params"`
 	ReturnType string             `json:"returnType,omitempty"`
@@ -222,6 +223,7 @@ func (w *WorkflowDef) MarshalJSON() ([]byte, error) {
 		Type:       "workflowDef",
 		Line:       w.Line,
 		Column:     w.Column,
+		SourceFile: w.SourceFile,
 		Name:       w.Name,
 		Params:     w.Params,
 		ReturnType: w.ReturnType,
@@ -262,6 +264,7 @@ type ActivityDefJSON struct {
 	Type       string            `json:"type"`
 	Line       int               `json:"line"`
 	Column     int               `json:"column"`
+	SourceFile string            `json:"sourceFile,omitempty"`
 	Name       string            `json:"name"`
 	Params     string            `json:"params"`
 	ReturnType string            `json:"returnType,omitempty"`
@@ -273,6 +276,7 @@ func (a *ActivityDef) MarshalJSON() ([]byte, error) {
 		Type:       "activityDef",
 		Line:       a.Line,
 		Column:     a.Column,
+		SourceFile: a.SourceFile,
 		Name:       a.Name,
 		Params:     a.Params,
 		ReturnType: a.ReturnType,
@@ -322,6 +326,7 @@ type WorkerDefJSON struct {
 	Type       string          `json:"type"`
 	Line       int             `json:"line"`
 	Column     int             `json:"column"`
+	SourceFile string          `json:"sourceFile,omitempty"`
 	Name       string          `json:"name"`
 	Workflows  []WorkerRefJSON `json:"workflows,omitempty"`
 	Activities []WorkerRefJSON `json:"activities,omitempty"`
@@ -333,6 +338,7 @@ func (w *WorkerDef) MarshalJSON() ([]byte, error) {
 		Type:       "workerDef",
 		Line:       w.Line,
 		Column:     w.Column,
+		SourceFile: w.SourceFile,
 		Name:       w.Name,
 		Workflows:  marshalWorkerRefs(w.Workflows),
 		Activities: marshalWorkerRefs(w.Activities),
@@ -360,20 +366,22 @@ type NamespaceEndpointJSON struct {
 
 // NamespaceDefJSON is the JSON representation of NamespaceDef.
 type NamespaceDefJSON struct {
-	Type      string                  `json:"type"`
-	Line      int                     `json:"line"`
-	Column    int                     `json:"column"`
-	Name      string                  `json:"name"`
-	Workers   []NamespaceWorkerJSON   `json:"workers,omitempty"`
-	Endpoints []NamespaceEndpointJSON `json:"endpoints,omitempty"`
+	Type       string                  `json:"type"`
+	Line       int                     `json:"line"`
+	Column     int                     `json:"column"`
+	SourceFile string                  `json:"sourceFile,omitempty"`
+	Name       string                  `json:"name"`
+	Workers    []NamespaceWorkerJSON   `json:"workers,omitempty"`
+	Endpoints  []NamespaceEndpointJSON `json:"endpoints,omitempty"`
 }
 
 func (n *NamespaceDef) MarshalJSON() ([]byte, error) {
 	nj := NamespaceDefJSON{
-		Type:   "namespaceDef",
-		Line:   n.Line,
-		Column: n.Column,
-		Name:   n.Name,
+		Type:       "namespaceDef",
+		Line:       n.Line,
+		Column:     n.Column,
+		SourceFile: n.SourceFile,
+		Name:       n.Name,
 	}
 	for _, w := range n.Workers {
 		wj := NamespaceWorkerJSON{
@@ -1041,16 +1049,18 @@ type NexusServiceDefJSON struct {
 	Type       string                `json:"type"`
 	Line       int                   `json:"line"`
 	Column     int                   `json:"column"`
+	SourceFile string                `json:"sourceFile,omitempty"`
 	Name       string                `json:"name"`
 	Operations []*NexusOperationJSON `json:"operations,omitempty"`
 }
 
 func (n *NexusServiceDef) MarshalJSON() ([]byte, error) {
 	nj := NexusServiceDefJSON{
-		Type:   "nexusServiceDef",
-		Line:   n.Line,
-		Column: n.Column,
-		Name:   n.Name,
+		Type:       "nexusServiceDef",
+		Line:       n.Line,
+		Column:     n.Column,
+		SourceFile: n.SourceFile,
+		Name:       n.Name,
 	}
 	for _, op := range n.Operations {
 		opj := &NexusOperationJSON{

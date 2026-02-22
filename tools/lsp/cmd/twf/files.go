@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/parser"
@@ -12,43 +12,47 @@ import (
 )
 
 // parseFiles reads and parses the given files, returning the AST and any errors.
-// Uses error-tolerant parsing (ParseFileAll) to return partial AST even with parse errors.
+// Each file is parsed independently with per-file line numbers. Definitions are
+// stamped with their source file and merged into a single AST for resolution.
 func parseFiles(paths []string, lenient bool) (*ast.File, []string, int) {
 	if len(paths) == 0 {
 		return nil, nil, 1
 	}
 
-	// Read and concatenate all input files
-	var parts []string
+	merged := &ast.File{}
+	var allErrs []string
+
+	// Parse each file independently
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading %s: %v\n", path, err)
 			return nil, nil, 1
 		}
-		parts = append(parts, string(data))
+
+		file, parseErrs := parser.ParseFileAll(string(data))
+
+		// Collect parse errors with filename prefix
+		for _, e := range parseErrs {
+			allErrs = append(allErrs, fmt.Sprintf("%s: %s", filepath.Base(path), e.Error()))
+		}
+
+		// Stamp source file and merge definitions
+		base := filepath.Base(path)
+		for _, def := range file.Definitions {
+			setSourceFile(def, base)
+			merged.Definitions = append(merged.Definitions, def)
+		}
 	}
-	input := strings.Join(parts, "\n")
 
-	// Parse with error tolerance - returns partial AST even with errors
-	file, parseErrs := parser.ParseFileAll(input)
-
-	// Collect all error messages
-	var allErrs []string
-
-	// Add parse errors
-	for _, e := range parseErrs {
-		allErrs = append(allErrs, e.Error())
-	}
-
-	// Resolve (even if there were parse errors, resolve what we got)
-	resolveErrs := resolver.Resolve(file)
+	// Resolve across all files
+	resolveErrs := resolver.Resolve(merged)
 	for _, e := range resolveErrs {
 		allErrs = append(allErrs, e.Error())
 	}
 
 	// Validate deployment/routing
-	validateErrs := validator.Validate(file)
+	validateErrs := validator.Validate(merged)
 	for _, e := range validateErrs {
 		allErrs = append(allErrs, e.Error())
 	}
@@ -59,5 +63,21 @@ func parseFiles(paths []string, lenient bool) (*ast.File, []string, int) {
 		exitCode = 1
 	}
 
-	return file, allErrs, exitCode
+	return merged, allErrs, exitCode
+}
+
+// setSourceFile stamps a definition with its source file name.
+func setSourceFile(def ast.Definition, sourceFile string) {
+	switch d := def.(type) {
+	case *ast.WorkflowDef:
+		d.SourceFile = sourceFile
+	case *ast.ActivityDef:
+		d.SourceFile = sourceFile
+	case *ast.WorkerDef:
+		d.SourceFile = sourceFile
+	case *ast.NamespaceDef:
+		d.SourceFile = sourceFile
+	case *ast.NexusServiceDef:
+		d.SourceFile = sourceFile
+	}
 }

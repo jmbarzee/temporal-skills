@@ -200,36 +200,36 @@ Both `marshalDefinition` and `marshalStatement` default cases now return `fmt.Er
 
 ---
 
-## Group 5: Multi-file sourceFile Tracking
+## Group 5: Multi-file sourceFile Tracking ✅ COMPLETED
 
 **Goal:** When multiple `.twf` files are parsed together, each definition carries its `sourceFile`. Cross-file resolution works.
 
-### 5a. Parser tracks file boundaries
+### Approach: Parse separately, merge, stamp
 
-When `parseFiles()` concatenates multiple files, inject markers or track byte offsets so each definition can be attributed to its source file. Options:
-- Track a `[]fileBoundary` (filename + start line) and assign during parsing
-- Parse files into separate ASTs, then merge definitions with sourceFile stamped
+Instead of concatenating files and tracking boundaries, each file is parsed independently via `ParseFileAll()`. Definitions are stamped with `SourceFile` (basename) and merged into a single `*ast.File` for cross-file resolution. This gives per-file line numbers (matching editor behavior) instead of global offsets into concatenated input.
 
-### 5b. AST carries sourceFile
+### 5a+5b. AST carries sourceFile ✅
 
-Add `SourceFile string` to each Definition type (or to the embedded `Pos` struct if all nodes should carry it).
+Added `SourceFile string` to all 5 Definition types: `WorkflowDef`, `ActivityDef`, `WorkerDef`, `NamespaceDef`, `NexusServiceDef`. Added to each definition JSON struct with `json:"sourceFile,omitempty"` and populated in each `MarshalJSON` method.
 
-### 5c. JSON emits sourceFile
+### 5c. Per-file parsing in CLI ✅
 
-Include `"sourceFile": "orders.twf"` on each definition in JSON output.
+Rewrote `parseFiles()` in `cmd/twf/files.go` to:
+- Parse each file independently (no more concatenation)
+- Stamp `SourceFile` on every definition
+- Merge definitions into single `*ast.File`
+- Resolve + validate on merged file
+- Parse error messages prefixed with filename
 
-### Parallelism
+### Files changed
+- `parser/ast/ast.go` — `SourceFile string` on 5 Definition types
+- `parser/ast/json.go` — `SourceFile` in 5 JSON structs + 5 MarshalJSON methods
+- `cmd/twf/files.go` — rewritten for per-file parsing
 
-Sequential — 5a must come before 5b, 5b before 5c.
-
-### Files touched
-- `parser/ast/ast.go` (new field)
-- `parser/ast/json.go` (emit field)
-- `parser/parser/parser.go` (track boundaries)
-- `cmd/twf/files.go` (pass file info to parser)
-
-### Breaking changes
-- New `sourceFile` field on all definitions in JSON output
+### Breaking changes (for TS propagation)
+- **All definitions** gain `sourceFile` field (always set to basename of source file)
+- **Line numbers** are now per-file, not global offsets into concatenated input
+- **Parse error messages** are now prefixed with filename
 
 ---
 

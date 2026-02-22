@@ -51,6 +51,7 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 	var queries []*ast.QueryDecl
 	var updates []*ast.UpdateDecl
 
+declLoop:
 	for {
 		// Skip blank lines and comments between declarations.
 		p.skipBlankLinesAndComments()
@@ -75,11 +76,10 @@ func parseWorkflowDef(p *Parser) (ast.Definition, error) {
 			}
 			updates = append(updates, u)
 		default:
-			goto parseBody
+			break declLoop
 		}
 	}
 
-parseBody:
 	// Parse workflow body.
 	body, err := p.parseBodyAs(bodyWorkflow)
 	if err != nil {

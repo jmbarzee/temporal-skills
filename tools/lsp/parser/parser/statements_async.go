@@ -1,98 +1,9 @@
 package parser
 
 import (
-	"strings"
-
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/ast"
 	"github.com/jmbarzee/temporal-skills/tools/lsp/parser/token"
 )
-
-// parseActivityCall parses: ACTIVITY IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ]
-func parseActivityCall(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume ACTIVITY
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	args, err := p.expect(token.ARGS)
-	if err != nil {
-		return nil, err
-	}
-
-	var result string
-	if p.current.Type == token.ARROW {
-		p.advance()
-		res, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		result = res.Literal
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	options, err := p.parseOptionalOptionsLine(OptionsContextActivity)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ast.ActivityCall{
-		Pos:      pos,
-		Activity: ast.Ref[*ast.ActivityDef]{Pos: pos, Name: name.Literal},
-		Args:     args.Literal,
-		Result:   result,
-		Options:  options,
-	}, nil
-}
-
-// parseWorkflowCall parses: WORKFLOW IDENT ARGS [ ARROW IDENT ] NEWLINE [ options_line ]
-func parseWorkflowCall(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume WORKFLOW
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	args, err := p.expect(token.ARGS)
-	if err != nil {
-		return nil, err
-	}
-
-	var result string
-	if p.current.Type == token.ARROW {
-		p.advance()
-		res, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		result = res.Literal
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	options, err := p.parseOptionalOptionsLine(OptionsContextWorkflow)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ast.WorkflowCall{
-		Pos:      pos,
-		Mode:     ast.CallChild,
-		Workflow: ast.Ref[*ast.WorkflowDef]{Pos: pos, Name: name.Literal},
-		Args:     args.Literal,
-		Result:   result,
-		Options:  options,
-	}, nil
-}
 
 // parseAwaitStmt handles both single await and await blocks (await all/one).
 // Single await: await timer(5m), await signal Name -> params, etc.
@@ -147,7 +58,7 @@ func parseAsyncTarget(p *Parser, allowArrows, allowDetach bool, pos ast.Pos) (as
 		}
 		return parseWorkflowOrNexusTarget(p, allowArrows, pos)
 	case token.NEXUS:
-		return parseNexusCallTarget(p, allowArrows)
+		return parseNexusTarget(p, false, allowArrows, pos)
 	case token.IDENT:
 		if !allowDetach {
 			return nil, p.errorf("expected timer, signal, update, activity, workflow, or nexus after '<-', got %s", p.current.Type)
@@ -239,7 +150,7 @@ func parseWorkflowOrNexusTarget(p *Parser, allowArrows bool, pos ast.Pos) (ast.A
 	}
 
 	if p.current.Type == token.NEXUS {
-		return parseDetachableNexusTarget(p, mode, allowArrows, pos)
+		return parseNexusTarget(p, mode == ast.CallDetach, allowArrows, pos)
 	}
 
 	if _, err := p.expect(token.WORKFLOW); err != nil {
@@ -276,8 +187,10 @@ func parseWorkflowOrNexusTarget(p *Parser, allowArrows bool, pos ast.Pos) (ast.A
 	return t, nil
 }
 
-// parseDetachableNexusTarget parses a nexus target that may have a DETACH prefix.
-func parseDetachableNexusTarget(p *Parser, mode ast.WorkflowCallMode, allowArrows bool, pos ast.Pos) (*ast.NexusTarget, error) {
+// parseNexusTarget parses: NEXUS IDENT IDENT DOT IDENT ARGS [ ARROW IDENT ]
+// The detach parameter controls whether Detach is set on the result.
+// When detach is true and a result arrow is present, an error is returned.
+func parseNexusTarget(p *Parser, detach, allowArrows bool, pos ast.Pos) (*ast.NexusTarget, error) {
 	p.advance() // consume NEXUS
 	endpoint, err := p.expect(token.IDENT)
 	if err != nil {
@@ -303,7 +216,7 @@ func parseDetachableNexusTarget(p *Parser, mode ast.WorkflowCallMode, allowArrow
 		Service:   ast.Ref[*ast.NexusServiceDef]{Pos: ast.Pos{Line: service.Line, Column: service.Column}, Name: service.Literal},
 		Operation: ast.Ref[*ast.NexusOperation]{Pos: ast.Pos{Line: operation.Line, Column: operation.Column}, Name: operation.Literal},
 		Args:      args.Literal,
-		Detach:    mode == ast.CallDetach,
+		Detach:    detach,
 	}
 	if allowArrows && p.current.Type == token.ARROW {
 		p.advance()
@@ -319,45 +232,6 @@ func parseDetachableNexusTarget(p *Parser, mode ast.WorkflowCallMode, allowArrow
 			Line:   pos.Line,
 			Column: pos.Column,
 		}
-	}
-	return t, nil
-}
-
-// parseNexusCallTarget parses a standalone nexus target (without DETACH prefix).
-func parseNexusCallTarget(p *Parser, allowArrows bool) (*ast.NexusTarget, error) {
-	p.advance() // consume NEXUS
-	endpoint, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	service, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.DOT); err != nil {
-		return nil, err
-	}
-	operation, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	args, err := p.expect(token.ARGS)
-	if err != nil {
-		return nil, err
-	}
-	t := &ast.NexusTarget{
-		Endpoint:  ast.Ref[*ast.NamespaceEndpoint]{Pos: ast.Pos{Line: endpoint.Line, Column: endpoint.Column}, Name: endpoint.Literal},
-		Service:   ast.Ref[*ast.NexusServiceDef]{Pos: ast.Pos{Line: service.Line, Column: service.Column}, Name: service.Literal},
-		Operation: ast.Ref[*ast.NexusOperation]{Pos: ast.Pos{Line: operation.Line, Column: operation.Column}, Name: operation.Literal},
-		Args:      args.Literal,
-	}
-	if allowArrows && p.current.Type == token.ARROW {
-		p.advance()
-		result, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		t.Result = result.Literal
 	}
 	return t, nil
 }
@@ -555,348 +429,5 @@ func parsePromiseStmt(p *Parser) (ast.Statement, error) {
 		Pos:    pos,
 		Name:   name.Literal,
 		Target: target,
-	}, nil
-}
-
-// parseSetStmt parses: SET IDENT NEWLINE
-func parseSetStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume SET
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.SetStmt{
-		Pos:       pos,
-		Condition: ast.Ref[*ast.ConditionDecl]{Pos: pos, Name: name.Literal},
-	}, nil
-}
-
-// parseUnsetStmt parses: UNSET IDENT NEWLINE
-func parseUnsetStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume UNSET
-
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.UnsetStmt{
-		Pos:       pos,
-		Condition: ast.Ref[*ast.ConditionDecl]{Pos: pos, Name: name.Literal},
-	}, nil
-}
-
-// parseSwitchBlock parses: SWITCH ARGS COLON NEWLINE INDENT { switch_case } [ else ] DEDENT
-func parseSwitchBlock(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume SWITCH
-
-	expr, err := p.expect(token.ARGS)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
-		return nil, err
-	}
-
-	var cases []*ast.SwitchCase
-	var defaultBody []ast.Statement
-
-	for p.current.Type != token.DEDENT && p.current.Type != token.EOF {
-		if p.current.Type == token.NEWLINE {
-			p.advance()
-			continue
-		}
-
-		if p.current.Type == token.ELSE {
-			p.advance()
-			if _, err := p.expect(token.COLON); err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(token.NEWLINE); err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(token.INDENT); err != nil {
-				return nil, err
-			}
-			defaultBody, err = p.parseBody()
-			if err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		if p.current.Type != token.CASE {
-			return nil, p.errorf("expected case or else in switch, got %s", p.current.Type)
-		}
-
-		casePos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-		p.advance() // consume CASE
-
-		// Collect the case value expression until COLON.
-		value := p.collectRawUntil(token.COLON)
-
-		if _, err := p.expect(token.COLON); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.NEWLINE); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.INDENT); err != nil {
-			return nil, err
-		}
-
-		body, err := p.parseBody()
-		if err != nil {
-			return nil, err
-		}
-
-		cases = append(cases, &ast.SwitchCase{
-			Pos:   casePos,
-			Value: value,
-			Body:  body,
-		})
-	}
-
-	if len(cases) == 0 {
-		return nil, &ParseError{
-			Msg:    "switch must have at least one case",
-			Line:   pos.Line,
-			Column: pos.Column,
-		}
-	}
-
-	if p.current.Type == token.DEDENT {
-		p.advance()
-	}
-
-	return &ast.SwitchBlock{
-		Pos:     pos,
-		Expr:    expr.Literal,
-		Cases:   cases,
-		Default: defaultBody,
-	}, nil
-}
-
-// parseIfStmt parses: IF ARGS COLON NEWLINE INDENT body DEDENT [ ELSE COLON NEWLINE INDENT body DEDENT ]
-func parseIfStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume IF
-
-	cond, err := p.expect(token.ARGS)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
-		return nil, err
-	}
-
-	body, err := p.parseBody()
-	if err != nil {
-		return nil, err
-	}
-
-	var elseBody []ast.Statement
-	if p.current.Type == token.ELSE {
-		p.advance()
-		if _, err := p.expect(token.COLON); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.NEWLINE); err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.INDENT); err != nil {
-			return nil, err
-		}
-		elseBody, err = p.parseBody()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &ast.IfStmt{
-		Pos:       pos,
-		Condition: cond.Literal,
-		Body:      body,
-		ElseBody:  elseBody,
-	}, nil
-}
-
-// parseForStmt parses: FOR [ ARGS ] COLON NEWLINE INDENT body DEDENT
-func parseForStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume FOR
-
-	stmt := &ast.ForStmt{Pos: pos}
-
-	if p.current.Type == token.COLON {
-		// Infinite loop: for:
-		stmt.Variant = ast.ForInfinite
-	} else if p.current.Type == token.ARGS {
-		content := p.current.Literal
-		p.advance()
-
-		// Check for "in" keyword using strings.Fields to find standalone word.
-		fields := strings.Fields(content)
-		inIdx := -1
-		for i, f := range fields {
-			if f == "in" {
-				inIdx = i
-				break
-			}
-		}
-
-		if inIdx > 0 {
-			// Iteration: for (var in collection):
-			stmt.Variant = ast.ForIteration
-			stmt.Variable = strings.Join(fields[:inIdx], " ")
-			stmt.Iterable = strings.Join(fields[inIdx+1:], " ")
-		} else {
-			// Conditional: for (condition):
-			stmt.Variant = ast.ForConditional
-			stmt.Condition = content
-		}
-	} else {
-		return nil, p.errorf("expected ( or : after for, got %s", p.current.Type)
-	}
-
-	if _, err := p.expect(token.COLON); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.NEWLINE); err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(token.INDENT); err != nil {
-		return nil, err
-	}
-
-	body, err := p.parseBody()
-	if err != nil {
-		return nil, err
-	}
-	stmt.Body = body
-
-	return stmt, nil
-}
-
-// parseReturnStmt parses: RETURN [ raw_expr ] NEWLINE
-func parseReturnStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume RETURN
-
-	var value string
-	if p.current.Type != token.NEWLINE && p.current.Type != token.DEDENT && p.current.Type != token.EOF {
-		value = p.collectRawUntil(token.NEWLINE)
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.ReturnStmt{
-		Pos:   pos,
-		Value: value,
-	}, nil
-}
-
-// parseCloseStmt parses: CLOSE (COMPLETE | FAIL | CONTINUE_AS_NEW) [ARGS] NEWLINE
-func parseCloseStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume CLOSE
-
-	var reason ast.CloseReason
-	switch p.current.Type {
-	case token.COMPLETE:
-		reason = ast.CloseComplete
-		p.advance()
-	case token.FAIL:
-		reason = ast.CloseFailWorkflow
-		p.advance()
-	case token.CONTINUE_AS_NEW:
-		reason = ast.CloseContinueAsNew
-		p.advance()
-	default:
-		return nil, p.errorf("expected complete, fail, or continue_as_new after 'close', got %s", p.current.Type)
-	}
-
-	var args string
-	if p.current.Type == token.ARGS {
-		args = p.current.Literal
-		p.advance()
-	}
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.CloseStmt{
-		Pos:    pos,
-		Reason: reason,
-		Args:   args,
-	}, nil
-}
-
-// parseBreakStmt parses: BREAK NEWLINE
-func parseBreakStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume BREAK
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.BreakStmt{Pos: pos}, nil
-}
-
-// parseContinueStmt parses: CONTINUE NEWLINE
-func parseContinueStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	p.advance() // consume CONTINUE
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.ContinueStmt{Pos: pos}, nil
-}
-
-// parseRawStmt captures the rest of the line as a raw statement.
-func parseRawStmt(p *Parser) (ast.Statement, error) {
-	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
-	text := p.collectRawUntil(token.NEWLINE)
-
-	if p.current.Type == token.NEWLINE {
-		p.advance()
-	}
-
-	return &ast.RawStmt{
-		Pos:  pos,
-		Text: text,
 	}, nil
 }

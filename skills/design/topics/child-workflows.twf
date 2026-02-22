@@ -17,38 +17,27 @@ workflow ParentWorkflow(input: Input) -> (Result):
     close complete(Result{childResult, childResult2})
 
 workflow ChildWorkflow(data: Data) -> (ChildResult):
-    activity Step1(data)
-    activity Step2(data)
+    activity ValidateInput(data)
+    activity TransformData(data)
     close complete(ChildResult{success: true})
 
 # --- Sequential decomposition ---
 
 workflow DeployApplication(app: App) -> (DeployResult):
     # Each child has own failure boundary
-    workflow DeployDatabase(app.database) -> dbResult
-    workflow DeployBackend(app.backend) -> beResult
-    workflow DeployFrontend(app.frontend) -> feResult
-    workflow ConfigureRouting(app) -> routeResult
+    workflow DeployInfrastructure(app) -> infraResult
+    workflow DeployServices(app) -> servicesResult
 
     close complete(DeployResult{status: "deployed"})
 
-workflow DeployDatabase(database: Database) -> (DeployResult):
-    activity ProvisionDB(database)
-    activity MigrateSchema(database)
+workflow DeployInfrastructure(app: App) -> (DeployResult):
+    activity ProvisionDatabase(app.database)
+    activity RunMigrations(app.database)
     close complete(DeployResult{status: "done"})
 
-workflow DeployBackend(backend: Backend) -> (DeployResult):
-    activity BuildBackend(backend)
-    activity DeployContainer(backend)
-    close complete(DeployResult{status: "done"})
-
-workflow DeployFrontend(frontend: Frontend) -> (DeployResult):
-    activity BuildFrontend(frontend)
-    activity DeployStatic(frontend)
-    close complete(DeployResult{status: "done"})
-
-workflow ConfigureRouting(app: App) -> (DeployResult):
-    activity SetupRoutes(app)
+workflow DeployServices(app: App) -> (DeployResult):
+    activity BuildArtifacts(app)
+    activity DeployContainers(app)
     close complete(DeployResult{status: "done"})
 
 # --- Parallel children ---
@@ -106,32 +95,23 @@ workflow NotifyCustomer(customer: Customer):
 
 # --- Supporting activities ---
 
-activity Step1(data: Data):
-    do_step1(data)
+activity ValidateInput(data: Data):
+    validate(data)
 
-activity Step2(data: Data):
-    do_step2(data)
+activity TransformData(data: Data):
+    transform(data)
 
-activity ProvisionDB(database: Database):
+activity ProvisionDatabase(database: Database):
     provision(database)
 
-activity MigrateSchema(database: Database):
+activity RunMigrations(database: Database):
     migrate(database)
 
-activity BuildBackend(backend: Backend):
-    build(backend)
+activity BuildArtifacts(app: App):
+    build(app)
 
-activity DeployContainer(backend: Backend):
-    deploy(backend)
-
-activity BuildFrontend(frontend: Frontend):
-    build(frontend)
-
-activity DeployStatic(frontend: Frontend):
-    deploy(frontend)
-
-activity SetupRoutes(app: App):
-    setup(app)
+activity DeployContainers(app: App):
+    deploy(app)
 
 activity ProcessSingleItem(item: Item) -> (Result):
     return process(item)

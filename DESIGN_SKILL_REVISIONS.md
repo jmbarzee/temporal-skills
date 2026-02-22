@@ -182,11 +182,13 @@ Remove deployment topology items that are redundant with `twf check` validation,
 
 ---
 
-## Group 4: Anti-Patterns Overhaul
+## Group 4: Anti-Patterns Overhaul ✅ COMPLETED
 
 **Goal:** Make the anti-patterns file the definitive catalog of Temporal design mistakes. Surface anti-patterns that are currently buried in topic files.
 
 **Depends on:** Group 3 (primitives-reference misuse warnings settled — avoid duplication)
+
+**Result:** anti-patterns.md rewritten from 3 entries to 11 across 3 categories: Structural (unbounded history, wrapper workflow, monolithic workflow, large payloads), Primitive Misuse (signal for RPC, query modifying state, update without validation, detach when result needed), Activity (non-determinism, non-idempotent, orchestration). common-errors.md gained cross-reference. SKILL.md Reference Index updated.
 
 ### 4a. Expand `reference/anti-patterns.md`
 

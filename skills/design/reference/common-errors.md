@@ -1,5 +1,7 @@
 # Common Errors
 
+This file covers **parser and resolver errors** from `twf check`. For **design-level anti-patterns** (structural mistakes, primitive misuse), see [anti-patterns.md](./anti-patterns.md).
+
 Common `twf check` errors and how to fix them.
 
 ## Resolve Errors

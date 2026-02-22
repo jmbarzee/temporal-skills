@@ -149,7 +149,7 @@ Read only what the current design requires.
 | Notation Reference | All TWF syntax constructs | [notation-reference.md](./reference/notation-reference.md) |
 | Design Checklist | Final verification before presenting | [design-checklist.md](./reference/design-checklist.md) |
 | Anti-Patterns | Common Temporal design mistakes | [anti-patterns.md](./reference/anti-patterns.md) |
-| Common Errors | Troubleshooting `twf check` | [common-errors.md](./reference/common-errors.md) |
+| Common Errors | Troubleshooting `twf check` parser/resolver errors | [common-errors.md](./reference/common-errors.md) |
 | Primitives Reference | Temporal primitive lookup | [primitives-reference.md](./reference/primitives-reference.md) |
 | Workers & Task Queues | Worker grouping, task queue routing, deployment | [task-queues.md](./topics/task-queues.md) |
 | Nexus | Cross-namespace communication | [nexus.md](./topics/nexus.md) |

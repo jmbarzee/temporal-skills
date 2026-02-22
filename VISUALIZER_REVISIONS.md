@@ -57,7 +57,7 @@ Extract from TREE_VIEW.md § Visual Design and VIEW_FRAMEWORK.md § Visual Consi
 
 ---
 
-## Group 2: Expand VIEW_FRAMEWORK.md — Shared View Behaviors
+## Group 2: Expand VIEW_FRAMEWORK.md — Shared View Behaviors ✅
 
 **Primary file:** `tools/visualizer/spec/VIEW_FRAMEWORK.md`
 

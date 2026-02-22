@@ -300,9 +300,11 @@ After all changes: `go run ./tools/lsp/cmd/twf check skills/design/topics/*.twf`
 
 ---
 
-## Group 6: Topic Scope Trimming
+## Group 6: Topic Scope Trimming ✅ COMPLETED
 
 **Goal:** Remove content that drifts into SDK/ops territory. Topics should teach TWF design patterns, not platform configuration.
+
+**Result:** `timers-scheduling.md` reduced from 291→129 lines (-56%): 169 lines of YAML schedule config replaced with 5-line note acknowledging schedules as platform config + Temporal docs link. `long-running.md` reduced from 394→226 lines (-43%): removed History Management Strategies (redundant), Signal Handling (SDK), Querying (SDK), Monitoring (ops), and duplicate "Never Continuing" anti-pattern. Kept 3 valuable continue-as-new anti-patterns (Losing Data, Wrong Place, Too Frequent).
 
 ### 6a. Trim `topics/timers-scheduling.md` Schedules section
 

@@ -19,6 +19,7 @@ Commands:
   check     Parse and validate TWF files
   parse     Output AST as JSON
   symbols   List workflows and activities
+  deps      Show dependency graph
   lsp       Start the language server (stdio)
   help      Show this help
 
@@ -47,6 +48,8 @@ func main() {
 		os.Exit(parseCommand(os.Args[2:]))
 	case "symbols":
 		os.Exit(symbolsCommand(os.Args[2:]))
+	case "deps":
+		os.Exit(depsCommand(os.Args[2:]))
 	case "lsp":
 		lspCommand()
 	case "help", "--help", "-h":

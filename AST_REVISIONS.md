@@ -314,91 +314,77 @@ Removed `--json` from global `Options:` section in usage text. It only applies t
 
 ---
 
-## Group 8: LSP Server Quality
+## Group 8: LSP Server Quality ✅ COMPLETED
 
 **Goal:** Reduce duplication, fix correctness bugs, remove dead code.
 
-### 8a. Shared AST query layer
+### 8a. Shared AST query layer — ALREADY CORRECT, reorg only ✅
 
-Extract `findNodeAtLine` into a single implementation used by hover, symbols, references, definition, and rename handlers. Consider a `Query` struct or package that indexes definitions by line.
+`findNodeAtLine` was already a single shared function used by all position-based handlers (hover, references, definition, rename, signature_help). Moved `findNodeAtLine` and `findNodeInStmts` from `hover.go` to new `query.go` for better organization.
 
-### 8b. Decompose signatureFor
+### 8b. Decompose signatureFor ✅
 
-Split the 182-line switch into per-node-type functions.
+Extracted `signatureForAwait` (45-line nested switch over 6 async target types) from `signatureFor`. The remaining 20 cases are already small (3-8 lines each) or call existing helpers (`workflowSig`, `activitySig`).
 
-### 8c. Semantic token type safety
+### 8c. Semantic token type safety ✅
 
-Replace magic constants (`semKeyword=0`, `modDeclaration=1<<0`) with typed enums. Ensure legend order changes produce compile errors, not silent misclassification.
+Replaced untyped integer constants with typed `semanticTokenType = uint32` and `semanticTokenModifier = uint32` aliases using `iota`. Added `semCount` sentinel. Extracted `tokenTypeLegend` as `[semCount]string` array — the array size is a compile-time assertion that the legend length matches the number of token type constants.
 
-### 8d. DocumentStore race condition
+### 8d. DocumentStore race condition — SKIP (no issue)
 
-`Update()` runs analysis outside the write lock. Move analysis inside the lock, or use a copy-on-write pattern where the new Document is fully analyzed before being stored.
+`analyze()` already runs inside the write lock in both `Open()` and `Update()`. No race condition exists.
 
-### 8e. Remove dead inlayHintHandler
+### 8e. Remove dead inlayHintHandler ✅
 
-Delete the stub that returns `(nil, nil)`.
+Deleted `inlay_hints.go` (no-op stub returning `nil, nil`). Removed handler registration and capability advertisement from `server.go`.
 
-### Parallelism
-
-8a is the largest change — **dedicated agent**.
-8b and 8c are independent — **one agent each, or combined**.
-8d and 8e are small — **one agent for both**.
-
-### Files touched
-- `internal/server/hover.go`, `references.go`, `symbols.go`, `definition.go`, `rename.go`
-- `internal/server/semantic_tokens.go`
-- `internal/server/document.go`
-- `internal/server/inlay_hints.go` (delete)
+### Files changed
+- `internal/server/query.go` — new (findNodeAtLine + findNodeInStmts)
+- `internal/server/hover.go` — removed query functions, extracted signatureForAwait
+- `internal/server/semantic_tokens.go` — typed constants with iota + semCount sentinel
+- `internal/server/server.go` — tokenTypeLegend array with compile-time assertion, removed inlay hints
+- `internal/server/inlay_hints.go` — deleted
 
 ### Breaking changes
 - None (LSP protocol unchanged)
 
 ---
 
-## Group 9: twf deps Subcommand
+## Group 9: twf deps Subcommand ✅ COMPLETED
 
 **Goal:** Purpose-built dependency graph output for the Graph View. Pre-computed nodes, edges, containment, and coarsened projections.
 
 **Depends on:** Groups 1–5 (clean AST, complete walker, resolved refs in JSON, sourceFile tracking)
 
-### 9a. Dependency extraction
+### 9a. Dependency extraction ✅
 
-Walk all workflow bodies, handler bodies, and nexus operation bodies to extract dependency edges. Use the improved walker (Group 2) to cover AsyncTarget nodes in await/promise/awaitOne contexts.
+3-pass `Extract()` function in `parser/deps/graph.go`:
+1. Build nodes + containment from definition types and worker/namespace registrations
+2. Walk all workflow bodies, handler bodies (signal/query/update), activity bodies, and nexus sync operation bodies using `WalkStatements` + `WithAsyncTargets` to extract edges from `ActivityCall`, `WorkflowCall`, `NexusCall` statements and `ActivityTarget`, `WorkflowTarget`, `NexusTarget` async targets
+3. Coarsen edges to worker-level and namespace-level
 
-### 9b. Containment hierarchy
+Unresolved references (nil `Resolved` pointer) are separated into their own list.
 
-Build parent→children relationships from namespace→worker→workflow/activity registration.
+### 9b. Containment hierarchy ✅
 
-### 9c. Graph coarsening
+Built during pass 1: `WorkerDef.Workflows/Activities/Services` → worker contains definitions. `NamespaceDef.Workers` → namespace contains workers. Reverse lookup maps enable coarsening.
 
-Project workflow-level edges to worker-level and namespace-level. Remove self-loops. Track weight and derivedFrom.
+### 9c. Graph coarsening ✅
 
-### 9d. Output structure
+Cross-worker and cross-namespace edges with weight (count of underlying edges) and `derivedFrom` (indices into `Graph.Edges`). Self-loops removed.
 
-```json
-{
-  "nodes": [...],
-  "edges": [...],
-  "containment": {...},
-  "coarsened": { "workerEdges": [...], "namespaceEdges": [...] },
-  "unresolved": [...],
-  "summary": {...}
-}
-```
+### 9d. JSON output ✅
 
-### 9e. Text output
+`twf deps --json` outputs the full `Graph` struct matching the planned schema.
 
-Human-readable default (no `--json` flag) showing namespaces, edges, cross-worker dependencies, and unresolved references.
+### 9e. Text output ✅
 
-### Parallelism
+`twf deps` (default) outputs: summary line, containment tree, edges grouped by source, cross-worker dependencies, cross-namespace dependencies, unresolved references.
 
-9a–9c are sequential (each builds on prior).
-9d and 9e are independent output formatters — **two agents in parallel** after 9a–9c.
-
-### Files touched
-- New `cmd/twf/deps.go`
-- New `parser/deps/` package (or inline in cmd)
-- `cmd/twf/main.go` (register command)
+### Files created
+- `parser/deps/graph.go` — types + extraction logic
+- `cmd/twf/deps.go` — command handler + JSON/text formatters
+- `cmd/twf/main.go` — registered `deps` command
 
 ### Breaking changes
 - New subcommand (additive, not breaking)

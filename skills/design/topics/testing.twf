@@ -68,6 +68,42 @@ workflow StatusWorkflow(orderId: string) -> (OrderResult):
     status = "completed"
     close complete(OrderResult{status: status, orderId: orderId})
 
+# --- Complex workflow for testing continue-as-new, conditions, and updates ---
+
+workflow SubscriptionManager(userId: string, sub: Subscription):
+    state:
+        condition renewed
+
+    update RenewSubscription(payment: Payment) -> (RenewResult):
+        activity ValidatePayment(payment) -> validation
+        if (validation.ok):
+            set renewed
+            return RenewResult{accepted: true}
+        else:
+            return RenewResult{accepted: false, reason: validation.error}
+
+    query GetSubscription() -> (Subscription):
+        return sub
+
+    for:
+        # Wait for renewal or expiration
+        await one:
+            renewed:
+                activity ExtendSubscription(userId, sub) -> sub
+                unset renewed
+            timer(30d):
+                activity SendExpirationWarning(userId)
+                await one:
+                    renewed:
+                        activity ExtendSubscription(userId, sub) -> sub
+                        unset renewed
+                    timer(7d):
+                        activity CancelSubscription(userId)
+                        close complete
+
+        # Periodic state snapshot for continue-as-new
+        close continue_as_new(userId, sub)
+
 # --- Supporting activities ---
 
 activity ValidateOrder(order: Order) -> (ValidationResult):
@@ -96,3 +132,15 @@ activity StartProcessing(orderId: string):
 
 activity ProcessItems(orderId: string):
     process(orderId)
+
+activity ValidatePayment(payment: Payment) -> (PaymentValidation):
+    return validate(payment)
+
+activity ExtendSubscription(userId: string, sub: Subscription) -> (Subscription):
+    return extend(userId, sub)
+
+activity SendExpirationWarning(userId: string):
+    warn(userId)
+
+activity CancelSubscription(userId: string):
+    cancel(userId)

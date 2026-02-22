@@ -64,7 +64,7 @@ nexus service PaymentService:
         activity LookupPayment(paymentId) -> status
         close complete(status)
 
-# AnalyticsService is defined but NOT registered on any worker → not hooked up
+# AnalyticsService on a separate analytics worker → independent scaling
 nexus service AnalyticsService:
     async TrackEvent workflow TrackEventWorkflow
 
@@ -88,6 +88,11 @@ worker paymentWorker:
     activity ChargePayment
     activity LookupPayment
     nexus service PaymentService
+
+worker analyticsWorker:
+    workflow TrackEventWorkflow
+    activity RecordEvent
+    nexus service AnalyticsService
 
 worker expressShipWorker:
     activity ShipOrder
@@ -121,7 +126,9 @@ namespace ecommerce:
     nexus endpoint PaymentEndpoint
         options:
             task_queue: "payments"
-    # Not connected: AnalyticsEndpoint routes to "analytics" but no worker on that queue has AnalyticsService
+    worker analyticsWorker
+        options:
+            task_queue: "analytics"
     nexus endpoint AnalyticsEndpoint
         options:
             task_queue: "analytics"

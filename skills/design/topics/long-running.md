@@ -107,6 +107,13 @@ workflow UserEntity(userId: string, user: User):
     if user == null:
         activity LoadUser(userId) -> (user)
 
+    query GetUser() -> (User):
+        return user
+
+    update UpdateSettings(settings: Settings) -> (Result):
+        user.settings = settings
+        return Result{success: true}
+
     for:
         # Wait for commands or periodic triggers
         await one:
@@ -129,13 +136,6 @@ workflow UserEntity(userId: string, user: User):
         # Continue-as-new periodically
         if eventCount > 500:
             close continue_as_new(userId, user)
-
-query GetUser() -> (User):
-    return user
-
-update UpdateSettings(settings: Settings) -> (Result):
-    user.settings = settings
-    return Result{success: true}
 ```
 
 ### Entity Lifecycle

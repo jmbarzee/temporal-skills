@@ -74,14 +74,24 @@ workflow BookingWorkflow(booking: Booking) -> (BookingResult):
     # Step 1: Reserve flight
     activity ReserveFlight(booking.flight) -> flight
 
-    # Step 2: Reserve hotel
+    # Step 2: Reserve hotel (compensate flight if this fails)
     activity ReserveHotel(booking.hotel) -> hotel
+    if (hotel.failed):
+        activity CancelFlight(flight.id)
+        close fail(BookingResult{status: "hotel_failed"})
 
-    # Step 3: Reserve car
+    # Step 3: Reserve car (compensate flight + hotel if this fails)
     activity ReserveCar(booking.car) -> car
+    if (car.failed):
+        activity CancelFlight(flight.id)
+        activity CancelHotel(hotel.id)
+        close fail(BookingResult{status: "car_failed"})
 
-    # Step 4: Charge payment
+    # Step 4: Charge payment (compensate all if this fails)
     activity ChargePayment(booking.payment) -> payment
+    if (payment.failed):
+        workflow CompensateBooking(flight.id, hotel.id, car.id)
+        close fail(BookingResult{status: "payment_failed"})
 
     # All succeeded
     close complete(BookingResult{status: "confirmed"})

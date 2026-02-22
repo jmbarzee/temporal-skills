@@ -233,11 +233,13 @@ Also add the "why" to the activity context restriction error: explain that activ
 
 ---
 
-## Group 5: Example Validity Fixes
+## Group 5: Example Validity Fixes ✅ COMPLETED
 
 **Goal:** Every `.twf` example passes `twf check`. Every `.md` code block is correctly tagged. `.twf` and `.md` companions tell the same story.
 
 **Depends on:** Groups 1–4 (grammar and reference content settled)
+
+**Result:** All 11 topic `.twf` files now pass `twf check` (100%). versioning.md: 10 `patched()` blocks re-tagged as `pseudo`, bridge paragraph added. task-queues.twf: orphan definitions registered on analyticsWorker — now passes. patterns.twf: saga enriched with failure/compensation branches. patterns.md: state machine aligned with `.twf`, "First Successful" renamed. testing.twf: added SubscriptionManager (continue-as-new + conditions + updates). skill-basics.twf: deleted (redundant). long-running.md: query/update placement fixed.
 
 ### 5a. Fix `topics/versioning.twf` + `topics/versioning.md` alignment
 

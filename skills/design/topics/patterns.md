@@ -214,7 +214,7 @@ workflow RateLimitedBatch(items: []Item) -> (BatchResult):
     close complete(BatchResult{})
 ```
 
-**With Early Exit:**
+**With Result Selection:**
 ```twf
 workflow FirstSuccessful(sources: []Source) -> (Data):
     await all:
@@ -306,44 +306,57 @@ Explicit states and transitions.
 
 ```twf
 workflow DocumentApproval(doc: Document) -> (ApprovalResult):
+    signal Submit():
+        phase = "pending_review"
+        activity NotifyReviewers(doc)
+
+    signal Approve():
+        phase = "approved"
+
+    signal Reject():
+        phase = "rejected"
+
+    signal RequestChanges():
+        phase = "changes_requested"
+
+    signal Withdraw():
+        phase = "withdrawn"
+
+    query GetPhase() -> (string):
+        return phase
+
     phase = "draft"
 
     for:
         switch (phase):
             case "draft":
-                await signal Submit
-                activity NotifyReviewers(doc)
-                phase = "pending_review"
-
+                await one:
+                    signal Submit:
+                    timer(90d):
+                        phase = "expired"
             case "pending_review":
                 await one:
                     signal Approve:
-                        phase = "approved"
                     signal Reject:
-                        phase = "rejected"
                     signal RequestChanges:
-                        phase = "changes_requested"
-
+                    timer(30d):
+                        phase = "expired"
             case "changes_requested":
                 await one:
                     signal Submit:
-                        phase = "pending_review"
                     signal Withdraw:
-                        phase = "withdrawn"
-
+                    timer(30d):
+                        phase = "expired"
             case "approved":
                 activity PublishDocument(doc)
                 close complete(ApprovalResult{status: "approved"})
-
             case "rejected":
                 activity ArchiveDocument(doc)
                 close complete(ApprovalResult{status: "rejected"})
-
             case "withdrawn":
                 close complete(ApprovalResult{status: "withdrawn"})
-
-query GetPhase() -> (string):
-    return phase
+            case "expired":
+                close complete(ApprovalResult{status: "expired"})
 ```
 
 ### State Transition Table
@@ -356,6 +369,9 @@ query GetPhase() -> (string):
 | pending_review | RequestChanges | changes_requested | None |
 | changes_requested | Submit | pending_review | None |
 | changes_requested | Withdraw | withdrawn | None |
+| draft | Timer(90d) | expired | Auto-expire |
+| pending_review | Timer(30d) | expired | Auto-expire |
+| changes_requested | Timer(30d) | expired | Auto-expire |
 
 ### When to Use
 - Approval workflows

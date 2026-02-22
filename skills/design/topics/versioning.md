@@ -35,9 +35,11 @@ Problem:
 
 Add conditional logic to handle old vs new code paths during replay.
 
+> **TWF vs SDK:** The `.twf` file ([`versioning.twf`](./versioning.twf)) uses boolean flag parameters for version gating — this is the DSL-level representation. The examples below use `patched("...")` which is the SDK-level API (Go: `workflow.GetVersion()`, Python: `patched()`). Both represent the same concept: branching on whether a workflow execution predates a code change.
+
 ### Basic Pattern
 
-```twf
+```pseudo
 workflow OrderWorkflow(order: Order) -> (OrderResult):
     activity ValidateOrder(order)
 
@@ -73,7 +75,7 @@ Replay of New Execution (started after patch):
 ### Patching Examples
 
 **Adding a Step:**
-```twf
+```pseudo
 workflow Process(data: Data) -> (Result):
     activity Step1(data)
 
@@ -85,7 +87,7 @@ workflow Process(data: Data) -> (Result):
 ```
 
 **Removing a Step:**
-```twf
+```pseudo
 workflow Process(data: Data) -> (Result):
     activity Step1(data)
 
@@ -97,7 +99,7 @@ workflow Process(data: Data) -> (Result):
 ```
 
 **Changing a Step:**
-```twf
+```pseudo
 workflow Process(data: Data) -> (Result):
     activity Step1(data)
 
@@ -299,10 +301,10 @@ temporal workflow list \
 
 ### Adding Activity
 
-```twf
+```pseudo
 workflow Process(data: Data):
     activity Existing1(data)
-    
+
     if patched("add-new-activity"):
         activity NewActivity(data)  # Safe to add
     
@@ -311,10 +313,10 @@ workflow Process(data: Data):
 
 ### Removing Activity
 
-```twf
+```pseudo
 workflow Process(data: Data):
     activity Existing1(data)
-    
+
     if not patched("remove-deprecated"):
         activity DeprecatedActivity(data)  # Removed for new, kept for old
     
@@ -323,13 +325,13 @@ workflow Process(data: Data):
 
 ### Reordering Activities
 
-```twf
+```pseudo
 # Original order: A, B, C
 # New order: A, C, B
 
 workflow Process(data: Data):
     activity A(data)
-    
+
     if patched("reorder-bc"):
         activity C(data)
         activity B(data)
@@ -340,7 +342,7 @@ workflow Process(data: Data):
 
 ### Changing Activity Parameters
 
-```twf
+```pseudo
 workflow Process(data: Data):
     if patched("new-activity-params"):
         activity Enhanced(data, extraParam: true)
@@ -354,7 +356,7 @@ workflow Process(data: Data):
 
 ### Unguarded Changes
 
-```twf
+```pseudo
 # BAD: Breaking change without version guard
 workflow Process(data: Data):
     activity Step1(data)
@@ -371,7 +373,7 @@ workflow Process(data: Data):
 
 ### Too Many Active Patches
 
-```twf
+```pseudo
 # BAD: Accumulated complexity
 workflow Process(data: Data):
     if patched("v1"):

@@ -502,23 +502,23 @@ namespace ns:
 	// Verify resolution links on NexusCall.
 	caller := file.Definitions[2].(*ast.WorkflowDef)
 	call := caller.Body[0].(*ast.NexusCall)
-	if call.ResolvedService == nil {
+	if call.Service.Resolved == nil {
 		t.Error("nexus call service not resolved")
-	} else if call.ResolvedService.Name != "OrderService" {
-		t.Errorf("resolved service %q, expected 'OrderService'", call.ResolvedService.Name)
+	} else if call.Service.Resolved.Name != "OrderService" {
+		t.Errorf("resolved service %q, expected 'OrderService'", call.Service.Resolved.Name)
 	}
-	if call.ResolvedOperation == nil {
+	if call.Operation.Resolved == nil {
 		t.Error("nexus call operation not resolved")
-	} else if call.ResolvedOperation.Name != "PlaceOrder" {
-		t.Errorf("resolved operation %q, expected 'PlaceOrder'", call.ResolvedOperation.Name)
+	} else if call.Operation.Resolved.Name != "PlaceOrder" {
+		t.Errorf("resolved operation %q, expected 'PlaceOrder'", call.Operation.Resolved.Name)
 	}
-	if call.ResolvedEndpoint == nil {
+	if call.Endpoint.Resolved == nil {
 		t.Error("nexus call endpoint not resolved")
-	} else if call.ResolvedEndpoint.EndpointName != "OrderEndpoint" {
-		t.Errorf("resolved endpoint %q, expected 'OrderEndpoint'", call.ResolvedEndpoint.EndpointName)
+	} else if call.Endpoint.Resolved.EndpointName != "OrderEndpoint" {
+		t.Errorf("resolved endpoint %q, expected 'OrderEndpoint'", call.Endpoint.Resolved.EndpointName)
 	}
-	if call.ResolvedEndpointNamespace != "ns" {
-		t.Errorf("resolved endpoint namespace %q, expected 'ns'", call.ResolvedEndpointNamespace)
+	if call.Endpoint.Resolved.Namespace != "ns" {
+		t.Errorf("resolved endpoint namespace %q, expected 'ns'", call.Endpoint.Resolved.Namespace)
 	}
 }
 
@@ -784,19 +784,19 @@ namespace ns:
 	if !ok {
 		t.Fatalf("expected NexusTarget, got %T", awaitStmt.Target)
 	}
-	if awaitNexus.ResolvedEndpoint == nil {
+	if awaitNexus.Endpoint.Resolved == nil {
 		t.Error("await nexus endpoint not resolved")
-	} else if awaitNexus.ResolvedEndpoint.EndpointName != "Ep" {
-		t.Errorf("await resolved endpoint %q, expected 'Ep'", awaitNexus.ResolvedEndpoint.EndpointName)
+	} else if awaitNexus.Endpoint.Resolved.EndpointName != "Ep" {
+		t.Errorf("await resolved endpoint %q, expected 'Ep'", awaitNexus.Endpoint.Resolved.EndpointName)
 	}
-	if awaitNexus.ResolvedService == nil {
+	if awaitNexus.Service.Resolved == nil {
 		t.Error("await nexus service not resolved")
 	}
-	if awaitNexus.ResolvedOperation == nil {
+	if awaitNexus.Operation.Resolved == nil {
 		t.Error("await nexus operation not resolved")
 	}
-	if awaitNexus.ResolvedEndpointNamespace != "ns" {
-		t.Errorf("await resolved endpoint namespace %q, expected 'ns'", awaitNexus.ResolvedEndpointNamespace)
+	if awaitNexus.Endpoint.Resolved.Namespace != "ns" {
+		t.Errorf("await resolved endpoint namespace %q, expected 'ns'", awaitNexus.Endpoint.Resolved.Namespace)
 	}
 
 	// Check promise nexus resolution.
@@ -805,15 +805,15 @@ namespace ns:
 	if !ok {
 		t.Fatalf("expected NexusTarget, got %T", promiseStmt.Target)
 	}
-	if promiseNexus.ResolvedEndpoint == nil {
+	if promiseNexus.Endpoint.Resolved == nil {
 		t.Error("promise nexus endpoint not resolved")
-	} else if promiseNexus.ResolvedEndpoint.EndpointName != "Ep" {
-		t.Errorf("promise resolved endpoint %q, expected 'Ep'", promiseNexus.ResolvedEndpoint.EndpointName)
+	} else if promiseNexus.Endpoint.Resolved.EndpointName != "Ep" {
+		t.Errorf("promise resolved endpoint %q, expected 'Ep'", promiseNexus.Endpoint.Resolved.EndpointName)
 	}
-	if promiseNexus.ResolvedService == nil {
+	if promiseNexus.Service.Resolved == nil {
 		t.Error("promise nexus service not resolved")
 	}
-	if promiseNexus.ResolvedOperation == nil {
+	if promiseNexus.Operation.Resolved == nil {
 		t.Error("promise nexus operation not resolved")
 	}
 }

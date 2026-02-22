@@ -525,7 +525,7 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Type:   "close",
 			Line:   s.Line,
 			Column: s.Column,
-			Reason: s.Reason,
+			Reason: closeReasonString(s.Reason),
 			Args:   s.Args,
 		})
 	case *BreakStmt:
@@ -569,15 +569,23 @@ func marshalStatement(stmt Statement) (json.RawMessage, error) {
 			Line:      s.Line,
 			Column:    s.Column,
 			Detach:    s.Detach,
-			Endpoint:  s.Endpoint,
-			Service:   s.Service,
-			Operation: s.Operation,
+			Endpoint:  s.Endpoint.Name,
+			Service:   s.Service.Name,
+			Operation: s.Operation.Name,
 			Args:      s.Args,
 			Result:    s.Result,
 			Options:   marshalOptionsBlock(s.Options),
 		}
-		nj.ResolvedEndpoint, nj.ResolvedService, nj.ResolvedOperation, nj.ResolvedEndpointNamespace =
-			marshalNexusResolved(s.ResolvedEndpoint, s.ResolvedEndpointNamespace, s.ResolvedService, s.ResolvedOperation)
+		if s.Endpoint.Resolved != nil {
+			nj.ResolvedEndpoint = &resolvedRefJSON{Name: s.Endpoint.Resolved.EndpointName, Line: s.Endpoint.Resolved.Line, Column: s.Endpoint.Resolved.Column}
+			nj.ResolvedEndpointNamespace = s.Endpoint.Resolved.Namespace
+		}
+		if s.Service.Resolved != nil {
+			nj.ResolvedService = &resolvedRefJSON{Name: s.Service.Resolved.Name, Line: s.Service.Resolved.Line, Column: s.Service.Resolved.Column}
+		}
+		if s.Operation.Resolved != nil {
+			nj.ResolvedOperation = &resolvedRefJSON{Name: s.Operation.Resolved.Name, Line: s.Operation.Resolved.Line, Column: s.Operation.Resolved.Column}
+		}
 		return json.Marshal(nj)
 	case *SetStmt:
 		return json.Marshal(setStmtJSON{
@@ -644,21 +652,17 @@ type workflowCallJSON struct {
 	Options *OptionsBlockJSON `json:"options,omitempty"`
 }
 
-// marshalNexusResolved converts nexus resolution fields to JSON reference form.
-func marshalNexusResolved(ep *NamespaceEndpoint, epNS string, svc *NexusServiceDef, op *NexusOperation) (
-	epRef, svcRef, opRef *resolvedRefJSON, ns string,
-) {
-	if ep != nil {
-		epRef = &resolvedRefJSON{Name: ep.EndpointName, Line: ep.Line, Column: ep.Column}
+func closeReasonString(r CloseReason) string {
+	switch r {
+	case CloseComplete:
+		return "complete"
+	case CloseFailWorkflow:
+		return "fail"
+	case CloseContinueAsNew:
+		return "continue_as_new"
+	default:
+		return "complete"
 	}
-	ns = epNS
-	if svc != nil {
-		svcRef = &resolvedRefJSON{Name: svc.Name, Line: svc.Line, Column: svc.Column}
-	}
-	if op != nil {
-		opRef = &resolvedRefJSON{Name: op.Name, Line: op.Line, Column: op.Column}
-	}
-	return
 }
 
 // asyncTargetFieldsJSON holds the flat JSON fields for an async target.
@@ -714,14 +718,22 @@ func marshalAsyncTargetFields(target AsyncTarget) asyncTargetFieldsJSON {
 		f.WorkflowArgs = t.Args
 		f.WorkflowResult = t.Result
 	case *NexusTarget:
-		f.Nexus = t.Endpoint
-		f.NexusService = t.Service
-		f.NexusOperation = t.Operation
+		f.Nexus = t.Endpoint.Name
+		f.NexusService = t.Service.Name
+		f.NexusOperation = t.Operation.Name
 		f.NexusArgs = t.Args
 		f.NexusResult = t.Result
 		f.NexusDetach = t.Detach
-		f.NexusResolvedEndpoint, f.NexusResolvedService, f.NexusResolvedOperation, f.NexusResolvedEndpointNamespace =
-			marshalNexusResolved(t.ResolvedEndpoint, t.ResolvedEndpointNamespace, t.ResolvedService, t.ResolvedOperation)
+		if t.Endpoint.Resolved != nil {
+			f.NexusResolvedEndpoint = &resolvedRefJSON{Name: t.Endpoint.Resolved.EndpointName, Line: t.Endpoint.Resolved.Line, Column: t.Endpoint.Resolved.Column}
+			f.NexusResolvedEndpointNamespace = t.Endpoint.Resolved.Namespace
+		}
+		if t.Service.Resolved != nil {
+			f.NexusResolvedService = &resolvedRefJSON{Name: t.Service.Resolved.Name, Line: t.Service.Resolved.Line, Column: t.Service.Resolved.Column}
+		}
+		if t.Operation.Resolved != nil {
+			f.NexusResolvedOperation = &resolvedRefJSON{Name: t.Operation.Resolved.Name, Line: t.Operation.Resolved.Line, Column: t.Operation.Resolved.Column}
+		}
 	case *IdentTarget:
 		f.Ident = t.Name
 		f.IdentResult = t.Result

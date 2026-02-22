@@ -41,19 +41,13 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("validation error at %d:%d: %s", e.Line, e.Column, e.Msg)
 }
 
-// endpointInfo tracks which namespace defines a nexus endpoint.
-type endpointInfo struct {
-	namespaceName string
-	endpoint      *ast.NamespaceEndpoint
-}
-
 type validationCtx struct {
 	workflows     map[string]*ast.WorkflowDef
 	activities    map[string]*ast.ActivityDef
 	workers       map[string]*ast.WorkerDef
 	namespaces    map[string]*ast.NamespaceDef
 	nexusServices map[string]*ast.NexusServiceDef
-	allEndpoints  map[string]*endpointInfo
+	allEndpoints  map[string]*ast.NamespaceEndpoint
 	errs          []*Error
 }
 
@@ -66,7 +60,7 @@ func Validate(file *ast.File) []*Error {
 		workers:       make(map[string]*ast.WorkerDef),
 		namespaces:    make(map[string]*ast.NamespaceDef),
 		nexusServices: make(map[string]*ast.NexusServiceDef),
-		allEndpoints:  make(map[string]*endpointInfo),
+		allEndpoints:  make(map[string]*ast.NamespaceEndpoint),
 	}
 
 	// Build definition maps from the AST.
@@ -89,10 +83,7 @@ func Validate(file *ast.File) []*Error {
 	for _, ns := range v.namespaces {
 		for i := range ns.Endpoints {
 			ep := &ns.Endpoints[i]
-			v.allEndpoints[ep.EndpointName] = &endpointInfo{
-				namespaceName: ns.Name,
-				endpoint:      ep,
-			}
+			v.allEndpoints[ep.EndpointName] = ep
 		}
 	}
 
@@ -320,7 +311,7 @@ func (v *validationCtx) walkStatements(stmts []ast.Statement, callingWorkflow st
 		case *ast.WorkflowCall:
 			v.checkCallRouting("workflow", n.Workflow.Name, n.Options, callingWorkflow, n.Line, n.Column)
 		case *ast.NexusCall:
-			v.checkEndpointServiceLinkage(n.Endpoint, n.Service, n.Line, n.Column)
+			v.checkEndpointServiceLinkage(n.Endpoint.Name, n.Service.Name, n.Line, n.Column)
 		default:
 			if target := ast.AsyncTargetOf(s); target != nil {
 				v.walkAsyncTarget(target, s.NodeLine(), s.NodeColumn())
@@ -332,7 +323,7 @@ func (v *validationCtx) walkStatements(stmts []ast.Statement, callingWorkflow st
 
 func (v *validationCtx) walkAsyncTarget(target ast.AsyncTarget, line, column int) {
 	if nt, ok := target.(*ast.NexusTarget); ok {
-		v.checkEndpointServiceLinkage(nt.Endpoint, nt.Service, line, column)
+		v.checkEndpointServiceLinkage(nt.Endpoint.Name, nt.Service.Name, line, column)
 	}
 }
 
@@ -456,11 +447,11 @@ func (v *validationCtx) taskQueuesForType(kind, name string) []string {
 // checkEndpointServiceLinkage verifies that the endpoint's task queue has a worker
 // that registers the given service.
 func (v *validationCtx) checkEndpointServiceLinkage(endpoint, service string, line, column int) {
-	epInfo, ok := v.allEndpoints[endpoint]
+	ep, ok := v.allEndpoints[endpoint]
 	if !ok {
 		return // endpoint not found — already reported by resolver
 	}
-	tq := extractTaskQueue(epInfo.endpoint.Options)
+	tq := extractTaskQueue(ep.Options)
 	if tq == "" {
 		return // missing task_queue — already reported in checkTaskQueueRequirements
 	}

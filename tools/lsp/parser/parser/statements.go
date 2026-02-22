@@ -299,9 +299,9 @@ func parseDetachableNexusTarget(p *Parser, mode ast.WorkflowCallMode, allowArrow
 		return nil, err
 	}
 	t := &ast.NexusTarget{
-		Endpoint:  endpoint.Literal,
-		Service:   service.Literal,
-		Operation: operation.Literal,
+		Endpoint:  ast.Ref[*ast.NamespaceEndpoint]{Pos: ast.Pos{Line: endpoint.Line, Column: endpoint.Column}, Name: endpoint.Literal},
+		Service:   ast.Ref[*ast.NexusServiceDef]{Pos: ast.Pos{Line: service.Line, Column: service.Column}, Name: service.Literal},
+		Operation: ast.Ref[*ast.NexusOperation]{Pos: ast.Pos{Line: operation.Line, Column: operation.Column}, Name: operation.Literal},
 		Args:      args.Literal,
 		Detach:    mode == ast.CallDetach,
 	}
@@ -346,9 +346,9 @@ func parseNexusCallTarget(p *Parser, allowArrows bool) (*ast.NexusTarget, error)
 		return nil, err
 	}
 	t := &ast.NexusTarget{
-		Endpoint:  endpoint.Literal,
-		Service:   service.Literal,
-		Operation: operation.Literal,
+		Endpoint:  ast.Ref[*ast.NamespaceEndpoint]{Pos: ast.Pos{Line: endpoint.Line, Column: endpoint.Column}, Name: endpoint.Literal},
+		Service:   ast.Ref[*ast.NexusServiceDef]{Pos: ast.Pos{Line: service.Line, Column: service.Column}, Name: service.Literal},
+		Operation: ast.Ref[*ast.NexusOperation]{Pos: ast.Pos{Line: operation.Line, Column: operation.Column}, Name: operation.Literal},
 		Args:      args.Literal,
 	}
 	if allowArrows && p.current.Type == token.ARROW {
@@ -830,16 +830,16 @@ func parseCloseStmt(p *Parser) (ast.Statement, error) {
 	pos := ast.Pos{Line: p.current.Line, Column: p.current.Column}
 	p.advance() // consume CLOSE
 
-	var reason string
+	var reason ast.CloseReason
 	switch p.current.Type {
 	case token.COMPLETE:
-		reason = "complete"
+		reason = ast.CloseComplete
 		p.advance()
 	case token.FAIL:
-		reason = "fail"
+		reason = ast.CloseFailWorkflow
 		p.advance()
 	case token.CONTINUE_AS_NEW:
-		reason = "continue_as_new"
+		reason = ast.CloseContinueAsNew
 		p.advance()
 	default:
 		return nil, p.errorf("expected complete, fail, or continue_as_new after 'close', got %s", p.current.Type)

@@ -83,10 +83,10 @@ func nameOfNode(node ast.Node) (name, kind string) {
 		}
 		return n.Workflow.Name, "workflow"
 	case *ast.NexusCall:
-		if n.ResolvedService != nil {
-			return n.ResolvedService.Name, "nexus_service"
+		if n.Service.Resolved != nil {
+			return n.Service.Resolved.Name, "nexus_service"
 		}
-		return n.Service, "nexus_service"
+		return n.Service.Name, "nexus_service"
 	case *ast.AwaitStmt:
 		if n.Target != nil {
 			return nameOfAsyncTarget(n.Target)
@@ -218,10 +218,10 @@ func collectRefsInStmts(stmts []ast.Statement, name, kind string, refs []ast.Nod
 				refs = append(refs, n)
 			}
 		case *ast.NexusCall:
-			if kind == "nexus_service" && n.Service == name {
+			if kind == "nexus_service" && n.Service.Name == name {
 				refs = append(refs, n)
 			}
-			if kind == "nexus_endpoint" && n.Endpoint == name {
+			if kind == "nexus_endpoint" && n.Endpoint.Name == name {
 				refs = append(refs, n)
 			}
 		default:
@@ -248,7 +248,7 @@ func nameOfAsyncTarget(target ast.AsyncTarget) (name, kind string) {
 	case *ast.WorkflowTarget:
 		return t.Workflow.Name, "workflow"
 	case *ast.NexusTarget:
-		return t.Service, "nexus_service"
+		return t.Service.Name, "nexus_service"
 	}
 	return "", ""
 }
@@ -265,8 +265,8 @@ func matchesAsyncTarget(target ast.AsyncTarget, name, kind string) bool {
 	case *ast.WorkflowTarget:
 		return kind == "workflow" && t.Workflow.Name == name
 	case *ast.NexusTarget:
-		return (kind == "nexus_service" && t.Service == name) ||
-			(kind == "nexus_endpoint" && t.Endpoint == name)
+		return (kind == "nexus_service" && t.Service.Name == name) ||
+			(kind == "nexus_endpoint" && t.Endpoint.Name == name)
 	}
 	return false
 }

@@ -45,11 +45,11 @@ func resolvedTarget(node ast.Node) ast.Node {
 		}
 	case *ast.NexusCall:
 		// Prefer service definition as the primary go-to-definition target.
-		if n.ResolvedService != nil {
-			return n.ResolvedService
+		if n.Service.Resolved != nil {
+			return n.Service.Resolved
 		}
-		if n.ResolvedEndpoint != nil {
-			return n.ResolvedEndpoint
+		if n.Endpoint.Resolved != nil {
+			return n.Endpoint.Resolved
 		}
 	case *ast.AwaitStmt:
 		if n.Target != nil {
@@ -99,11 +99,11 @@ func resolvedTargetFromAsync(target ast.AsyncTarget) ast.Node {
 			return t.Workflow.Resolved
 		}
 	case *ast.NexusTarget:
-		if t.ResolvedService != nil {
-			return t.ResolvedService
+		if t.Service.Resolved != nil {
+			return t.Service.Resolved
 		}
-		if t.ResolvedEndpoint != nil {
-			return t.ResolvedEndpoint
+		if t.Endpoint.Resolved != nil {
+			return t.Endpoint.Resolved
 		}
 	}
 	return nil

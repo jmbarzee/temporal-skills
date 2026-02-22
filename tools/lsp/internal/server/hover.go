@@ -278,11 +278,11 @@ func signatureFor(node ast.Node) string {
 		if n.Detach {
 			prefix = "detach nexus"
 		}
-		sig := fmt.Sprintf("%s %s %s.%s(%s)", prefix, n.Endpoint, n.Service, n.Operation, n.Args)
-		if n.ResolvedEndpoint != nil {
-			tq := extractEndpointTaskQueue(n.ResolvedEndpoint)
+		sig := fmt.Sprintf("%s %s %s.%s(%s)", prefix, n.Endpoint.Name, n.Service.Name, n.Operation.Name, n.Args)
+		if n.Endpoint.Resolved != nil {
+			tq := extractEndpointTaskQueue(n.Endpoint.Resolved)
 			if tq != "" {
-				sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, n.ResolvedEndpointNamespace)
+				sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, n.Endpoint.Resolved.Namespace)
 			}
 		}
 		return sig
@@ -332,14 +332,14 @@ func signatureFor(node ast.Node) string {
 			}
 			return fmt.Sprintf("%s %s(%s)", prefix, t.Workflow.Name, t.Args)
 		case *ast.NexusTarget:
-			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint, t.Service, t.Operation, t.Args)
+			sig := fmt.Sprintf("await nexus %s %s.%s(%s)", t.Endpoint.Name, t.Service.Name, t.Operation.Name, t.Args)
 			if t.Result != "" {
 				sig += " -> " + t.Result
 			}
-			if t.ResolvedEndpoint != nil {
-				tq := extractEndpointTaskQueue(t.ResolvedEndpoint)
+			if t.Endpoint.Resolved != nil {
+				tq := extractEndpointTaskQueue(t.Endpoint.Resolved)
 				if tq != "" {
-					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, t.ResolvedEndpointNamespace)
+					sig += fmt.Sprintf("\n→ routes to task_queue %s (namespace %s)", tq, t.Endpoint.Resolved.Namespace)
 				}
 			}
 			return sig

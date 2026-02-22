@@ -316,14 +316,14 @@ func TestNexusCallBasic(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected NexusCall, got %T", wf.Body[0])
 	}
-	if call.Endpoint != "PaymentEndpoint" {
-		t.Errorf("expected endpoint 'PaymentEndpoint', got %q", call.Endpoint)
+	if call.Endpoint.Name != "PaymentEndpoint" {
+		t.Errorf("expected endpoint 'PaymentEndpoint', got %q", call.Endpoint.Name)
 	}
-	if call.Service != "PaymentService" {
-		t.Errorf("expected service 'PaymentService', got %q", call.Service)
+	if call.Service.Name != "PaymentService" {
+		t.Errorf("expected service 'PaymentService', got %q", call.Service.Name)
 	}
-	if call.Operation != "Charge" {
-		t.Errorf("expected operation 'Charge', got %q", call.Operation)
+	if call.Operation.Name != "Charge" {
+		t.Errorf("expected operation 'Charge', got %q", call.Operation.Name)
 	}
 	if call.Args != "card" {
 		t.Errorf("expected args 'card', got %q", call.Args)
@@ -851,8 +851,8 @@ func TestContinueAsNew(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected CloseStmt, got %T", wf.Body[0])
 	}
-	if closeStmt.Reason != "continue_as_new" {
-		t.Errorf("expected reason 'continue_as_new', got %q", closeStmt.Reason)
+	if closeStmt.Reason != ast.CloseContinueAsNew {
+		t.Errorf("expected reason CloseContinueAsNew, got %v", closeStmt.Reason)
 	}
 	if closeStmt.Args != "newArgs" {
 		t.Errorf("expected args 'newArgs', got %q", closeStmt.Args)
@@ -1366,43 +1366,43 @@ func TestCloseStatement(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  string
-		reason string
+		reason ast.CloseReason
 		args   string
 	}{
 		{
 			name:   "close complete",
 			input:  "workflow Test():\n    close complete\n",
-			reason: "complete",
+			reason: ast.CloseComplete,
 			args:   "",
 		},
 		{
 			name:   "close complete with args",
 			input:  "workflow Test():\n    close complete(Result{success: true})\n",
-			reason: "complete",
+			reason: ast.CloseComplete,
 			args:   "Result{success: true}",
 		},
 		{
 			name:   "close fail",
 			input:  "workflow Test():\n    close fail\n",
-			reason: "fail",
+			reason: ast.CloseFailWorkflow,
 			args:   "",
 		},
 		{
 			name:   "close fail with args",
 			input:  "workflow Test():\n    close fail(Error{message: \"timeout\"})\n",
-			reason: "fail",
+			reason: ast.CloseFailWorkflow,
 			args:   "Error{message: \"timeout\"}",
 		},
 		{
 			name:   "close continue_as_new",
 			input:  "workflow Test():\n    close continue_as_new(newArgs)\n",
-			reason: "continue_as_new",
+			reason: ast.CloseContinueAsNew,
 			args:   "newArgs",
 		},
 		{
 			name:   "close continue_as_new no args",
 			input:  "workflow Test():\n    close continue_as_new\n",
-			reason: "continue_as_new",
+			reason: ast.CloseContinueAsNew,
 			args:   "",
 		},
 	}
@@ -1422,7 +1422,7 @@ func TestCloseStatement(t *testing.T) {
 				t.Fatalf("expected CloseStmt, got %T", wf.Body[0])
 			}
 			if closeStmt.Reason != tt.reason {
-				t.Errorf("reason: expected %q, got %q", tt.reason, closeStmt.Reason)
+				t.Errorf("reason: expected %v, got %v", tt.reason, closeStmt.Reason)
 			}
 			if closeStmt.Args != tt.args {
 				t.Errorf("args: expected %q, got %q", tt.args, closeStmt.Args)
@@ -1755,14 +1755,14 @@ func TestNexusCallDetach(t *testing.T) {
 	if !call.Detach {
 		t.Error("expected detach true")
 	}
-	if call.Endpoint != "Endpoint" {
-		t.Errorf("expected endpoint 'Endpoint', got %q", call.Endpoint)
+	if call.Endpoint.Name != "Endpoint" {
+		t.Errorf("expected endpoint 'Endpoint', got %q", call.Endpoint.Name)
 	}
-	if call.Service != "Svc" {
-		t.Errorf("expected service 'Svc', got %q", call.Service)
+	if call.Service.Name != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", call.Service.Name)
 	}
-	if call.Operation != "Op" {
-		t.Errorf("expected operation 'Op', got %q", call.Operation)
+	if call.Operation.Name != "Op" {
+		t.Errorf("expected operation 'Op', got %q", call.Operation.Name)
 	}
 	if call.Result != "" {
 		t.Errorf("expected no result, got %q", call.Result)
@@ -1812,14 +1812,14 @@ func TestNexusCallPromise(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected NexusTarget, got %T", promise.Target)
 	}
-	if nt.Endpoint != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", nt.Endpoint)
+	if nt.Endpoint.Name != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", nt.Endpoint.Name)
 	}
-	if nt.Service != "Svc" {
-		t.Errorf("expected nexus service 'Svc', got %q", nt.Service)
+	if nt.Service.Name != "Svc" {
+		t.Errorf("expected nexus service 'Svc', got %q", nt.Service.Name)
 	}
-	if nt.Operation != "Op" {
-		t.Errorf("expected nexus operation 'Op', got %q", nt.Operation)
+	if nt.Operation.Name != "Op" {
+		t.Errorf("expected nexus operation 'Op', got %q", nt.Operation.Name)
 	}
 	if nt.Args != "args" {
 		t.Errorf("expected nexus args 'args', got %q", nt.Args)
@@ -1846,14 +1846,14 @@ func TestNexusCallAwait(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected NexusTarget, got %T", await.Target)
 	}
-	if ant.Endpoint != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", ant.Endpoint)
+	if ant.Endpoint.Name != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", ant.Endpoint.Name)
 	}
-	if ant.Service != "Svc" {
-		t.Errorf("expected service 'Svc', got %q", ant.Service)
+	if ant.Service.Name != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", ant.Service.Name)
 	}
-	if ant.Operation != "Op" {
-		t.Errorf("expected operation 'Op', got %q", ant.Operation)
+	if ant.Operation.Name != "Op" {
+		t.Errorf("expected operation 'Op', got %q", ant.Operation.Name)
 	}
 	if ant.Result != "result" {
 		t.Errorf("expected result 'result', got %q", ant.Result)
@@ -1894,14 +1894,14 @@ activity HandleTimeout():
 	if !ok {
 		t.Fatalf("expected NexusTarget, got %T", nexusCase.Target)
 	}
-	if nct.Endpoint != "Endpoint" {
-		t.Errorf("expected nexus 'Endpoint', got %q", nct.Endpoint)
+	if nct.Endpoint.Name != "Endpoint" {
+		t.Errorf("expected nexus 'Endpoint', got %q", nct.Endpoint.Name)
 	}
-	if nct.Service != "Svc" {
-		t.Errorf("expected service 'Svc', got %q", nct.Service)
+	if nct.Service.Name != "Svc" {
+		t.Errorf("expected service 'Svc', got %q", nct.Service.Name)
 	}
-	if nct.Operation != "Op" {
-		t.Errorf("expected operation 'Op', got %q", nct.Operation)
+	if nct.Operation.Name != "Op" {
+		t.Errorf("expected operation 'Op', got %q", nct.Operation.Name)
 	}
 	if nct.Result != "result" {
 		t.Errorf("expected result 'result', got %q", nct.Result)

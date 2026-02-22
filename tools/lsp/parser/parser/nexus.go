@@ -212,9 +212,9 @@ func parseNexusCallInner(p *Parser, pos ast.Pos, detach bool) (ast.Statement, er
 	return &ast.NexusCall{
 		Pos:       pos,
 		Detach:    detach,
-		Endpoint:  endpoint.Literal,
-		Service:   service.Literal,
-		Operation: operation.Literal,
+		Endpoint:  ast.Ref[*ast.NamespaceEndpoint]{Pos: ast.Pos{Line: endpoint.Line, Column: endpoint.Column}, Name: endpoint.Literal},
+		Service:   ast.Ref[*ast.NexusServiceDef]{Pos: ast.Pos{Line: service.Line, Column: service.Column}, Name: service.Literal},
+		Operation: ast.Ref[*ast.NexusOperation]{Pos: ast.Pos{Line: operation.Line, Column: operation.Column}, Name: operation.Literal},
 		Args:      args.Literal,
 		Result:    result,
 		Options:   options,

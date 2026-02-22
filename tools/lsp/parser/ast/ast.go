@@ -88,6 +88,7 @@ type NamespaceWorker struct {
 type NamespaceEndpoint struct {
 	Pos
 	EndpointName string
+	Namespace    string // set by resolver: name of the owning namespace
 	Options      *OptionsBlock
 }
 
@@ -237,23 +238,27 @@ type WorkflowTarget struct {
 func (*WorkflowTarget) asyncTarget() {}
 
 type NexusTarget struct {
-	Endpoint                  string
-	Service                   string
-	Operation                 string
-	Args                      string
-	Result                    string
-	Detach                    bool
-	ResolvedEndpoint          *NamespaceEndpoint
-	ResolvedEndpointNamespace string
-	ResolvedService           *NexusServiceDef
-	ResolvedOperation         *NexusOperation
+	Endpoint  Ref[*NamespaceEndpoint]
+	Service   Ref[*NexusServiceDef]
+	Operation Ref[*NexusOperation]
+	Args      string
+	Result    string
+	Detach    bool
 }
 
 func (*NexusTarget) asyncTarget() {}
 
+// IdentResolution holds the resolved target of an ident reference.
+// Exactly one field is non-nil after successful resolution.
+type IdentResolution struct {
+	Promise   *PromiseStmt
+	Condition *ConditionDecl
+}
+
 type IdentTarget struct {
-	Name   string
-	Result string
+	Name     string
+	Result   string
+	Resolved IdentResolution
 }
 
 func (*IdentTarget) asyncTarget() {}
@@ -345,9 +350,18 @@ type ReturnStmt struct {
 
 func (*ReturnStmt) stmtNode() {}
 
+// CloseReason classifies the kind of workflow close.
+type CloseReason int
+
+const (
+	CloseComplete      CloseReason = iota // close complete
+	CloseFailWorkflow                     // close fail
+	CloseContinueAsNew                    // close continue_as_new
+)
+
 type CloseStmt struct {
 	Pos
-	Reason string // "complete", "fail", or "continue_as_new"
+	Reason CloseReason
 	Args   string // opaque, optional (parenthesized args)
 }
 
@@ -457,17 +471,12 @@ func (*NexusServiceDef) defNode() {}
 type NexusCall struct {
 	Pos
 	Detach    bool
-	Endpoint  string
-	Service   string
-	Operation string
+	Endpoint  Ref[*NamespaceEndpoint]
+	Service   Ref[*NexusServiceDef]
+	Operation Ref[*NexusOperation]
 	Args      string
 	Result    string // optional
 	Options   *OptionsBlock
-	// Resolution links
-	ResolvedEndpoint          *NamespaceEndpoint
-	ResolvedEndpointNamespace string // namespace that owns the endpoint
-	ResolvedService           *NexusServiceDef
-	ResolvedOperation         *NexusOperation
 }
 
 func (*NexusCall) stmtNode() {}

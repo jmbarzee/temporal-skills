@@ -49,11 +49,6 @@ func (e *ResolveError) Error() string {
 	return fmt.Sprintf("resolve error at %d:%d: %s", e.Line, e.Column, e.Msg)
 }
 
-// endpointInfo tracks which namespace defines a nexus endpoint.
-type endpointInfo struct {
-	namespaceName string
-	endpoint      *ast.NamespaceEndpoint
-}
 
 // Resolve walks the AST, linking calls to their definitions.
 // Returns a list of errors (empty on success).
@@ -82,20 +77,21 @@ func Resolve(file *ast.File) []*ResolveError {
 	}
 
 	// Build global endpoint map across all namespaces.
-	allEndpoints := make(map[string]*endpointInfo)
+	allEndpoints := make(map[string]*ast.NamespaceEndpoint)
 	for _, ns := range namespaces {
 		for i := range ns.Endpoints {
 			ep := &ns.Endpoints[i]
+			ep.Namespace = ns.Name
 			if existing, exists := allEndpoints[ep.EndpointName]; exists {
 				errs = append(errs, &ResolveError{
-					Msg:    fmt.Sprintf("duplicate nexus endpoint name %q: defined in namespace %s and namespace %s", ep.EndpointName, existing.namespaceName, ns.Name),
+					Msg:    fmt.Sprintf("duplicate nexus endpoint name %q: defined in namespace %s and namespace %s", ep.EndpointName, existing.Namespace, ns.Name),
 					Line:   ep.Line,
 					Column: ep.Column,
 					Kind:   ErrDuplicateEndpoint,
 					Name:   ep.EndpointName,
 				})
 			}
-			allEndpoints[ep.EndpointName] = &endpointInfo{namespaceName: ns.Name, endpoint: ep}
+			allEndpoints[ep.EndpointName] = ep
 		}
 	}
 
@@ -241,7 +237,7 @@ type resolveCtx struct {
 	conditions    map[string]*ast.ConditionDecl
 	promises      map[string]*ast.PromiseStmt
 	nexusServices map[string]*ast.NexusServiceDef
-	allEndpoints  map[string]*endpointInfo
+	allEndpoints  map[string]*ast.NamespaceEndpoint
 	errs          []*ResolveError
 }
 
@@ -260,11 +256,7 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 		resolveRef(&s.Workflow, c.workflows, "workflow", ErrUndefinedWorkflow, &c.errs)
 
 	case *ast.NexusCall:
-		res := c.resolveNexusRef(s.Endpoint, s.Service, s.Operation, s.Line, s.Column)
-		s.ResolvedEndpoint = res.endpoint
-		s.ResolvedEndpointNamespace = res.endpointNamespace
-		s.ResolvedService = res.service
-		s.ResolvedOperation = res.operation
+		c.resolveNexusRefs(&s.Endpoint, &s.Service, &s.Operation)
 
 	case *ast.AwaitAllBlock:
 		c.resolveStatements(s.Body)
@@ -305,86 +297,73 @@ func (c *resolveCtx) resolveStatement(stmt ast.Statement) {
 	}
 }
 
-// nexusResolution holds the resolved links from a nexus call site.
-type nexusResolution struct {
-	endpoint          *ast.NamespaceEndpoint
-	endpointNamespace string // namespace that owns the endpoint
-	service           *ast.NexusServiceDef
-	operation         *ast.NexusOperation
-}
-
-// resolveNexusRef validates a nexus call site (endpoint, service, operation).
-// Used by NexusCall, AwaitStmt nexus, AwaitOneCase nexus, and PromiseStmt nexus.
-func (c *resolveCtx) resolveNexusRef(endpoint, service, operation string, line, column int) nexusResolution {
-	var res nexusResolution
-
+// resolveNexusRefs validates and resolves a nexus call site's endpoint, service,
+// and operation Ref fields.
+func (c *resolveCtx) resolveNexusRefs(endpoint *ast.Ref[*ast.NamespaceEndpoint], service *ast.Ref[*ast.NexusServiceDef], operation *ast.Ref[*ast.NexusOperation]) {
 	// Endpoint resolution.
 	if len(c.allEndpoints) > 0 {
-		if epInfo, ok := c.allEndpoints[endpoint]; ok {
-			res.endpoint = epInfo.endpoint
-			res.endpointNamespace = epInfo.namespaceName
+		if ep, ok := c.allEndpoints[endpoint.Name]; ok {
+			endpoint.Resolved = ep
 		} else {
 			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined nexus endpoint: %s", endpoint),
-				Line:   line,
-				Column: column,
+				Msg:    fmt.Sprintf("undefined nexus endpoint: %s", endpoint.Name),
+				Line:   endpoint.Line,
+				Column: endpoint.Column,
 				Kind:   ErrNexusUndefinedEndpoint,
-				Name:   endpoint,
+				Name:   endpoint.Name,
 			})
 		}
 	} else {
 		c.errs = append(c.errs, &ResolveError{
-			Msg:      fmt.Sprintf("unresolved nexus endpoint: %s (no endpoints defined — may be external)", endpoint),
-			Line:     line,
-			Column:   column,
+			Msg:      fmt.Sprintf("unresolved nexus endpoint: %s (no endpoints defined — may be external)", endpoint.Name),
+			Line:     endpoint.Line,
+			Column:   endpoint.Column,
 			Severity: "warning",
 			Kind:     ErrNexusUnresolvedEndpoint,
-			Name:     endpoint,
+			Name:     endpoint.Name,
 		})
 	}
 
 	// Service resolution.
 	if len(c.nexusServices) > 0 {
-		svc, ok := c.nexusServices[service]
+		svc, ok := c.nexusServices[service.Name]
 		if !ok {
 			c.errs = append(c.errs, &ResolveError{
-				Msg:    fmt.Sprintf("undefined nexus service: %s", service),
-				Line:   line,
-				Column: column,
+				Msg:    fmt.Sprintf("undefined nexus service: %s", service.Name),
+				Line:   service.Line,
+				Column: service.Column,
 				Kind:   ErrNexusUndefinedService,
-				Name:   service,
+				Name:   service.Name,
 			})
 		} else {
-			res.service = svc
+			service.Resolved = svc
 			// Operation resolution (only when service was found).
 			for _, op := range svc.Operations {
-				if op.Name == operation {
-					res.operation = op
+				if op.Name == operation.Name {
+					operation.Resolved = op
 					break
 				}
 			}
-			if res.operation == nil {
+			if operation.Resolved == nil {
 				c.errs = append(c.errs, &ResolveError{
-					Msg:    fmt.Sprintf("nexus service %s has no operation %s", service, operation),
-					Line:   line,
-					Column: column,
+					Msg:    fmt.Sprintf("nexus service %s has no operation %s", service.Name, operation.Name),
+					Line:   operation.Line,
+					Column: operation.Column,
 					Kind:   ErrNexusNoOperation,
-					Name:   operation,
+					Name:   operation.Name,
 				})
 			}
 		}
 	} else {
 		c.errs = append(c.errs, &ResolveError{
-			Msg:      fmt.Sprintf("unresolved nexus service: %s (no nexus services defined — may be external)", service),
-			Line:     line,
-			Column:   column,
+			Msg:      fmt.Sprintf("unresolved nexus service: %s (no nexus services defined — may be external)", service.Name),
+			Line:     service.Line,
+			Column:   service.Column,
 			Severity: "warning",
 			Kind:     ErrNexusUnresolvedService,
-			Name:     service,
+			Name:     service.Name,
 		})
 	}
-
-	return res
 }
 
 func (c *resolveCtx) resolveAwaitOneCase(awaitCase *ast.AwaitOneCase) {
@@ -412,14 +391,10 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 	case *ast.WorkflowTarget:
 		resolveRef(&t.Workflow, c.workflows, "workflow", ErrUndefinedWorkflow, &c.errs)
 	case *ast.NexusTarget:
-		res := c.resolveNexusRef(t.Endpoint, t.Service, t.Operation, line, column)
-		t.ResolvedEndpoint = res.endpoint
-		t.ResolvedEndpointNamespace = res.endpointNamespace
-		t.ResolvedService = res.service
-		t.ResolvedOperation = res.operation
+		c.resolveNexusRefs(&t.Endpoint, &t.Service, &t.Operation)
 	case *ast.IdentTarget:
-		_, isPromise := c.promises[t.Name]
-		_, isCondition := c.conditions[t.Name]
+		promise, isPromise := c.promises[t.Name]
+		condition, isCondition := c.conditions[t.Name]
 		if !isPromise && !isCondition {
 			c.errs = append(c.errs, &ResolveError{
 				Msg:    fmt.Sprintf("undefined promise or condition: %s", t.Name),
@@ -428,6 +403,12 @@ func (c *resolveCtx) resolveAsyncTarget(target ast.AsyncTarget, line, column int
 				Kind:   ErrUndefinedPromiseOrCondition,
 				Name:   t.Name,
 			})
+		}
+		if isPromise {
+			t.Resolved.Promise = promise
+		}
+		if isCondition {
+			t.Resolved.Condition = condition
 		}
 		if isCondition && t.Result != "" {
 			c.errs = append(c.errs, &ResolveError{

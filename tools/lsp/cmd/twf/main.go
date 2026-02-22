@@ -23,7 +23,6 @@ Commands:
   help      Show this help
 
 Options:
-  --json     Output in JSON format (where applicable)
   --lenient  Continue even with resolve errors
 
 Examples:

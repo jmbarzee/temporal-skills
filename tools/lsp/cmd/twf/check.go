@@ -25,9 +25,7 @@ func checkCommand(args []string) int {
 	file, errs, exitCode := parseFiles(paths, *lenient)
 
 	// Always report errors to stderr
-	for _, msg := range errs {
-		fmt.Fprintln(os.Stderr, msg)
-	}
+	printErrors(errs)
 
 	// Count definitions from partial AST
 	var workflows, activities int

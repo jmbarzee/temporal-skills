@@ -81,3 +81,10 @@ func setSourceFile(def ast.Definition, sourceFile string) {
 		d.SourceFile = sourceFile
 	}
 }
+
+// printErrors writes error messages to stderr.
+func printErrors(errs []string) {
+	for _, msg := range errs {
+		fmt.Fprintln(os.Stderr, msg)
+	}
+}

@@ -278,41 +278,39 @@ The column-based spacing implementation in `helpers.go` is correct. No issues fo
 
 ---
 
-## Group 7: CLI Improvements
+## Group 7: CLI Improvements ✅ COMPLETED
 
 **Goal:** Clean CLI layer with proper pipeline encapsulation, full symbol coverage, and safe error handling.
 
-### 7a. Pipeline encapsulation
+### 7a. Pipeline encapsulation — SKIPPED (addressed by prior work)
 
-Create a top-level function (e.g., `parser.ParseAndResolve()` or a `Pipeline` struct) that runs parse → resolve → validate in one call. CLI commands become thin wrappers.
+Group 5 rewrote `parseFiles()` with a clean multi-file pipeline (parse each → stamp → merge → resolve → validate). The LSP's `document.analyze()` is already a clean 6-line function. The shared part (resolve + validate) is two function calls — a new package would be over-engineering.
 
-### 7b. twf symbols: full coverage
+### 7b. twf symbols: full coverage ✅
 
-Add workers, namespaces, and nexus services to `twf symbols` output. Workers should list their registered workflow/activity/service names.
+Added `WorkerDef`, `NamespaceDef`, `NexusServiceDef` to `extractSymbols()`. Workers list registered workflows/activities/services. Namespaces list workers and endpoints. NexusServices list operations with sync/async kind. Both text and JSON output updated.
 
-### 7c. Nil safety in cmd callers
+### 7c. Nil safety in cmd callers ✅
 
-`parseFiles()` can return nil file on read error. Callers (`parse.go`, `check.go`, `symbols.go`) must check before using.
+Added nil check in `parse.go` before `json.MarshalIndent`. Outputs `null` JSON and returns exit code 1 on nil file. `check.go` and `symbols.go` already had nil checks.
 
-### 7d. Dedup error printing
+### 7d. Dedup error printing ✅
 
-Extract shared error-printing loop used identically in three command handlers.
+Extracted `printErrors(errs []string)` in `files.go`. All three command handlers (`check.go`, `parse.go`, `symbols.go`) now use it.
 
-### 7e. Flag handling
+### 7e. Flag handling ✅
 
-Either accept `--json` as a no-op on `twf parse` (it always outputs JSON) or remove it from help text. Don't silently swallow flag parse errors.
+Removed `--json` from global `Options:` section in usage text. It only applies to `twf symbols`.
 
-### Parallelism
-
-7a is the structural change — **dedicated agent**.
-7b through 7e are independent fixes — **one agent for all four**.
-
-### Files touched
-- `cmd/twf/files.go`, `check.go`, `parse.go`, `symbols.go`, `main.go`
-- Possibly a new `parser/pipeline.go` for the encapsulated function
+### Files changed
+- `cmd/twf/symbols.go` — full definition coverage + printErrors
+- `cmd/twf/files.go` — printErrors helper
+- `cmd/twf/parse.go` — nil safety + printErrors
+- `cmd/twf/check.go` — printErrors
+- `cmd/twf/main.go` — usage text fix
 
 ### Breaking changes
-- `twf symbols` output gains new definition types
+- `twf symbols` output gains `worker`, `namespace`, and `nexusService` kinds with sub-symbols
 
 ---
 

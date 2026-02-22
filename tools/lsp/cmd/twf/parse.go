@@ -26,8 +26,11 @@ func parseCommand(args []string) int {
 	file, errs, _ := parseFiles(paths, true)
 
 	// Output errors to stderr (but don't fail - we still emit JSON)
-	for _, msg := range errs {
-		fmt.Fprintln(os.Stderr, msg)
+	printErrors(errs)
+
+	if file == nil {
+		fmt.Println("null")
+		return 1
 	}
 
 	// Output AST to stdout even if there were errors

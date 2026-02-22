@@ -23,6 +23,12 @@ type symbolJSON struct {
 	Signals    []subSymbol `json:"signals,omitempty"`
 	Queries    []subSymbol `json:"queries,omitempty"`
 	Updates    []subSymbol `json:"updates,omitempty"`
+	Workflows  []subSymbol `json:"workflows,omitempty"`
+	Activities []subSymbol `json:"activities,omitempty"`
+	Services   []subSymbol `json:"services,omitempty"`
+	Workers    []subSymbol `json:"workers,omitempty"`
+	Endpoints  []subSymbol `json:"endpoints,omitempty"`
+	Operations []subSymbol `json:"operations,omitempty"`
 }
 
 // extractSymbols collects workflow and activity definitions into a uniform slice.
@@ -66,6 +72,49 @@ func extractSymbols(file *ast.File) []symbolJSON {
 				Params:     d.Params,
 				ReturnType: d.ReturnType,
 			})
+		case *ast.WorkerDef:
+			sym := symbolJSON{
+				Kind: "worker",
+				Name: d.Name,
+			}
+			for _, w := range d.Workflows {
+				sym.Workflows = append(sym.Workflows, subSymbol{Name: w.Name})
+			}
+			for _, a := range d.Activities {
+				sym.Activities = append(sym.Activities, subSymbol{Name: a.Name})
+			}
+			for _, s := range d.Services {
+				sym.Services = append(sym.Services, subSymbol{Name: s.Name})
+			}
+			symbols = append(symbols, sym)
+		case *ast.NamespaceDef:
+			sym := symbolJSON{
+				Kind: "namespace",
+				Name: d.Name,
+			}
+			for _, w := range d.Workers {
+				sym.Workers = append(sym.Workers, subSymbol{Name: w.Worker.Name})
+			}
+			for _, e := range d.Endpoints {
+				sym.Endpoints = append(sym.Endpoints, subSymbol{Name: e.EndpointName})
+			}
+			symbols = append(symbols, sym)
+		case *ast.NexusServiceDef:
+			sym := symbolJSON{
+				Kind: "nexusService",
+				Name: d.Name,
+			}
+			for _, op := range d.Operations {
+				opKind := "sync"
+				if op.OpType == ast.NexusOpAsync {
+					opKind = "async"
+				}
+				sym.Operations = append(sym.Operations, subSymbol{
+					Name:   op.Name,
+					Params: opKind,
+				})
+			}
+			symbols = append(symbols, sym)
 		}
 	}
 
@@ -91,9 +140,7 @@ func symbolsCommand(args []string) int {
 	file, errs, exitCode := parseFiles(paths, *lenient)
 
 	// Report errors to stderr but continue to show symbols
-	for _, msg := range errs {
-		fmt.Fprintln(os.Stderr, msg)
-	}
+	printErrors(errs)
 
 	// Show symbols from partial AST
 	if file != nil {
@@ -130,6 +177,24 @@ func printSymbolsText(file *ast.File) int {
 				fmt.Printf(" -> (%s)", u.ReturnType)
 			}
 			fmt.Println()
+		}
+		for _, w := range sym.Workflows {
+			fmt.Printf("  workflow %s\n", w.Name)
+		}
+		for _, a := range sym.Activities {
+			fmt.Printf("  activity %s\n", a.Name)
+		}
+		for _, svc := range sym.Services {
+			fmt.Printf("  service %s\n", svc.Name)
+		}
+		for _, w := range sym.Workers {
+			fmt.Printf("  worker %s\n", w.Name)
+		}
+		for _, e := range sym.Endpoints {
+			fmt.Printf("  endpoint %s\n", e.Name)
+		}
+		for _, op := range sym.Operations {
+			fmt.Printf("  operation %s (%s)\n", op.Name, op.Params)
 		}
 	}
 	return 0

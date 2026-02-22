@@ -133,8 +133,7 @@ func TestWalkStatementsAwaitOneNestedAwaitAll(t *testing.T) {
 
 func TestWalkStatementsSwitchBlock(t *testing.T) {
 	// SwitchBlock with two cases and a default.
-	// SwitchCase is NOT a Statement, so the walker should NOT visit it via fn.
-	// But it should recurse into case bodies and default.
+	// SwitchCase is a Statement, so the walker visits it before recursing into its body.
 	stmts := []Statement{
 		&SwitchBlock{
 			Pos: Pos{Line: 1},
@@ -152,9 +151,8 @@ func TestWalkStatementsSwitchBlock(t *testing.T) {
 		return true
 	})
 
-	// Should visit: SwitchBlock(1), RawStmt(3), RawStmt(5), RawStmt(6)
-	// Should NOT visit SwitchCase nodes (lines 2, 4)
-	want := []int{1, 3, 5, 6}
+	// Should visit: SwitchBlock(1), SwitchCase(2), RawStmt(3), SwitchCase(4), RawStmt(5), RawStmt(6)
+	want := []int{1, 2, 3, 4, 5, 6}
 	if len(lines) != len(want) {
 		t.Fatalf("expected %d visits, got %d: %v", len(want), len(lines), lines)
 	}
@@ -244,6 +242,88 @@ func TestAsyncTargetOf(t *testing.T) {
 				t.Errorf("AsyncTargetOf(%T) = %v, want %v", tt.stmt, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWalkWithAsyncTargets(t *testing.T) {
+	activity := &ActivityTarget{Activity: Ref[*ActivityDef]{Name: "doWork"}}
+	stmts := []Statement{
+		&AwaitStmt{Pos: Pos{Line: 1}, Target: activity},
+		&RawStmt{Pos: Pos{Line: 2}},
+	}
+
+	var targets []AsyncTarget
+	var parentLines []int
+	WalkStatements(stmts, func(s Statement) bool {
+		return true
+	}, WithAsyncTargets(func(target AsyncTarget, parent Statement) bool {
+		targets = append(targets, target)
+		parentLines = append(parentLines, parent.NodeLine())
+		return true
+	}))
+
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 async target, got %d", len(targets))
+	}
+	if targets[0] != activity {
+		t.Errorf("expected activity target, got %T", targets[0])
+	}
+	if parentLines[0] != 1 {
+		t.Errorf("expected parent line 1, got %d", parentLines[0])
+	}
+}
+
+func TestWalkWithAsyncTargetsEarlyExit(t *testing.T) {
+	stmts := []Statement{
+		&AwaitStmt{Pos: Pos{Line: 1}, Target: &ActivityTarget{Activity: Ref[*ActivityDef]{Name: "a"}}},
+		&RawStmt{Pos: Pos{Line: 2}}, // should NOT be visited
+	}
+
+	var lines []int
+	result := WalkStatements(stmts, func(s Statement) bool {
+		lines = append(lines, s.NodeLine())
+		return true
+	}, WithAsyncTargets(func(target AsyncTarget, parent Statement) bool {
+		return false // stop walk
+	}))
+
+	if result != false {
+		t.Errorf("expected WalkStatements to return false on early exit")
+	}
+	// fn visits AwaitStmt(1), then async target callback returns false — walk stops
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 visit before stop, got %d: %v", len(lines), lines)
+	}
+}
+
+func TestWalkWithAsyncTargetsAwaitOneCase(t *testing.T) {
+	signal := &SignalTarget{Signal: Ref[*SignalDecl]{Name: "mySignal"}}
+	stmts := []Statement{
+		&AwaitOneBlock{
+			Pos: Pos{Line: 1},
+			Cases: []*AwaitOneCase{
+				{
+					Pos:    Pos{Line: 10},
+					Target: signal,
+					Body:   []Statement{&RawStmt{Pos: Pos{Line: 11}}},
+				},
+			},
+		},
+	}
+
+	var targets []AsyncTarget
+	WalkStatements(stmts, func(s Statement) bool {
+		return true
+	}, WithAsyncTargets(func(target AsyncTarget, parent Statement) bool {
+		targets = append(targets, target)
+		return true
+	}))
+
+	if len(targets) != 1 {
+		t.Fatalf("expected 1 async target, got %d", len(targets))
+	}
+	if targets[0] != signal {
+		t.Errorf("expected signal target, got %T", targets[0])
 	}
 }
 

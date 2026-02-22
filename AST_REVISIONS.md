@@ -88,41 +88,33 @@ After 1a–1d, update `resolver.go`:
 
 ---
 
-## Group 2: Walker Completeness
+## Group 2: Walker Completeness ✅ COMPLETED
 
 **Goal:** `WalkStatements` provides complete coverage of all reference-carrying nodes. No consumer needs to combine Walk + manual AsyncTarget extraction.
 
-### 2a. Walk visits AsyncTarget nodes
+### 2a. Walk visits AsyncTarget nodes ✅
 
-Currently `WalkStatements` stops at the Statement level. `AwaitStmt`, `PromiseStmt`, and `AwaitOneCase` contain `AsyncTarget` but the walker doesn't recurse into them. Consumers must use `AsyncTargetOf()` separately.
+Added functional options pattern to `WalkStatements`:
+- `WalkOption` type, `walkConfig` struct, `WithAsyncTargets(func(AsyncTarget, Statement) bool)` option
+- `WalkStatements` signature now accepts `...WalkOption` (backward compatible)
+- `walkStatement` propagates config and invokes async target callback after visiting each statement
+- `references.go` `collectRefsInStmts` migrated from `AsyncTargetOf` default-case pattern to `WithAsyncTargets`
 
-Options:
-- **(A)** Add an `AsyncTargetVisitor` callback to `WalkStatements` (second function parameter)
-- **(B)** Make `WalkStatements` call `fn` on AsyncTargets by introducing a wrapper type that satisfies `Statement`
-- **(C)** Add a separate `WalkAll` that visits both statements and targets
+### 2b. SwitchCase is now a Statement ✅
 
-Recommendation: **(A)** — optional second callback keeps existing callers unchanged. Signature becomes:
-```go
-func WalkStatements(stmts []Statement, fn func(Statement) bool, opts ...WalkOption)
-```
-Where `WalkOption` can include `WithAsyncTargets(func(AsyncTarget) bool)`.
+- Added `func (*SwitchCase) stmtNode() {}` for symmetry with `AwaitOneCase`
+- Walker now visits `SwitchCase` nodes via `fn` before recursing into their bodies
+- `AwaitOneCase` children now recurse via `walkStatement` instead of direct `fn()` call
 
-### 2b. SwitchCase vs AwaitOneCase consistency
-
-`AwaitOneCase` implements `stmtNode()` (is a Statement). `SwitchCase` does not. Both are containers for child statements. Either both should be Statements or neither — decide and align.
-
-### Parallelism
-
-2a and 2b are independent — **two agents in parallel**.
-
-### Files touched
-- `parser/ast/walk.go`
-- `parser/ast/walk_test.go`
-- `parser/ast/ast.go` (if SwitchCase changes)
+### Files changed
+- `parser/ast/ast.go` — SwitchCase gains stmtNode()
+- `parser/ast/walk.go` — WalkOption, WithAsyncTargets, rewritten walkStatement
+- `parser/ast/walk_test.go` — Updated SwitchBlock expectations, added WithAsyncTargets tests
+- `internal/server/references.go` — Migrated to WithAsyncTargets
 
 ### Breaking changes
-- Walk API signature change (backward compatible if using variadic options)
-- SwitchCase may gain/lose Statement interface
+- Walk API signature change (backward compatible via variadic options)
+- SwitchCase is now a Statement (walker visits it — consumers with exhaustive switches may need a case)
 
 ---
 

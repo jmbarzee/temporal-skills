@@ -305,6 +305,8 @@ type SwitchCase struct {
 	Body  []Statement
 }
 
+func (*SwitchCase) stmtNode() {}
+
 type SwitchBlock struct {
 	Pos
 	Expr    string // opaque, paren-delimited

@@ -5,13 +5,7 @@ The tree view is the primary view for the TWF Visualizer. It renders every defin
 
 ## User Goals
 
-The tree view answers questions about **individual definitions and their contents**:
-
-1. **"What do these workflows do?"** — Read the step-by-step logic of any workflow, activity, or handler through recursive expand/collapse.
-2. **"What are the inputs and outputs?"** — See signatures (params → return type) on every definition and call.
-3. **"What handlers do these workflows expose?"** — See signal, query, and update declarations grouped at the top of each workflow body.
-4. **"What does this call expand to?"** — Inline expansion shows the full body of any referenced workflow, activity, or nexus operation without navigating away.
-5. **"What definitions exist in this file or package?"** — Filter and browse definitions by type, source file, and name.
+This view serves goals 1–5 (individual definition questions) from [PRODUCT.md](./PRODUCT.md) § User Goals.
 
 
 ## Existing codebase context
@@ -118,7 +112,7 @@ Header elements (left to right):
 1. **Toggle indicator** — `▶` (collapsed) or `▼` (expanded). Placeholder space if not expandable.
 2. **Icon** — type-specific icon (text emoji or SVG). Workflows use interlocking gears SVG, activities use single gear SVG.
 3. **Keyword** — bold text identifying the block type (e.g., `workflow`, `activity`, `await`, `if`)
-4. **Signature** — the name, params, and return type. Truncated with ellipsis if too long.
+4. **Signature** — the name, params, and return type. Truncated with ellipsis if too long. Full text shown on hover via tooltip.
 
 Body:
 - Indented via left margin (20px) + left padding (12px)
@@ -225,6 +219,7 @@ Statements are rendered by `StatementBlock` which routes to specialized block co
 | Raw | (code text) | Light grey |
 | Break | `break` | Subtle grey |
 | Continue | `continue` | Subtle grey |
+| Comment | `comment` | Light grey |
 
 
 ## Cross-reference resolution
@@ -253,68 +248,29 @@ Every block in the tree view supports **contextual navigation** — small action
 | Worker definition | Show namespace, Show in Graph |
 | Namespace definition | Show in Graph |
 | Call block (activity/workflow/nexus call) | Show definition, Show in Graph |
-| Handler declaration (signal/query/update) | Show callers (workflows that send to this handler) |
+| Handler declaration (signal/query/update) | Show callers *(future — requires send-side DSL syntax)* |
 
 Buttons only appear when the action has at least one valid target. If a definition has no callers, "Show callers" does not appear.
 
 ### Behavior
 
-- **Single target:** Clicking the button scrolls the tree view to the target, expanding its ancestry if needed, and flashes the target. Same animation sequence as "Show in [View]" (see [NAVIGATION.md](./NAVIGATION.md)).
+- **Single target:** Clicking the button scrolls the tree view to the target, expanding its ancestry if needed, and flashes the target. Same animation sequence as "Show in [View]" (see [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md)).
 - **Multiple targets:** Clicking the button opens a small popover listing the targets. The user selects one, then the view navigates to it.
-- **Show in Graph:** Follows the cross-view "Show in [View]" sequence from NAVIGATION.md.
+- **Show in Graph:** Follows the cross-view "Show in [View]" sequence from VIEW_FRAMEWORK.md.
 
 ### Data requirements
 
 The visualizer builds a **reverse reference index** client-side from the AST's forward references. For each definition, the index maps its name to the set of call sites (workflow + statement location) that reference it. This is computed from the same data already used by `DefinitionContext` — no parser changes needed.
 
 
-## Visual design
+## Visual Design
 
-### Color system
-Each definition and statement type has a dedicated color palette defined as CSS variables with three values:
-- `--block-{type}-bg` — gradient background
-- `--block-{type}-border` — border color
-- `--block-{type}-text` — text/icon color
-
-Top-level definitions use a 2px border; call-level and statement-level blocks use 1px.
-
-Handler declarations (signals, queries, updates) use a **dashed** border style to visually distinguish them from executable statements.
-
-### Icon system
-Icons are defined in the central theme map (`temporal-theme.tsx`). Most are Unicode text characters. Workflows and activities use custom SVG icons (interlocking gears and single gear respectively) for clearer rendering at small sizes.
-
-### Theme support
-- Light theme is the default
-- Dark theme activates via `.vscode-dark` class (VS Code webview) or `[data-theme="dark"]` attribute
-- Every color palette has a matching dark variant defined in the CSS
-- Hover brightness shifts direction between themes (`0.95` in light, `1.1` in dark)
+Color palette, icon system, theming, and border conventions are defined in [PRODUCT.md](./PRODUCT.md) § Visual Identity.
 
 
-## Live Reload Behavior
+## Live Reload
 
-When the AST updates (file save → parser re-run → new `TWFFile` delivered to the visualizer), the tree view preserves user state where possible.
-
-### Identity Matching
-
-Definitions are matched across AST versions **by name**. A definition with the same name in the new AST is considered the same definition. Renames are treated as a removal of the old name plus an addition of the new name.
-
-### State Preserved Across Reloads
-
-| State | Behavior |
-|-------|----------|
-| Expand/collapse | Preserved for definitions that still exist (matched by name). New definitions appear collapsed. |
-| Scroll position | Preserved. If the scrolled-to definition was removed, scroll to the nearest surviving sibling. |
-| Filter selections | Preserved (file filter, type toggles, search query). If a filtered file no longer exists, remove it from the selection. |
-| Contextual nav buttons | Recomputed from new AST (reverse index rebuilt). |
-
-### Additions and Removals
-
-- **New definitions** appear in their natural position (sorted by type and order in AST), collapsed, with no special animation.
-- **Removed definitions** disappear immediately. If the removed definition was expanded, its children simply vanish with it.
-
-### Transition Indicator
-
-A brief, non-blocking indicator (e.g., a subtle flash on the header bar, or a small "updated" badge that fades) signals that the AST has been refreshed. This should not interrupt the user's current interaction.
+See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Live Reload for the shared reload behavior (identity matching, state preservation, transition indicator). Tree-view-specific reload details are documented there.
 
 
 ## Keyboard Navigation
@@ -338,11 +294,15 @@ The tree view supports keyboard navigation following the same model as VS Code's
 
 The currently focused block has a visible focus ring (distinct from hover and selection styles). Focus follows keyboard navigation and is independent of mouse hover.
 
+### Bulk Expand/Collapse (future)
+
+For large ASTs with many definitions, expanding one at a time can be tedious. A future keyboard shortcut (e.g., **Ctrl+Shift+→** to expand all at the current level, **Ctrl+Shift+←** to collapse all) would help.
+
 ### Accessibility
 
-ARIA roles should follow the WAI-ARIA Treeview pattern (`role="tree"`, `role="treeitem"`, `aria-expanded`, `aria-level`). Specific ARIA attributes are an implementation concern — the key requirement is that screen readers can announce block type, name, expanded/collapsed state, and nesting depth.
+See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) § Accessibility for the shared accessibility approach (ARIA roles, focus indicators). The tree view follows the WAI-ARIA Treeview pattern (`role="tree"`, `role="treeitem"`, `aria-expanded`, `aria-level`).
 
 
 ## Cross-View Navigation
 
-The tree view participates in the visualizer's cross-view navigation system. See [NAVIGATION.md](./NAVIGATION.md) for the full spec covering view switching, "Show in Graph" actions, and shared filter vocabulary.
+The tree view participates in the visualizer's cross-view navigation system. See [VIEW_FRAMEWORK.md](./VIEW_FRAMEWORK.md) for view switching, "Show in Graph" actions, shared filter vocabulary, and other shared behaviors.

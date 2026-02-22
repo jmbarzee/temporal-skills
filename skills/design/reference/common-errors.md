@@ -20,7 +20,7 @@ Common `twf check` errors and how to fix them.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `<keyword> is not allowed in activity body` | Using a temporal primitive (`workflow`, `activity`, `timer`, `signal`, `await`, etc.) inside an activity definition or query handler | Move the temporal primitive to a workflow. Activities can only contain non-temporal logic. |
+| `<keyword> is not allowed in activity body` | Using a temporal primitive (`workflow`, `activity`, `timer`, `signal`, `await`, etc.) inside an activity definition or query handler | Move the temporal primitive to a workflow. Activities run outside the replay-safe workflow context as normal side-effecting code — temporal primitives require deterministic replay and cannot function in activities. |
 | `expected ( after return type ->` | Return type not parenthesized: `-> Result` | Use `-> (Result)` — return types must be wrapped in parentheses |
 | `expected ( after if` / `expected ( after for` | Missing parentheses around condition/iterator | Use `if (expr):` / `for (x in items):` |
 | `unexpected token <tok> at top level` | Statement or keyword that doesn't start a workflow or activity definition | Ensure all top-level items are `workflow`, `activity`, `worker`, `namespace`, or `nexus service` definitions |
@@ -34,5 +34,25 @@ Common `twf check` errors and how to fix them.
 | `namespace X references undefined worker: Y` | Namespace uses unknown worker | Add worker block or fix name |
 | `worker instantiation missing required task_queue` | No `task_queue` in options | Add `options: task_queue: "..."` |
 | `duplicate nexus endpoint name "X"` | Same endpoint name in multiple namespaces | Use unique endpoint names |
+| `workers on same task_queue with different type sets` | Two workers share a task queue but register different workflows/activities | Ensure all workers on the same task queue have identical type sets, or use separate task queues |
+| `nexus endpoint routes to task_queue with no worker registering the service` | Endpoint's task queue has no worker that registers the nexus service | Add the nexus service to a worker on that task queue |
+| `explicit task_queue routing: target not on any worker polling that queue` | Activity/workflow call specifies a `task_queue` option, but no worker on that queue registers the target | Add the target to a worker on the specified task queue, or fix the task queue name |
+| `implicit task_queue routing: target not on calling workflow's task queue` | Activity/workflow is called without explicit `task_queue`, but no worker on the caller's task queue registers it | Add the target to a worker on the same task queue, or add an explicit `task_queue` option to route correctly |
+| `unknown option key` | Unrecognized key in an `options:` block | Check spelling against allowed option keys for the context (activity call, workflow call, worker instantiation, etc.) |
+| `wrong value type for option key` | Option value doesn't match expected type (e.g., number where duration expected) | Check the expected type for the option key |
 
-Warnings (workflow/activity not on any worker, worker not instantiated) indicate coverage gaps, not errors.
+## Warnings
+
+These indicate coverage gaps or potential issues, not hard errors:
+
+| Warning | Meaning |
+|---------|---------|
+| Workflow/activity not registered on any instantiated worker | Definition exists but won't be reachable at runtime |
+| Nexus service not referenced by any worker | Service defined but no worker registers it |
+| Worker not instantiated in any namespace | Worker defined but never deployed |
+| Empty worker (no registrations) | Worker block has no workflow/activity/nexus service entries |
+| Empty namespace (no instantiations) | Namespace block has no worker or endpoint instantiations |
+| Empty workflow body | Workflow has no statements |
+| Empty activity body | Activity has no statements |
+| Unresolved nexus endpoint (no endpoints defined) | Nexus call references an endpoint that may be external |
+| Unresolved nexus service (no services defined) | Nexus call references a service that may be external |

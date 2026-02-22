@@ -109,7 +109,7 @@ To revise an existing `.twf` file: run `twf symbols` to understand current struc
 
 ## TWF Syntax
 
-Full grammar: [`LANGUAGE.md`](./reference/LANGUAGE.md). All `.twf` must pass `twf check` before presenting to user.
+Full grammar: [`LANGUAGE_SPEC.md`](../../../tools/lsp/LANGUAGE_SPEC.md). All `.twf` must pass `twf check` before presenting to user.
 
 Activity bodies are intentionally free-form (`raw_stmt`) — they represent SDK-level implementation, not orchestration. Use pseudocode or descriptive text. The right level of detail depends on how obvious the behavior is from the name and signature:
 

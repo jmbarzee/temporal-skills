@@ -10,11 +10,13 @@ Within each group, **parallelizable** work is marked. Sub-agents should not cros
 
 ---
 
-## Group 1: Eliminate LANGUAGE.md Duplication
+## Group 1: Eliminate LANGUAGE.md Duplication ✅ COMPLETED
 
 **Goal:** Remove the ~955-line near-duplicate of the canonical spec. Fix the single source of grammar truth.
 
 **Why first:** Two concrete drift bugs exist today (missing priority sub-keys, missing error types). Every other group references grammar — this must be settled first.
+
+**Result:** `reference/LANGUAGE.md` replaced with 5-line redirect to canonical spec. `SKILL.md` link updated. `common-errors.md` expanded with 6 missing error types, 9-row warnings table, and enhanced activity context explanation.
 
 ### 1a. Replace `reference/LANGUAGE.md` with a redirect
 

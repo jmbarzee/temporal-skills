@@ -118,50 +118,33 @@ Added functional options pattern to `WalkStatements`:
 
 ---
 
-## Group 3: Resolver Simplification
+## Group 3: Resolver Simplification ✅ COMPLETED
 
 **Goal:** Collapse repeated resolution patterns now that all references use `Ref[T]`.
 
 **Depends on:** Group 1
 
-### 3a. Nexus resolution uses resolveRef chains
+### 3a. Nexus resolution uses resolveRef chains ✅
 
-After Group 1, `resolveNexusRef` can become three sequential `resolveRef` calls instead of a custom 70-line function with inline map lookups. The cascading lookup (endpoint → service → operation) still exists but each step is a standard `resolveRef`.
+Extracted `resolveRefWithWarn` generic helper for the "empty map → warning, non-empty → resolve or error" pattern shared by endpoint and service resolution. Extracted `resolveNexusOperation` for operation lookup. `resolveNexusRefs` collapsed from 68 lines to ~10 lines.
 
-### 3b. Collapse resolveStatement switch
+### 3b + 3c. Walker-based statement traversal ✅
 
-Many cases in `resolveStatement` (13+ branches) follow the same pattern: extract Ref field, call resolveRef. Consider a `Resolvable` interface:
-```go
-type Resolvable interface {
-    Refs() []*UntypedRef  // returns all references needing resolution
-}
-```
+Replaced `resolveStatements` (loop), `resolveStatement` (12-case switch with manual body recursion), and `resolveAwaitOneCase` (separate method) with a single `resolveStatements` that uses `ast.WalkStatements` + `WithAsyncTargets`. The walker handles all traversal; the resolver switch only contains resolution-specific cases (ActivityCall, WorkflowCall, NexusCall, SetStmt, UnsetStmt). `resolveAsyncTarget` stays as-is — it has genuine per-type logic that isn't reducible.
 
-If type erasure is too complex, at minimum extract the body-recursion cases (AwaitAllBlock, SwitchBlock, IfStmt, ForStmt) into a shared helper, leaving only the resolve-specific logic in each case.
+### 3d. Unified resolveWorkerRefs ✅
 
-### 3c. Collapse resolveAsyncTarget switch
+`resolveWorkerRefs` now loops `resolveRef` directly. Dropped the `workerName` parameter — error messages use the standard `"undefined <kind>: <name>"` format. Worker error messages changed from `"worker X references undefined Y: Z"` to `"undefined Y: Z"`.
 
-Same pattern as 3b — 8 cases, most calling resolveRef. After Group 1 makes NexusTarget use Ref[T], the nexus case becomes three resolveRef calls like any other.
+### 3e. Documented ErrorKind constants ✅
 
-### 3d. Unify resolveWorkerRefs
+Added category headers and per-constant doc comments to all 23 ErrorKind constants, organized into: duplicate definition errors, undefined reference errors, nexus resolution errors, worker reference errors, and namespace reference errors.
 
-`resolveWorkerRefs` is nearly identical to a loop of `resolveRef` calls. Inline it or make it a thin wrapper.
-
-### 3e. Document ErrorKind constants
-
-The 23 `ErrorKind` constants lack documentation. Add a one-line comment to each explaining when it's used and whether it's a warning or error.
-
-### Parallelism
-
-3a, 3d, and 3e are independent — **three agents in parallel**.
-3b and 3c are related (both simplify switches) — **one agent for both**.
-
-### Files touched
+### Files changed
 - `parser/resolver/resolver.go`
-- `parser/resolver/resolver_test.go`
 
 ### Breaking changes
-- None (internal refactor). Resolver output unchanged.
+- None (internal refactor). Resolver output unchanged except for worker error message wording (pre-v1, acceptable).
 
 ---
 

@@ -321,11 +321,78 @@ The graph view uses modifier keys for interaction variants (e.g., Shift+hover fo
 
 ---
 
+## Future: Message Flow Edges
+
+The current graph models **call** relationships (workflow calls workflow, workflow calls activity). Temporal workflows also communicate through **messages** — signals, queries, and updates — which represent a different kind of dependency.
+
+### Vision
+
+When the DSL supports typed signal/query/update send statements (see `POSSIBLE_DSL_FEATURES.md`), the graph can derive **message flow edges** alongside call edges:
+
+- **Workflow → Workflow** ("signals/queries/updates") — WorkflowA sends a signal to WorkflowB.
+
+These are visually distinct from call edges (different line style or color) and toggleable — the user can show/hide message flow edges independently to manage visual complexity.
+
+Message flow edges participate in the same systems as call edges:
+- Graph coarsening projects them up to Worker → Worker and Namespace → Namespace.
+- Transitive hover highlights follow them.
+- Search and filtering apply to them.
+
+### Data Contract (not yet available)
+
+Requires the parser to emit typed send statements in the AST with:
+- Source workflow (the sender)
+- Target workflow (the receiver)
+- Handler name (which signal/query/update)
+- Message type (signal vs query vs update)
+
+The DSL does not currently support send-side syntax. This feature is blocked on DSL and parser work.
+
+### Design Anticipation
+
+The edge data model, visual encoding tables, and interaction specs in this document are designed to accommodate message flow edges without structural changes. When the data becomes available:
+- Add a new edge type to the Fundamental Edges table.
+- Add a row to the Edge Appearance table (distinct line style for message flows).
+- Add a toggle to the filter controls for message flow visibility.
+
+---
+
 ## Performance Considerations
 
 - **Node count** — For typical TWF projects, expect tens to low hundreds of nodes. A naive O(n²) charge calculation is acceptable at this scale. If needed later, apply a **Barnes-Hut approximation** (quadtree-based) to reduce to O(n log n).
 - **Rendering** — Canvas-based rendering (2D context) will outperform SVG for larger node counts, but SVG is easier to style and integrate with React. Start with whichever matches the team's velocity; the simulation logic is renderer-agnostic.
 - **Offscreen culling** — Only render nodes and edges within (or near) the visible viewport. The simulation still runs for all nodes.
+
+---
+
+## Live Reload Behavior
+
+When the AST updates, the graph view preserves the user's spatial context.
+
+### Identity Matching
+
+Nodes are matched across AST versions **by name**. A node with the same name in the new AST is considered the same node. Renames are treated as a removal plus an addition.
+
+### State Preserved Across Reloads
+
+| State | Behavior |
+|-------|----------|
+| Node positions | Preserved for nodes that still exist. Simulation does not restart for surviving nodes. |
+| Viewport (zoom/pan) | Preserved. |
+| Semantic zoom level | Preserved. |
+| Force parameters | Preserved (slider values unchanged). |
+| Filter selections | Preserved. If a filtered file no longer exists, remove it from the selection. |
+| Search query | Preserved. Results recomputed against new nodes. |
+| Selection | Preserved if the selected node still exists. Cleared if the selected node was removed. |
+
+### Additions and Removals
+
+- **New nodes** are seeded at the position of their parent node (same as level transition seeding). The simulation reheats locally — new nodes spread out from their parent while existing nodes remain stable.
+- **Removed nodes** fade out over a short duration (~200 ms). Their edges disappear with them. The simulation reheats locally to let surviving neighbors adjust.
+
+### Transition Indicator
+
+A brief, non-blocking indicator signals the AST has been refreshed (same pattern as tree view). This should not interrupt hover or selection state.
 
 ---
 
@@ -341,6 +408,38 @@ The graph view uses modifier keys for interaction variants (e.g., Shift+hover fo
 | **Focus + context (dimming)**  | Highlight what matters; push everything else to the background |
 | **Direct manipulation**        | Drag nodes, drag the viewport, scrub sliders — all immediate |
 | **Linked views (sliders ↔ simulation)** | Controls reflect simulation state; changes flow both ways  |
+
+
+## Keyboard Navigation
+
+The graph view supports keyboard navigation for node selection, viewport control, and interaction states.
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| **Tab** | Cycle focus to the next node (order: by containment hierarchy, then alphabetical within peers) |
+| **Shift+Tab** | Cycle focus to the previous node |
+| **Enter** | Select the focused node (same as click — triggers dependency highlight) |
+| **Escape** | Deselect all. Close any open panel or popover. |
+| **Arrow keys** | Pan the viewport |
+| **+** / **-** | Zoom in / out |
+| **F** | Fit-to-view (frame all visible nodes) |
+| **/** or **Ctrl+F** | Open search bar and focus the search input |
+| **Space** | Toggle simulation play/pause |
+| **?** | Toggle keyboard shortcut reference panel |
+
+### Focus Indicator
+
+The currently focused node has a visible focus ring (distinct from hover highlight and selection highlight). When a node is focused via keyboard, the tooltip appears as it would on mouse hover.
+
+### Modifier Keys with Keyboard
+
+The Shift modifier for upstream dependency highlighting (see Interaction States) also works with keyboard focus — holding Shift while a node is focused reverses the transitive highlight direction.
+
+### Accessibility
+
+ARIA roles should follow WAI-ARIA guidance for interactive graphics. Nodes should be focusable elements with labels announcing node type and name. Specific ARIA attributes are an implementation concern — the key requirement is that screen readers can announce node identity and dependency relationships.
 
 
 ## Cross-View Navigation

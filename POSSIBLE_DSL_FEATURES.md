@@ -43,6 +43,30 @@ nexus service OrderService:
 
 ## Workflow Semantics
 
+### Signal/Query/Update Send Statements
+
+Explicit DSL syntax for sending signals, queries, and updates to other workflows. Currently the DSL declares handlers on the receiving side but has no way to express the send side.
+
+```twf
+workflow OrderSaga(order: Order) -> (Result):
+    workflow ProcessPayment(order) -> payment
+
+    # Signal a running workflow
+    signal ProcessPayment.PaymentReceived(payment)
+
+    # Query a running workflow
+    query ProcessPayment.Status() -> status
+
+    # Update a running workflow
+    update ProcessPayment.AdjustAmount(newAmount) -> confirmation
+```
+
+**Why needed:** The visualizer's graph view models dependency edges between workflows. Currently only call/await edges exist. Signal/query/update sends create real dependencies — "WorkflowB sends a signal to WorkflowA" — but these are invisible without send-side data in the AST. Adding typed send statements would enable message flow edges in the graph view (see GRAPH_VIEW.md future section on message flow edges).
+
+**Open questions:** What is the syntax? `signal TargetWorkflow.HandlerName(args)` vs `send signal HandlerName to TargetWorkflow(args)`? Should sends target a specific workflow instance (by ID) or a workflow type? How does the resolver validate that the target workflow actually handles the named signal/query/update? Should sends appear as statements (in workflow body) or as part of await expressions?
+
+---
+
 ### Workflow Cancellation Handler
 
 `await one:` documents auto-cancellation of race losers, but there's no way to express what happens when an *entire workflow* is cancelled externally.

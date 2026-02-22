@@ -290,6 +290,59 @@ Icons are defined in the central theme map (`temporal-theme.tsx`). Most are Unic
 - Hover brightness shifts direction between themes (`0.95` in light, `1.1` in dark)
 
 
+## Live Reload Behavior
+
+When the AST updates (file save → parser re-run → new `TWFFile` delivered to the visualizer), the tree view preserves user state where possible.
+
+### Identity Matching
+
+Definitions are matched across AST versions **by name**. A definition with the same name in the new AST is considered the same definition. Renames are treated as a removal of the old name plus an addition of the new name.
+
+### State Preserved Across Reloads
+
+| State | Behavior |
+|-------|----------|
+| Expand/collapse | Preserved for definitions that still exist (matched by name). New definitions appear collapsed. |
+| Scroll position | Preserved. If the scrolled-to definition was removed, scroll to the nearest surviving sibling. |
+| Filter selections | Preserved (file filter, type toggles, search query). If a filtered file no longer exists, remove it from the selection. |
+| Contextual nav buttons | Recomputed from new AST (reverse index rebuilt). |
+
+### Additions and Removals
+
+- **New definitions** appear in their natural position (sorted by type and order in AST), collapsed, with no special animation.
+- **Removed definitions** disappear immediately. If the removed definition was expanded, its children simply vanish with it.
+
+### Transition Indicator
+
+A brief, non-blocking indicator (e.g., a subtle flash on the header bar, or a small "updated" badge that fades) signals that the AST has been refreshed. This should not interrupt the user's current interaction.
+
+
+## Keyboard Navigation
+
+The tree view supports keyboard navigation following the same model as VS Code's tree widget.
+
+### Key Bindings
+
+| Key | Action |
+|-----|--------|
+| **↑ / ↓** | Move focus to previous / next visible block (siblings and across nesting levels) |
+| **→** | Expand focused block (if collapsed). If already expanded, move focus to first child. |
+| **←** | Collapse focused block (if expanded). If already collapsed, move focus to parent. |
+| **Enter** | Toggle expand/collapse on focused block |
+| **Home / End** | Move focus to first / last visible block |
+| **/** or **Ctrl+F** | Open search bar and focus the search input |
+| **Escape** | Close search bar (if open), clear selection, or close any open popover |
+| **Tab** | Move focus between header controls (file filter, type toggles, search) and the block list |
+
+### Focus Indicator
+
+The currently focused block has a visible focus ring (distinct from hover and selection styles). Focus follows keyboard navigation and is independent of mouse hover.
+
+### Accessibility
+
+ARIA roles should follow the WAI-ARIA Treeview pattern (`role="tree"`, `role="treeitem"`, `aria-expanded`, `aria-level`). Specific ARIA attributes are an implementation concern — the key requirement is that screen readers can announce block type, name, expanded/collapsed state, and nesting depth.
+
+
 ## Cross-View Navigation
 
 The tree view participates in the visualizer's cross-view navigation system. See [NAVIGATION.md](./NAVIGATION.md) for the full spec covering view switching, "Show in Graph" actions, and shared filter vocabulary.
